@@ -102,7 +102,7 @@ Every run prints `PINS ACTIVE`, so a pin cannot rot silently.
 ## When a sync hits a conflict
 
 A conflict only ever means one thing: **you and upstream edited the same file.**
-Only 19 files are even capable of it today — `docs/DIVERGENCE.md` tracks that
+Only 19 files are even capable of it today — `rules/DIVERGENCE.md` tracks that
 number over time.
 
 Neither version is silently lost. Upstream's whole file is saved under
@@ -123,8 +123,8 @@ Resolve it normally. Nothing is thrown away while you think about it.
 | file | what it tells you |
 |---|---|
 | `STATUS.md` | the last sync: what passed, what broke, what conflicted. Scratch, not committed. |
-| `docs/DIVERGENCE.md` | how far we have drifted, one row per sync. Committed — the trend is the point. |
-| `docs/BREAKAGE.md` | which widgets/scripts do not load, and where the thing they wanted went. Regenerate with `python qa/breakage.py`. |
+| `rules/DIVERGENCE.md` | how far we have drifted, one row per sync. Committed — the trend is the point. |
+| `rules/BREAKAGE.md` | which widgets/scripts do not load, and where the thing they wanted went. Regenerate with `python qa/breakage.py`. |
 
 ## When a hook blocks you
 

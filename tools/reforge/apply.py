@@ -149,13 +149,36 @@ def prune_empty_dirs(dry: bool) -> int:
     return removed
 
 
+def rename_imports(old: str, new: str, keep: tuple[str, ...], text: str) -> str:
+    """Rewrite `from old.x` / `import old.x` only, leaving all other text alone.
+
+    A blunt token rename is wrong whenever the transform leaves carve-outs at the
+    original path: Sources moved to dev/reference but marks_sources and InvPlus
+    stayed put, and they are imported from files that do get rewritten, so the
+    exemption has to be per-import, not per-file. It is also wrong for string
+    paths — TeamInventoryViewer.py:35 joins a real directory called "Sources/",
+    and turning that into dots would break it.
+    """
+    pattern = re.compile(r"^(\s*)(from|import)(\s+)(%s(?:\.[\w.]*)?)" % re.escape(old), re.MULTILINE)
+
+    def swap(match: re.Match) -> str:
+        dotted = match.group(4)
+        if any(dotted == k or dotted.startswith(k + ".") for k in keep):
+            return match.group(0)
+        return "".join(match.group(1, 2, 3)) + new + dotted[len(old) :]
+
+    return pattern.sub(swap, text)
+
+
 def run_codemods(mf: manifest_mod.Manifest, dry: bool) -> int:
     touched = 0
     for mod in mf.codemods:
-        if mod.get("kind") != "module_rename":
+        kind = mod.get("kind")
+        if kind not in ("module_rename", "import_rename"):
             continue
         old, new = mod["old"], mod["new"]
         exclude = tuple(mod.get("exclude", []))
+        keep = tuple(mod.get("keep", []))
         pattern = re.compile(r"\b%s\b" % re.escape(old))
         for path in REPO.rglob("*.py"):
             if any(part in (".git", "__pycache__", ".venv") for part in path.parts):
@@ -169,7 +192,7 @@ def run_codemods(mf: manifest_mod.Manifest, dry: bool) -> int:
                 continue
             if old not in text:
                 continue
-            replaced = pattern.sub(new, text)
+            replaced = rename_imports(old, new, keep, text) if kind == "import_rename" else pattern.sub(new, text)
             if replaced != text:
                 touched += 1
                 if not dry:

@@ -21,7 +21,7 @@ from datetime import date
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-LEDGER = REPO / "docs" / "DIVERGENCE.md"
+LEDGER = REPO / "rules" / "DIVERGENCE.md"
 
 
 def git(*args: str) -> str:
@@ -41,7 +41,7 @@ def name_status(rev_range: str) -> list[tuple[str, str]]:
 
 def area_of(path: str) -> str:
     head = path.split("/")[0]
-    if head in ("Core", "HeroAI", "Widgets", "Scripts", "qa", "tools", "docs", "dev", "Runtime"):
+    if head in ("Core", "HeroAI", "Widgets", "Scripts", "qa", "tools", "docs", "rules", "dev", "Runtime"):
         return head
     return "(root)"
 
@@ -123,7 +123,7 @@ def main() -> int:
         % (m["ours_total"], m["conflict_surface"])
     )
     print("            transform moved/rewrote %d" % m["transform_total"])
-    print("recorded in docs/DIVERGENCE.md")
+    print("recorded in rules/DIVERGENCE.md")
     return 0
 
 

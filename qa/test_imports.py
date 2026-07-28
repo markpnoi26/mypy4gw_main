@@ -67,6 +67,29 @@ BLOCKING = {
 }
 
 
+def deprecated() -> dict[str, str]:
+    """RS-004: leaves we have decided not to keep. Skipped, not deleted.
+
+    Read rather than hardcoded so the rule lives in one place — qa/breakage.py
+    derives the list, this only honours it. Skipped rather than xfailed because
+    several of these do real work at import before they fail.
+    """
+    ledger = REPO / "rules" / "DEPRECATED.md"
+    if not ledger.is_file():
+        return {}
+    rows = {}
+    for line in ledger.read_text(encoding="utf-8").splitlines():
+        if not line.startswith("| `"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) >= 3 and cells[0].startswith("`"):
+            rows[cells[0].strip("`")] = cells[2]
+    return rows
+
+
+DEPRECATED = deprecated()
+
+
 def loadable_files(package: str) -> list[Path]:
     root = REPO / package
     if not root.is_dir():
@@ -77,6 +100,15 @@ def loadable_files(package: str) -> list[Path]:
         if not (SKIP_PARTS & set(p.relative_to(REPO).parts))
         and p.relative_to(REPO).as_posix() not in BLOCKING
     ]
+
+
+def leaf_cases(package: str):
+    out = []
+    for path in loadable_files(package):
+        reason = DEPRECATED.get(path.relative_to(REPO).as_posix())
+        marks = [pytest.mark.skip(reason="deprecated (RS-004): %s" % reason)] if reason else []
+        out.append(pytest.param(path, marks=marks))
+    return out
 
 
 def test_core_facade_imports():
@@ -95,13 +127,13 @@ def test_heroai_module_imports(name):
 
 
 @pytest.mark.leaf
-@pytest.mark.parametrize("path", loadable_files("Widgets"), ids=lambda p: p.relative_to(REPO).as_posix())
+@pytest.mark.parametrize("path", leaf_cases("Widgets"), ids=lambda p: p.relative_to(REPO).as_posix())
 def test_widget_loads(path):
     load_from_path(path)
 
 
 @pytest.mark.leaf
-@pytest.mark.parametrize("path", loadable_files("Scripts"), ids=lambda p: p.relative_to(REPO).as_posix())
+@pytest.mark.parametrize("path", leaf_cases("Scripts"), ids=lambda p: p.relative_to(REPO).as_posix())
 def test_script_loads(path):
     load_from_path(path)
 

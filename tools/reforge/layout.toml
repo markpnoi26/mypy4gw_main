@@ -20,6 +20,12 @@ dest = "keep"
 tier = "dev"
 note = "our gates. Named qa/ because upstream owns tests/, which moves to dev/tests/imgui/."
 
+[[rule]]
+match = "rules/**"
+dest = "keep"
+tier = "docs"
+note = "RS-000. Our standing decisions, and the generated ledgers that track them. Outranks docs/, which is upstream's reference material plus our own historical handovers. See rules/README.md."
+
 [[override]]
 match = "docs/tier_map_and_separation_plan.md"
 dest = "keep"
@@ -36,7 +42,16 @@ old = "Py4GWCoreLib"
 new = "Core"
 scope = "**/*.py"
 exclude = ["tools/"]
-note = "3678 import statements across 1009 files. Also rewrites the dynamic import at BuildMgr.py:2037 and any 'Py4GWCoreLib/...' string path. verify.py greps for survivors. tools/ is excluded because the transform describes this rename in its own prose and would rewrite itself into nonsense."
+note = "RS-001. 3678 import statements across 1009 files. Also rewrites the dynamic import at BuildMgr.py:2037 and any 'Py4GWCoreLib/...' string path. verify.py greps for survivors. tools/ is excluded because the transform describes this rename in its own prose and would rewrite itself into nonsense."
+
+[[codemod]]
+kind = "import_rename"
+old = "Sources"
+new = "dev.reference"
+scope = "**/*.py"
+exclude = ["tools/", "qa/"]
+keep = ["Sources.marks_sources", "Sources.ApoSource.InvPlus"]
+note = "RS-002. Completes the Sources demotion: the files moved to dev/reference/ but 21 leaf importers still said `Sources.`. import_rename, not module_rename, for two reasons — the carve-outs stay at the root path and are imported from files that do get rewritten, so the exemption is per-import rather than per-file; and TeamInventoryViewer.py:35 joins the literal directory 'Sources/marks_sources/mods_data', which dots would break."
 
 
 # ============================================================================
@@ -593,6 +608,13 @@ match = "Widgets/Automation/Helpers/Elite Skills/**"
 dest = "Widgets/World/{name}"
 tier = "widget"
 
+[[override]]
+match = "Widgets/Automation/Helpers/Elite Skills/EliteSkillsCapture.py"
+dest = "Scripts/py4gw-tasks/scripts/EliteSkillsCapture.py"
+tier = "script"
+pack = "tasks"
+note = "RS-003. 12617 lines, and the only entry point is main() — no draw(), no configure(). Autoloading it as a widget paid that import cost every session for something that runs on demand. First conversion under the widget-to-script rule; see rules/RESTRUCTURE.md."
+
 # --- Items & Loot ---
 [[rule]]
 match = "Widgets/Guild Wars/Items & Loot/**"
@@ -703,7 +725,7 @@ new = "widgets:Dialogs/Skill Trainer.py"
 
 [[legacy_id]]
 old = "Automation/Helpers/Elite Skills/EliteSkillsCapture.py"
-new = "widgets:World/EliteSkillsCapture.py"
+new = "scripts:py4gw-tasks/EliteSkillsCapture.py"
 
 [[legacy_id]]
 old = "Guild Wars/Items & Loot/InventoryPlus.py"
