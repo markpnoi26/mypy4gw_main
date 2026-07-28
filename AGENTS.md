@@ -242,7 +242,7 @@ they survive upstream's next restructure — a local-only edit does not.
 `tiercheck.py` currently **fails by design** — the facade eagerly pulls 17
 `HeroAI` modules, and `Core/py4gwcorelib_src/AutoInventoryHandler.py` still
 reaches into `dev/reference`. Those are known and tracked in
-`docs/tier_map_and_separation_plan.md`. Do not silence them; fix or waive with a
+`rules/TIER_MAP.md`. Do not silence them; fix or waive with a
 reason in `tier_map.toml`.
 
 `pytest qa` is the only gate that executes module bodies, and the only one that
@@ -305,7 +305,7 @@ code rules still hold; its layout claims describe upstream's tree, not this one.
 eagerly imports 244 modules including 17 from `HeroAI`, and
 `Core/py4gwcorelib_src/AutoInventoryHandler.py` reaches into `dev/reference`.
 `verify.py` reports the same 6 tier violations. These are measured, tracked in
-`docs/tier_map_and_separation_plan.md`, and **not** to be silenced.
+`rules/TIER_MAP.md`, and **not** to be silenced.
 
 **Never run in the game client.** Nothing in this tree has been loaded by
 `Py4GW.dll`. 2,098 file moves and ~1,020 codemod rewrites are statically checked

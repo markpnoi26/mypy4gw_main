@@ -26,10 +26,10 @@ dest = "keep"
 tier = "docs"
 note = "RS-000. Our standing decisions, and the generated ledgers that track them. Outranks docs/, which is upstream's reference material plus our own historical handovers. See rules/README.md."
 
-[[override]]
-match = "docs/tier_map_and_separation_plan.md"
-dest = "keep"
-tier = "docs"
+# RS-006 retired the override that used to sit here. The tier map was never an
+# upstream file — it only ever existed untracked in the fork — so a rule matching
+# `docs/tier_map_and_separation_plan.md` matched nothing. It now lives at
+# rules/TIER_MAP.md, covered by the `rules/**` keep above.
 
 
 # ============================================================================

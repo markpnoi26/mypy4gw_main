@@ -66,7 +66,7 @@ exits non-zero on violation.
 
 `tiercheck` **fails today by design**: the `Core` facade eagerly pulls 17 HeroAI
 modules and `AutoInventoryHandler` reaches into `dev/reference`. Known, tracked
-in `docs/tier_map_and_separation_plan.md`. Do not silence — fix, or waive with a
+in `rules/TIER_MAP.md`. Do not silence — fix, or waive with a
 reason in `tier_map.toml`.
 
 ## Reading drift

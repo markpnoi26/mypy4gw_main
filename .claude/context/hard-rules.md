@@ -48,7 +48,7 @@ abandoned and deleted; `docs/ImGui_Facade_Migration_Plan.md` is dead.
   `sys.stdout`/`sys.stderr` into the Py4GW console, and eagerly pulls **241
   modules including 17 from `HeroAI`**. Prefer module-specific imports when
   debugging startup or import side effects. Reducing that closure is tracked in
-  `docs/tier_map_and_separation_plan.md`.
+  `rules/TIER_MAP.md`.
 
 ## Tier 0 is a binary you consume
 
