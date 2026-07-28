@@ -36,6 +36,8 @@ extend_skip_glob = [
 # qa/ not tests/ — upstream owns a tests/ directory, and the manifest moves it to
 # dev/tests/imgui/. qa/ is ours and collides with nothing upstream ships.
 testpaths = ["qa"]
-addopts = "-q"
+# leaf is deselected by default: widget and script module bodies do real work at
+# import (one of them blocks indefinitely), so they are opt-in via `-m leaf`.
+addopts = "-q -m 'not leaf'"
 pythonpath = [".", "qa"]
-markers = ["leaf: tier-4 widgets and scripts; deselect with -m 'not leaf'"]
+markers = ["leaf: tier-4 widgets and scripts; run explicitly with -m leaf"]
