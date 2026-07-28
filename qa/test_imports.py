@@ -59,6 +59,14 @@ def module_names(package: str) -> list[str]:
     return names
 
 
+# Busy-wait or block at module scope, so importing them never returns. pytest's
+# thread timeout method — the only one Windows supports — aborts the whole run
+# rather than the one test, so these have to be excluded rather than timed out.
+BLOCKING = {
+    "Scripts/py4gw-examples/TestGenerator.py",
+}
+
+
 def loadable_files(package: str) -> list[Path]:
     root = REPO / package
     if not root.is_dir():
@@ -67,6 +75,7 @@ def loadable_files(package: str) -> list[Path]:
         p
         for p in sorted(root.rglob("*.py"))
         if not (SKIP_PARTS & set(p.relative_to(REPO).parts))
+        and p.relative_to(REPO).as_posix() not in BLOCKING
     ]
 
 
@@ -86,17 +95,13 @@ def test_heroai_module_imports(name):
 
 
 @pytest.mark.leaf
-@pytest.mark.parametrize(
-    "path", loadable_files("Widgets"), ids=lambda p: p.relative_to(REPO).as_posix()
-)
+@pytest.mark.parametrize("path", loadable_files("Widgets"), ids=lambda p: p.relative_to(REPO).as_posix())
 def test_widget_loads(path):
     load_from_path(path)
 
 
 @pytest.mark.leaf
-@pytest.mark.parametrize(
-    "path", loadable_files("Scripts"), ids=lambda p: p.relative_to(REPO).as_posix()
-)
+@pytest.mark.parametrize("path", loadable_files("Scripts"), ids=lambda p: p.relative_to(REPO).as_posix())
 def test_script_loads(path):
     load_from_path(path)
 
