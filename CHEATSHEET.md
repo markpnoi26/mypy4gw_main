@@ -163,4 +163,4 @@ why those two are the ones to push.
 ---
 
 Deeper detail lives in `AGENTS.md`: §3 for the sync cycle and conflict handling,
-§9 for the traps that have already bitten.
+§10 for the traps that have already bitten.

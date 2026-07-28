@@ -94,3 +94,39 @@ reverse**, because `Core` is an ordinary English word. `tools/` is excluded from
 it precisely because the toolchain describes the rename in prose and would
 rewrite itself into nonsense. `backport.py` reverses only imports and quoted
 paths, never bare tokens.
+
+**A token rename is the wrong tool whenever the move has carve-outs.** Use
+`kind = "import_rename"` instead — it rewrites only `from x` / `import x` and
+honours a `keep` list of dotted prefixes. `module_rename` cannot express the two
+cases that actually come up: a kept subtree imported *from files that do get
+rewritten* (per-import, not per-file, so `exclude` is useless), and a name that
+is also a real directory in a string path, where dots break it. Both bit the
+`Sources` → `dev.reference` rename. → RS-002.
+
+## rules/ outranks docs/
+
+`rules/` holds our standing decisions and the generated ledgers. `docs/` is
+reference — upstream's material plus our own finished handovers — and is **never
+corrected to match**; where the two disagree, `rules/` is current.
+
+Read `rules/RESTRUCTURE.md` before proposing any structural change: every
+deliberate divergence has an `RS-nnn` number that also appears in the
+`layout.toml` note or gate code enforcing it. New rule → next number, written up
+there, number referenced from the enforcing code. No enforcement means it is a
+note, not a rule — mark it **OPEN**.
+
+`BREAKAGE.md`, `DEPRECATED.md`, `DIVERGENCE.md` and `upstream-verdicts.tsv` are
+**generated**. Never hand-edit them; change the rule and regenerate.
+
+## Broken leaves are usually not bugs
+
+Under RS-004, a widget or script that fails to load **outside**
+`Scripts/py4gw-marks-corner/` is deprecated, not broken: listed in
+`rules/DEPRECATED.md`, skipped by the gate, left in the tree. Do not
+"helpfully" fix those — the 285 leaf files are mostly other people's bots.
+Breakage *inside* a protected pack is a real bug.
+
+Before touching any leaf, check `origin` in the ledger: `ours` means our
+transform broke a file that worked upstream, `inherited` means it was already
+broken before the fork. Those deserve opposite responses, and the difference is
+not guessable from the traceback.
