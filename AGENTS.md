@@ -124,6 +124,24 @@ python tools/reforge/compare.py
 
 Record the previous `layout` sha before regenerating — it is the rebase anchor.
 
+### Pushing after a sync
+
+`main` is **rebased** every cycle, so its history is rewritten and `origin/main`
+can never fast-forward. Every push after a sync is:
+
+```bash
+git push --force-with-lease origin main
+```
+
+**Never `git pull` on `main`.** It tracks `origin/main`, so a reflexive pull
+merges the *previous* layout back in and resurrects a whole generation of
+pre-transform files. `git status` reporting "diverged" after a sync is normal
+and expected — that is what a rebase looks like from the remote's side.
+
+Back up `base` and `vendor` too (`git push origin base vendor`). `main` alone
+carries the toolchain as *files*, but not the branch topology that regenerates
+it — and `base` is where the manifest history actually lives.
+
 **`drift.py` failing is the normal signal that upstream changed something.** It
 reports four things, and each means something different:
 
@@ -294,3 +312,10 @@ Each of these cost real time; none is obvious from the code.
   do not read it as data loss.
 - **`git check-ignore` exits 0 when *any* pattern matches, including a negation.**
   Read the printed rule, not the exit code.
+- **The pre-push credential hook does not travel.** `.git/hooks/` is not part of
+  the repo, so a fresh clone has no guard. Reinstall it there.
+- **Upstream's history carries six 52–57 MB launcher binaries**, so a full push
+  is ~478 MB and GitHub warns about file size. They are historical (current tree
+  tracks only the 17.7 MB `Py4GW_Reforged_Launcher.exe`) and cannot be removed
+  without rewriting `vendor`, which would break the fast-forward relationship to
+  upstream. Live with it, or stop tracking the launcher via the manifest.
