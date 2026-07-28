@@ -33,6 +33,9 @@ extend_skip_glob = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# qa/ not tests/ — upstream owns a tests/ directory, and the manifest moves it to
+# dev/tests/imgui/. qa/ is ours and collides with nothing upstream ships.
+testpaths = ["qa"]
 addopts = "-q"
-pythonpath = ["."]
+pythonpath = [".", "qa"]
+markers = ["leaf: tier-4 widgets and scripts; deselect with -m 'not leaf'"]
