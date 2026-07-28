@@ -13,6 +13,7 @@ from pathlib import Path
 
 import fmt
 import manifest as manifest_mod
+import pins as pins_mod
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -214,6 +215,7 @@ def main() -> int:
         return 1
 
     guard(args, mf)
+    applied_pins = pins_mod.apply_pins(mf, args.dry_run)
     files = tracked_files()
     moves, drops, uncovered = plan(mf, files)
     markers = widget_marker_dirs(moves)
@@ -229,6 +231,7 @@ def main() -> int:
     touched = run_codemods(mf, args.dry_run)
     pruned = prune_empty_dirs(args.dry_run)
     print("pruned %d empty directories" % pruned)
+    pins_mod.report(applied_pins)
 
     print("\ncodemod: %d files %s" % (touched, "would change" if args.dry_run else "rewritten"))
     if args.dry_run:

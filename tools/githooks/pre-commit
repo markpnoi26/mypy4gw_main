@@ -21,9 +21,9 @@ vendor)
         "" \
         "  git stash && git checkout main && git stash pop"
     ;;
-layout)
+layout|staging)
     if [ "$REFORGE_ALLOW_LAYOUT" != "1" ]; then
-        die "'layout' is generated, and is DELETED on the next sync." \
+        die "'$branch' is generated, and is DELETED on the next sync." \
             "" \
             "  Anything committed here is lost when apply.py runs again." \
             "" \

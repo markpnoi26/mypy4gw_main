@@ -138,6 +138,7 @@ class Manifest:
         self.meta = doc.get("meta", {})
         self.codemods = doc.get("codemod", [])
         self.legacy_ids = {row["old"]: row["new"] for row in doc.get("legacy_id", [])}
+        self.pins = doc.get("pin", [])
         self.entries = [self.build(row, False) for row in doc.get("rule", [])]
         self.entries += [self.build(row, True) for row in doc.get("override", [])]
 
