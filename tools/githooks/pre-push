@@ -1,5 +1,10 @@
 #!/bin/sh
-# Refuses to push while any credential-shaped path is tracked. See CHEATSHEET.md.
+# Two guards. See CHEATSHEET.md.
+#
+# A hook cannot change your push: git decides what to send before this runs, so
+# it can only accept or refuse. To stop typing --force-with-lease, use the alias
+# that tools/install-hooks.sh sets up:  git pushmain
+
 bad="$(git ls-files | grep -E '(^|/)accounts\.json$|^Py4GW\.ini$|^Settings/[^D]|^json/')"
 if [ -n "$bad" ]; then
     echo "" >&2
@@ -11,4 +16,22 @@ if [ -n "$bad" ]; then
     echo "" >&2
     exit 1
 fi
+
+# layout and staging are rebuilt from scratch by every sync, so a pushed copy is
+# stale the moment it lands - and invites someone to treat it as real.
+while read -r local_ref local_sha remote_ref remote_sha; do
+    case "$remote_ref" in
+    refs/heads/layout | refs/heads/staging)
+        echo "" >&2
+        echo "  [BLOCKED] '$remote_ref' is generated - do not push it." >&2
+        echo "" >&2
+        echo "    Push these instead:" >&2
+        echo "      git pushmain                  your work" >&2
+        echo "      git push origin base vendor   the machine, and upstream's mirror" >&2
+        echo "" >&2
+        exit 1
+        ;;
+    esac
+done
+
 exit 0
