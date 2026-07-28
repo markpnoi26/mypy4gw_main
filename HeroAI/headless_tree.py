@@ -3,7 +3,6 @@ from Core.GlobalCache import GLOBAL_CACHE
 from Core.Map import Map
 from Core.Player import Player
 from Core.Routines import Routines
-from Core.Builds.Any.HeroAI import HeroAI_Build
 from Core.routines_src.BehaviourTrees import BehaviorTree
 from Core import ActionQueueManager, Range, SharedCommandType, ThrottledTimer, Utils
 from Core.py4gwcorelib_src.loot_filters import LootFilters
@@ -28,9 +27,11 @@ class HeroAIHeadlessTree:
     without requiring the widget itself to be enabled.
     """
 
-    def __init__(self, cached_data: CacheData | None = None, heroai_build: HeroAI_Build | None = None):
+    def __init__(self, cached_data: CacheData | None = None, heroai_build=None):
+        from HeroAI.engine import create_heroai_engine
+
         self.cached_data = cached_data or CacheData()
-        self.heroai_build = heroai_build or HeroAI_Build(self.cached_data)
+        self.heroai_build = heroai_build or create_heroai_engine(self.cached_data)
         Settings().AutoCallTargets = True
         self._build_contract_map_signature: tuple[int, int, int, int] | None = None
         self._loot_throttle_check = ThrottledTimer(250)

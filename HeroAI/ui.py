@@ -3320,6 +3320,16 @@ def draw_configure_window(module_name: str, configure_window: WindowModule):
                 resurrection_scroll.draw_settings()
                 ImGui.end_tab_item()
 
+            if ImGui.begin_tab_item("Combat Engine"):
+                account_settings = Settings()
+                bt_enabled = account_settings.get_account_bt_rotation_enabled()
+                new_bt_enabled = ImGui.checkbox("Use BT Rotation Engine (experimental)", bt_enabled)
+                if new_bt_enabled != bt_enabled:
+                    account_settings.set_account_bt_rotation_enabled(new_bt_enabled)
+                PyImGui.text_disabled("Off = legacy combat engine (default). Takes effect next frame,")
+                PyImGui.text_disabled("no restart needed. Per-account setting.")
+                ImGui.end_tab_item()
+
             if ImGui.begin_tab_item("Debug"):
                 if ImGui.begin_child("##DebugSettingsChild", (0, 0)):
                     show_debug = ImGui.checkbox("Show Debug Window", settings.ShowDebugWindow)

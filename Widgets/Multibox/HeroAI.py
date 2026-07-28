@@ -6,7 +6,7 @@ import traceback
 import Py4GW
 import PyImGui
 
-from Core.Builds.Any.HeroAI import HeroAI_Build
+from HeroAI.engine import create_heroai_engine
 
 MODULE_ALIASES = ['Automation/Multiboxing/HeroAI.py']
 MODULE_NAME = "HeroAI"
@@ -39,7 +39,7 @@ from Core import GLOBAL_CACHE, Agent, Range, Routines, ThrottledTimer, SharedCom
 LOOT_THROTTLE_CHECK = ThrottledTimer(250)
 
 cached_data = CacheData()
-heroai_build = HeroAI_Build(cached_data)
+heroai_build = create_heroai_engine(cached_data)
 map_quads: list[Map.Pathing.Quad] = []
 build_contract_map_signature: tuple[int, int, int, int] | None = None
 
