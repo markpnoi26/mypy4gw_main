@@ -41,8 +41,9 @@ Nothing is obligated to flow upward. A change that only makes sense in this
 layout can simply stay here; `backport.py` reports those as "layout-only" rather
 than guessing.
 
-Other repos on this machine, for reference: `Py4GW` is the retired pre-Reforged
-project. `MyPy4GW` is a working symlink-overlay runtime that ran in-client on
+Other repos on this machine, for reference: `Py4GW`, the retired pre-Reforged
+project, **no longer has a working tree** — only a stale memory scope refers to
+it. `MyPy4GW` is a working symlink-overlay runtime that ran in-client on
 2026-07-22 — it is the proof that owning `Py4GW_widget_manager.py` plus
 `sys.path` precedence is enough to control the runtime without touching
 upstream's tree. `Py4GW_Reforged_Native`, the C++ project that builds

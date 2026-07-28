@@ -42,8 +42,23 @@ they name *this* tree.
 
 ## Reading these against a sibling repo
 
-Paths here name **this** tree. `Py4GW_Reforged`, `Py4GW` and `MyPy4GW` still use
-upstream's layout, so translate in reverse when exploring them:
+Two siblings exist, both at `C:\cygwin64\home\Mark\code\`:
+
+| repo | layout | what it is |
+|---|---|---|
+| `Py4GW_Reforged` | `Py4GWCoreLib/` + `HeroAI/` | the fork — PR staging, and `forwardport.py --source` |
+| `MyPy4GW` | `Py4GWCoreLib/` only | symlink-overlay runtime; no `HeroAI/`, so BT skills do not apply |
+
+> `Py4GW_Reforged` also contains a stray `Core/` — 11 entries against
+> `Py4GWCoreLib`'s 69, untracked and gitignored at `.gitignore:253`. It is
+> residue from an early transform run, **not** a second layout. Do not read it as
+> evidence that repo has been reorganised; translate paths anyway.
+
+There is no `Py4GW` directory. `AGENTS.md` §0 mentions it as the retired
+pre-Reforged project and a memory scope still exists for it, but the working tree
+is gone.
+
+Both siblings use upstream's layout, so translate in reverse when exploring them:
 
 | here | sibling repos |
 |---|---|
