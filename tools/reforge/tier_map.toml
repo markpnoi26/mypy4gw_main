@@ -1,0 +1,79 @@
+# Tier assignment by role. A file at tier N may import tiers <= N.
+#
+# Prefixes are matched longest-first, so a deeper path wins over its parent.
+# Both layouts are listed: `Py4GWCoreLib/` is the upstream/vendor name, `Core/`
+# is what the module_rename codemod produces on the layout branch.
+
+[meta]
+# Files above this tier may not be imported at module scope by files below it.
+enforce = true
+
+[[tier]]
+level = 0
+name = "native surface"
+paths = ["stubs/"]
+
+[[tier]]
+level = 0.5
+name = "vendored memory access"
+paths = [
+  "Py4GWCoreLib/native_src/", "Core/native_src/",
+  "Py4GWCoreLib/Scanner.py", "Core/Scanner.py",
+  "Py4GWCoreLib/Context.py", "Core/Context.py",
+]
+
+[[tier]]
+level = 1
+name = "domain source-of-truth"
+paths = ["Py4GWCoreLib/", "Core/"]
+
+[[tier]]
+level = 2
+name = "support infrastructure"
+paths = [
+  "Py4GWCoreLib/py4gwcorelib_src/", "Core/py4gwcorelib_src/",
+  "Py4GWCoreLib/GlobalCache/", "Core/GlobalCache/",
+  "Py4GWCoreLib/routines_src/", "Core/routines_src/",
+  "Py4GWCoreLib/Routines.py", "Core/Routines.py",
+  "Py4GWCoreLib/Py4GWcorelib.py", "Core/Py4GWcorelib.py",
+  "Py4GWCoreLib/HotkeyManager.py", "Core/HotkeyManager.py",
+]
+
+# Combat and automation. Misplaced upstream: these sit inside the core package
+# but are Tier 3 by role. HeroAI is tier 3 here, NOT "core" as layout.toml
+# currently pins it - that pin is what makes HeroAI read as a source.
+[[tier]]
+level = 3
+name = "combat and automation"
+paths = [
+  "HeroAI/",
+  "Py4GWCoreLib/SkillManager.py", "Core/SkillManager.py",
+  "Py4GWCoreLib/BuildMgr.py", "Core/BuildMgr.py",
+  "Py4GWCoreLib/BldMgrBT.py", "Core/BldMgrBT.py",
+  "Py4GWCoreLib/build_src/", "Core/build_src/",
+  "Py4GWCoreLib/Builds/", "Core/Builds/",
+  "Py4GWCoreLib/BTBuilds/", "Core/BTBuilds/",
+  "Py4GWCoreLib/Botting.py", "Core/Botting.py",
+  "Py4GWCoreLib/BottingTree.py", "Core/BottingTree.py",
+  "Py4GWCoreLib/botting_src/", "Core/botting_src/",
+  "Py4GWCoreLib/botting_tree_src/", "Core/botting_tree_src/",
+]
+
+[[tier]]
+level = 4
+name = "leaf consumers"
+paths = [
+  "Widgets/", "Sources/", "Bots/", "bot_factory/", "Examples/", "Scripts/",
+  "UI_RE/", "tests/", "dev/", "migration/", "BridgeRuntime/",
+  "Py4GW_Reforged_Launcher/", "Launcher/", "tools/",
+]
+
+# Known-accepted violations. Each needs a reason; tiercheck reports them
+# separately from new breakage so the count can only go down.
+[[waiver]]
+path = "Py4GWCoreLib/native_src/internals/encoded_strings.py"
+reason = "reads enums for item/gamedata decode; enums are vocabulary, arguably tier 0.5"
+
+[[waiver]]
+path = "Core/native_src/internals/encoded_strings.py"
+reason = "same as the Py4GWCoreLib-layout path"

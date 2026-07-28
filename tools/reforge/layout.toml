@@ -1,0 +1,814 @@
+[meta]
+base = "vendor"
+target_branch = "layout"
+strict = false
+
+
+# ============================================================================
+# TOOLCHAIN + OWN DOCS — tracked in this repo, must survive the transform.
+# ============================================================================
+
+[[rule]]
+match = "tools/**"
+dest = "keep"
+tier = "dev"
+note = "the transform itself; promoted out of .claude so it ships with the repo"
+
+[[override]]
+match = "docs/tier_map_and_separation_plan.md"
+dest = "keep"
+tier = "docs"
+
+
+# ============================================================================
+# CODEMODS — derived rewrites applied after moves.
+# ============================================================================
+
+[[codemod]]
+kind = "module_rename"
+old = "Py4GWCoreLib"
+new = "Core"
+scope = "**/*.py"
+exclude = ["tools/"]
+note = "3678 import statements across 1009 files. Also rewrites the dynamic import at BuildMgr.py:2037 and any 'Py4GWCoreLib/...' string path. verify.py greps for survivors. tools/ is excluded because the transform describes this rename in its own prose and would rewrite itself into nonsense."
+
+
+# ============================================================================
+# CORE — the library. Renamed Py4GWCoreLib -> Core.
+# ============================================================================
+
+[[rule]]
+match = "Py4GWCoreLib/**"
+dest = "Core/{rel:Py4GWCoreLib}"
+tier = "core"
+
+[[override]]
+match = "Py4GWCoreLib/tests/**"
+dest = "dev/tests/corelib/{rel:Py4GWCoreLib/tests}"
+tier = "dev"
+
+# Wave 3 — blocked on making the BuildMgr.py:2037 registry multi-root.
+# [[rule]]
+# match = "Core/Builds/**"
+# dest  = "Scripts/py4gw-builds/builds/{rel:Core/Builds}"
+# tier  = "script"
+
+
+# ============================================================================
+# PINNED AT ROOT — do not move. Each has an external referent.
+# ============================================================================
+
+[[rule]]
+match = "Py4GW_widget_manager.py"
+dest = "keep"
+tier = "core"
+note = "DLL imports this by name (string present in Py4GW.dll)"
+
+[[rule]]
+match = "accounts.json"
+dest = "keep"
+note = "Py4GW.ini:account_config_file points here"
+
+[[rule]]
+match = "Textures/**"
+dest = "keep"
+note = "96 hardcoded \"Textures/...\" string paths, incl. WidgetManager.py:441 MODULE_ICON default"
+
+[[rule]]
+match = "fonts/**"
+dest = "keep"
+note = "6 hardcoded string paths"
+
+[[rule]]
+match = "{Styles,Addons,stubs,offsets,Logs,error_log}/**"
+dest = "keep"
+note = "stubs pinned by pyrightconfig.json:stubPath; offsets load path untraced; Addons is binary"
+
+[[rule]]
+match = "{Py4GW.dll,Py4GW.ini,Py4GW_Reforged_Launcher.exe,README.md,CLAUDE.md,AGENTS.md,pyproject.toml,pyrightconfig.json,requirements.txt,Py4GW_python.pyproj,clean_python_cache.bat}"
+dest = "keep"
+
+
+# ============================================================================
+# TIER 1 — WIDGETS
+# ============================================================================
+
+[[override]]
+match = "Widgets/System/Messaging.py"
+dest = "Widgets/Panels/Messaging.py"
+tier = "widget"
+note = "panel half; shared helpers upstreamed to core separately"
+
+[[override]]
+match = "Widgets/System/Style Manager.py"
+dest = "Widgets/Panels/Style Manager.py"
+tier = "widget"
+
+[[override]]
+match = "Widgets/System/System Settings.py"
+dest = "Widgets/Panels/System Settings.py"
+tier = "widget"
+
+[[override]]
+match = "Widgets/System/Debug Terminal.py"
+dest = "Widgets/Panels/Debug Terminal.py"
+tier = "widget"
+
+[[override]]
+match = "Widgets/System/Frame Limiter.py"
+dest = "Widgets/Panels/Frame Limiter.py"
+tier = "widget"
+
+[[override]]
+match = "Widgets/System/Environment Upkeeper.py"
+dest = "Widgets/Upkeep/Environment Upkeeper.py"
+tier = "widget"
+
+[[override]]
+match = "Widgets/System/Enemy Tracker.py"
+dest = "Widgets/Overlays/Enemy Tracker.py"
+tier = "widget"
+
+[[rule]]
+match = "Widgets/Guild Wars/Screen Overlays/**"
+dest = "Widgets/Overlays/{rel:Widgets/Guild Wars/Screen Overlays}"
+tier = "widget"
+
+[[override]]
+match = "Widgets/Guild Wars/Items & Loot/TeamInventoryViewer.py"
+dest = "Widgets/Items/TeamInventoryViewer.py"
+tier = "widget"
+
+[[override]]
+match = "Widgets/Guild Wars/Calendar.py"
+dest = "Widgets/World/Calendar.py"
+tier = "widget"
+
+[[override]]
+match = "Widgets/Guild Wars/Travel.py"
+dest = "Widgets/World/Travel.py"
+tier = "widget"
+
+[[override]]
+match = "Widgets/Automation/Multiboxing/HeroAI.py"
+dest = "Widgets/Multibox/HeroAI.py"
+tier = "widget"
+
+[[override]]
+match = "Widgets/Guild Wars/ChatCommandBroadcast.py"
+dest = "Widgets/Multibox/ChatCommandBroadcast.py"
+tier = "widget"
+
+[[override]]
+match = "Widgets/Guild Wars/Switch Character.py"
+dest = "Widgets/Multibox/Switch Character.py"
+tier = "widget"
+
+[[override]]
+match = "Widgets/Automation/Enhancements/HeroHelper.py"
+dest = "Widgets/Heroes/HeroHelper.py"
+tier = "widget"
+
+
+# ============================================================================
+# TIER 2 — SCRIPTS
+# ============================================================================
+
+[[rule]]
+match = "Widgets/Automation/Bots/**"
+dest = "Scripts/py4gw-community-bots/scripts/{rel:Widgets/Automation/Bots}"
+tier = "script"
+pack = "community-bots"
+
+[[rule]]
+match = "Widgets/Coding/**"
+dest = "Scripts/py4gw-devtools/scripts/{rel:Widgets/Coding}"
+tier = "script"
+pack = "devtools"
+
+[[override]]
+match = "Widgets/Coding/Tools/Script Runner.py"
+dest = "drop"
+note = "superseded by the core script host"
+
+[[override]]
+match = "Widgets/Guild Wars/Customization/HeroAi Skill Editor.py"
+dest = "Scripts/py4gw-heroai/scripts/HeroAi Skill Editor.py"
+tier = "script"
+pack = "heroai"
+
+[[override]]
+match = "Widgets/Automation/Multiboxing/CombatPrep.py"
+dest = "drop"
+note = "BREAKS Bots/marks_coding_corner/VoltaicSpearTeamFarm.py:23 — vendor to marks-corner/lib or strip the import first"
+
+[[rule]]
+match = "Bots/marks_coding_corner/utils/**"
+dest = "Scripts/py4gw-marks-corner/lib/{rel:Bots/marks_coding_corner/utils}"
+tier = "lib"
+pack = "marks-corner"
+
+[[rule]]
+match = "Bots/marks_coding_corner/**"
+dest = "Scripts/py4gw-marks-corner/scripts/{rel:Bots/marks_coding_corner}"
+tier = "script"
+pack = "marks-corner"
+
+[[rule]]
+match = "Bots/**"
+dest = "Scripts/py4gw-community-bots/legacy/{rel:Bots}"
+tier = "script"
+pack = "community-bots"
+note = "catch-all for BDS, Challenge Missions, Elite Tome Farm, Ewoog_Scripts, Example Bots, Halloween, modular_bot"
+
+[[rule]]
+match = "HeroAI/**"
+dest = "keep"
+tier = "core"
+note = "core-tier, pinned. 34 Core/ files import ~10 of its modules (targeting 19 refs, custom_skill_src.skill_types 14, types 10, cache_data 6) incl. BottingTree, BuildMgr, SkillManager and 20 Builds files. Folding it into Core/heroai needs an import-only codemod: a blunt token rename would also rewrite the \"HeroAI\" config-path and MODULE_NAME strings under Runtime/settings/Defaults/HeroAI/."
+
+[[rule]]
+match = "Examples/**"
+dest = "Scripts/py4gw-examples/{rel:Examples}"
+tier = "script"
+pack = "examples"
+
+
+# ============================================================================
+# RUNTIME — settings, accounts, db seeds, reference data.
+# Named Runtime/ and not Data/ because Windows is case-insensitive: a Data/
+# destination collides with the existing data/ source, and the data/** rule
+# then re-matches its own output forever.
+# ============================================================================
+
+[[rule]]
+match = "Settings/**"
+dest = "keep"
+note = "PINNED. The native side owns template seeding from settings/Defaults/*.cfg (see Core/py4gwcorelib_src/Settings.py:240; the DLL carries the literal 'default_template'). The persistence jail roots at <projects_path>/settings and <projects_path>/json, confirmed empirically: MyPy4GW created settings/ at the project root when it ran. Moving these breaks seeding."
+
+[[rule]]
+match = "json/**"
+dest = "Runtime/accounts/{rel:json}"
+
+[[rule]]
+match = "data/**"
+dest = "Runtime/db/{rel:data}"
+
+[[rule]]
+match = "EnemyData/**"
+dest = "Runtime/enemy/{rel:EnemyData}"
+
+
+# ============================================================================
+# DEV — everything that is not shipped
+# ============================================================================
+
+[[rule]]
+match = "Legacy code and tests/**"
+dest = "dev/legacy/{rel:Legacy code and tests}"
+tier = "dev"
+
+[[rule]]
+match = "UI_RE/**"
+dest = "dev/ui-re/{rel:UI_RE}"
+tier = "dev"
+
+[[rule]]
+match = "tests/**"
+dest = "dev/tests/imgui/{rel:tests}"
+tier = "dev"
+
+[[rule]]
+match = "native_ui_test_tabs/**"
+dest = "dev/harness/native_ui_tabs/{rel:native_ui_test_tabs}"
+tier = "dev"
+
+[[rule]]
+match = "{BridgeRuntime}/**"
+dest = "dev/bridge/runtime/{rel:BridgeRuntime}"
+tier = "dev"
+
+[[rule]]
+match = "{bridge_cli,bridge_daemon}.py"
+dest = "dev/bridge/{name}"
+tier = "dev"
+
+[[rule]]
+match = "migration/**"
+dest = "dev/migration/{rel:migration}"
+tier = "dev"
+
+[[rule]]
+match = "bot_factory/**"
+dest = "dev/bot_factory/{rel:bot_factory}"
+tier = "dev"
+note = "contains discovery.py — check against the script-host design before filing as dev"
+
+[[override]]
+match = "Bot_Factory.py"
+dest = "dev/bot_factory/Bot_Factory.py"
+tier = "dev"
+
+[[rule]]
+match = "Launcher_Redesign/**"
+dest = "dev/launcher-mockup/{rel:Launcher_Redesign}"
+tier = "dev"
+
+[[rule]]
+match = "Py4GW_Reforged_Launcher/**"
+dest = "Launcher/{rel:Py4GW_Reforged_Launcher}"
+note = "distinct deliverable, not dev sediment — builds the root .exe"
+
+[[rule]]
+match = "{frame_api_test,frame_relation_test,frame_viewer,frame_viewer_basic,listeners_test,particle_lab,particle_test,navmesh_debug,overlay_occlusion_diag,context_diagnostic,gwui_scrollable_window_test,skill_texture_test,frame_api_test}.py"
+dest = "dev/harness/{name}"
+tier = "dev"
+
+[[rule]]
+match = "{GWUI Test,Trapezoid Lookup Test,Hello_World,Hello World Collector Test,Barebones_Example_module,Beahaviour Tree tester,HeroAI_ParallelTree_Example}.py"
+dest = "dev/scratch/{name}"
+tier = "dev"
+
+[[rule]]
+match = "{py4gw_mcp_server,import_accounts_json,capture_name_surfaces,AgentEnemyDebugDump,Map Struct Mapper,Patcher}.py"
+dest = "dev/tools/{name}"
+tier = "dev"
+
+[[rule]]
+match = "{test_sqlite3,test_name_obfuscation_smoke}.py"
+dest = "dev/tests/{name}"
+tier = "dev"
+
+[[override]]
+match = "AgentEnemyDebugDump_samples.json"
+dest = "dev/tools/AgentEnemyDebugDump_samples.json"
+tier = "dev"
+
+# Root bots -> scripts, not dev.
+[[rule]]
+match = "{Beautiful Pre-Searing,Chahbek_Village_ZM_BT,Factions Leveler Redux,Multibox Plant Farmer,VQ Drazach Thicket Redux,VQ Mount Quinkai Redux,Lightbringer Party Broadcast,Py4GW DEMO 2.0}.py"
+dest = "Scripts/py4gw-marks-corner/scripts/{name}"
+tier = "script"
+pack = "marks-corner"
+
+[[rule]]
+match = "{radial menu,loot_beam,light_beacon}.py"
+dest = "Widgets/Overlays/{name}"
+tier = "widget"
+note = "overlay-shaped; confirm before applying"
+
+[[override]]
+match = "HeroAI_UI.py"
+dest = "Scripts/py4gw-heroai/scripts/HeroAI_UI.py"
+tier = "script"
+pack = "heroai"
+
+[[override]]
+match = "Py4GW_Launcher_Lite.py"
+dest = "Launcher/Py4GW_Launcher_Lite.py"
+
+
+# ============================================================================
+# DOCS
+# ============================================================================
+
+[[rule]]
+match = "docs/**"
+dest = "keep"
+tier = "docs"
+
+[[rule]]
+match = "{DBMGR_HANDOVER.md,FOLLOW_REFACTOR_HANDOVER.md,2.0 full changelog.txt,perf.txt,request.txt,av_char_diagnostics.txt,py_ui_function_catalog.txt}"
+dest = "docs/{name}"
+tier = "docs"
+
+[[rule]]
+match = "{crossed swords.png,farm_froggy.png,folder icons.psd,python_icon.ico,python_icon.jpg,python_icon_round.png,python_icon_round_20px.png}"
+dest = "docs/assets/{name}"
+tier = "docs"
+
+
+# ============================================================================
+# DROP
+# ============================================================================
+
+[[override]]
+match = "HeroAI_UI - bkp.py"
+dest = "drop"
+
+[[override]]
+match = "test_sqlite3 - Copy - Copy.py"
+dest = "drop"
+
+[[rule]]
+match = "Wayfarer's_Reverie_maps/**"
+dest = "drop"
+note = "empty directory"
+
+[[rule]]
+match = "**/__pycache__/**"
+dest = "drop"
+
+[[override]]
+match = "**/.widget"
+dest = "drop"
+note = "markers are synthesized by apply.py from widget-tier destinations, never moved"
+
+[[rule]]
+match = "{.vs,.idea}/**"
+dest = "drop"
+note = "checked-in IDE state, incl. VS Copilot index DBs (CodeChunks.db, SemanticSymbols.db*)"
+
+[[rule]]
+match = "Py4GW/**"
+dest = "drop"
+note = "stray nested Py4GW/HeroAI/custom_skill_src/necromancer.py"
+
+
+# ============================================================================
+# ROOT METADATA — keep
+# ============================================================================
+
+[[rule]]
+match = "{.gitignore,.gitattributes,.gitmodules,error_log}"
+dest = "keep"
+
+
+# ============================================================================
+# UNCLASSIFIED — blocked on triage. drift.py lists these; strict=false tolerates.
+# ============================================================================
+#
+#  30 widget-candidate files still to call:
+#   Widgets/Guild Wars/Items & Loot/*      (6: MerchantRules 30378L, Xunlaimanager 3400L,
+#                                              InventoryPlus 3085L, LootManager, SuperItemEater,
+#                                              item_eater)
+#   Widgets/Guild Wars/Customization/*     (4: Layout Manager, MultiBoxing, Window Renamer,
+#                                              Disable Camera Smoothing)
+#   Widgets/Guild Wars/Triggers/*          (2: Titles, Disable Alcohol Effect)
+#   Widgets/Automation/Enhancements/*      (5: Dhuum Helper, Kamadan Trade Spammer,
+#                                              Survival Title Helper, Pet Helper, Heroic Refrain)
+#   Widgets/Automation/Helpers/**          (9: Pycons 13866L, EliteSkillsCapture 12617L,
+#                                              EZ Cast 1329L, TitleHelper, 5x Dialogs)
+#   Widgets/Automation/modular/*           (2: Modular Tester, Modular Coder)
+#   Widgets/WidgetCatalog/*                (1: Py4GW_widget_catalog 2874L — superseded by launchpad?)
+#   Widgets/{Config,Data}/**               (data dirs — 8 .gitignore rules at lines 46-59 point here)
+#   Py4GW/**                               (1 stray file: Py4GW/HeroAI)
+
+
+# ============================================================================
+# LEGACY IDS — widget id is the INI section key (WidgetManager.py:896, :925).
+# A move without an alias silently resets enabled-state and per-widget config.
+# verify.py must expand globs against the real tree before checking coverage.
+# ============================================================================
+
+[[legacy_id]]
+old = "System/Style Manager.py"
+new = "widgets:Panels/Style Manager.py"
+
+[[legacy_id]]
+old = "System/Messaging.py"
+new = "widgets:Panels/Messaging.py"
+
+[[legacy_id]]
+old = "System/System Settings.py"
+new = "widgets:Panels/System Settings.py"
+
+[[legacy_id]]
+old = "System/Debug Terminal.py"
+new = "widgets:Panels/Debug Terminal.py"
+
+[[legacy_id]]
+old = "System/Frame Limiter.py"
+new = "widgets:Panels/Frame Limiter.py"
+
+[[legacy_id]]
+old = "System/Environment Upkeeper.py"
+new = "widgets:Upkeep/Environment Upkeeper.py"
+
+[[legacy_id]]
+old = "System/Enemy Tracker.py"
+new = "widgets:Overlays/Enemy Tracker.py"
+
+[[legacy_id]]
+old = "Guild Wars/Screen Overlays/Skillbar +.py"
+new = "widgets:Overlays/Skillbar +.py"
+
+[[legacy_id]]
+old = "Guild Wars/Screen Overlays/Vanquish Tracker.py"
+new = "widgets:Overlays/Vanquish Tracker.py"
+
+[[legacy_id]]
+old = "Guild Wars/Screen Overlays/Instance Timer.py"
+new = "widgets:Overlays/Instance Timer.py"
+
+[[legacy_id]]
+old = "Guild Wars/Screen Overlays/Map Overlay.py"
+new = "widgets:Overlays/Map Overlay.py"
+
+[[legacy_id]]
+old = "Guild Wars/Items & Loot/TeamInventoryViewer.py"
+new = "widgets:Items/TeamInventoryViewer.py"
+
+[[legacy_id]]
+old = "Guild Wars/Calendar.py"
+new = "widgets:World/Calendar.py"
+
+[[legacy_id]]
+old = "Guild Wars/Travel.py"
+new = "widgets:World/Travel.py"
+
+[[legacy_id]]
+old = "Automation/Multiboxing/HeroAI.py"
+new = "widgets:Multibox/HeroAI.py"
+
+[[legacy_id]]
+old = "Guild Wars/ChatCommandBroadcast.py"
+new = "widgets:Multibox/ChatCommandBroadcast.py"
+
+[[legacy_id]]
+old = "Guild Wars/Switch Character.py"
+new = "widgets:Multibox/Switch Character.py"
+
+[[legacy_id]]
+old = "Automation/Enhancements/HeroHelper.py"
+new = "widgets:Heroes/HeroHelper.py"
+
+
+# ============================================================================
+# DRIFT TRIAGE — the 36 paths left unclassified by the first pass.
+# Globs carry a default destination so future upstream additions stay covered;
+# overrides redirect the specific files whose role differs.
+# ============================================================================
+
+# --- Automation/Enhancements: default to Upkeep, redirect the rest ---
+[[rule]]
+match = "Widgets/Automation/Enhancements/**"
+dest = "Widgets/Upkeep/{name}"
+tier = "widget"
+
+[[override]]
+match = "Widgets/Automation/Enhancements/Dhuum Helper.py"
+dest = "Widgets/Combat/Dhuum Helper.py"
+tier = "widget"
+
+[[override]]
+match = "Widgets/Automation/Enhancements/Heroic Refrain.py"
+dest = "Widgets/Combat/Heroic Refrain.py"
+tier = "widget"
+
+[[override]]
+match = "Widgets/Automation/Enhancements/Pet Helper.py"
+dest = "Widgets/Heroes/Pet Helper.py"
+tier = "widget"
+
+[[override]]
+match = "Widgets/Automation/Enhancements/{Kamadan Trade Spammer.py,Kamadan Trade Spammer.ini}"
+dest = "Widgets/Trade/{name}"
+tier = "widget"
+
+# --- Automation/Helpers: default to Upkeep ---
+[[rule]]
+match = "Widgets/Automation/Helpers/**"
+dest = "Widgets/Upkeep/{name}"
+tier = "widget"
+
+[[override]]
+match = "Widgets/Automation/Helpers/EZ Cast.py"
+dest = "Widgets/Combat/EZ Cast.py"
+tier = "widget"
+
+[[rule]]
+match = "Widgets/Automation/Helpers/Dialogs/**"
+dest = "Widgets/Dialogs/{name}"
+tier = "widget"
+
+[[rule]]
+match = "Widgets/Automation/Helpers/Elite Skills/**"
+dest = "Widgets/World/{name}"
+tier = "widget"
+
+# --- Items & Loot ---
+[[rule]]
+match = "Widgets/Guild Wars/Items & Loot/**"
+dest = "Widgets/Items/{name}"
+tier = "widget"
+
+# --- Customization: client-behaviour tweaks, except the multibox one ---
+[[rule]]
+match = "Widgets/Guild Wars/Customization/**"
+dest = "Widgets/Client/{name}"
+tier = "widget"
+
+[[override]]
+match = "Widgets/Guild Wars/Triggers/Disable Alcohol Effect.py"
+dest = "Widgets/Client/Disable Alcohol Effect.py"
+tier = "widget"
+
+[[override]]
+match = "Widgets/Guild Wars/Triggers/Titles.py"
+dest = "Widgets/Upkeep/Titles.py"
+tier = "widget"
+
+# --- modular authoring tools belong with the modular pack, not the widget tree ---
+[[rule]]
+match = "Widgets/Automation/modular/**"
+dest = "Scripts/py4gw-modular/tools/{name}"
+tier = "script"
+pack = "modular"
+
+# --- bundled read-only catalogs: PINNED. MerchantRules.py:56 computes
+#     get_projects_path()/"Widgets"/"Data", so a move needs a semantic edit. ---
+[[rule]]
+match = "Widgets/Data/**"
+dest = "keep"
+tier = "widget"
+note = "computed path in Widgets/Guild Wars/Items & Loot/MerchantRules.py:56 (DATA_DIR)"
+
+# --- the pre-launchpad catalog UI: superseded, but kept rather than dropped ---
+[[rule]]
+match = "Widgets/WidgetCatalog/**"
+dest = "dev/legacy/widget_catalog/{name}"
+tier = "dev"
+note = "vendor's Py4GW_widget_manager.py registers the launchpad only; no catalog handoff remains"
+
+[[override]]
+match = "Widgets/WidgetCatalog/folder icons.png"
+dest = "docs/assets/folder icons.png"
+tier = "docs"
+
+# --- scratch output ---
+[[rule]]
+match = "{debug,errors}.txt"
+dest = "drop"
+
+
+# ============================================================================
+# LEGACY IDS for the triaged moves. Widget id is the INI section key, so a move
+# without an alias silently resets enabled-state and per-widget config.
+# ============================================================================
+
+[[legacy_id]]
+old = "Automation/Enhancements/Dhuum Helper.py"
+new = "widgets:Combat/Dhuum Helper.py"
+
+[[legacy_id]]
+old = "Automation/Enhancements/Heroic Refrain.py"
+new = "widgets:Combat/Heroic Refrain.py"
+
+[[legacy_id]]
+old = "Automation/Enhancements/Pet Helper.py"
+new = "widgets:Heroes/Pet Helper.py"
+
+[[legacy_id]]
+old = "Automation/Enhancements/Survival Title Helper.py"
+new = "widgets:Upkeep/Survival Title Helper.py"
+
+[[legacy_id]]
+old = "Automation/Enhancements/Kamadan Trade Spammer.py"
+new = "widgets:Trade/Kamadan Trade Spammer.py"
+
+[[legacy_id]]
+old = "Automation/Helpers/EZ Cast.py"
+new = "widgets:Combat/EZ Cast.py"
+
+[[legacy_id]]
+old = "Automation/Helpers/Pycons.py"
+new = "widgets:Upkeep/Pycons.py"
+
+[[legacy_id]]
+old = "Automation/Helpers/Dialogs/Balthazar Skill Unlock.py"
+new = "widgets:Dialogs/Balthazar Skill Unlock.py"
+
+[[legacy_id]]
+old = "Automation/Helpers/Dialogs/CanthaDialogSender.py"
+new = "widgets:Dialogs/CanthaDialogSender.py"
+
+[[legacy_id]]
+old = "Automation/Helpers/Dialogs/NFDialogSender.py"
+new = "widgets:Dialogs/NFDialogSender.py"
+
+[[legacy_id]]
+old = "Automation/Helpers/Dialogs/Profession Unlocker.py"
+new = "widgets:Dialogs/Profession Unlocker.py"
+
+[[legacy_id]]
+old = "Automation/Helpers/Dialogs/Skill Trainer.py"
+new = "widgets:Dialogs/Skill Trainer.py"
+
+[[legacy_id]]
+old = "Automation/Helpers/Elite Skills/EliteSkillsCapture.py"
+new = "widgets:World/EliteSkillsCapture.py"
+
+[[legacy_id]]
+old = "Guild Wars/Items & Loot/InventoryPlus.py"
+new = "widgets:Items/InventoryPlus.py"
+
+[[legacy_id]]
+old = "Guild Wars/Items & Loot/SuperItemEater.py"
+new = "widgets:Items/SuperItemEater.py"
+
+[[legacy_id]]
+old = "Guild Wars/Items & Loot/Xunlaimanager.py"
+new = "widgets:Items/Xunlaimanager.py"
+
+[[legacy_id]]
+old = "Guild Wars/Items & Loot/item_eater.py"
+new = "widgets:Items/item_eater.py"
+
+[[legacy_id]]
+old = "Guild Wars/Customization/Disable Camera Smoothing.py"
+new = "widgets:Client/Disable Camera Smoothing.py"
+
+[[legacy_id]]
+old = "Guild Wars/Customization/Layout Manager.py"
+new = "widgets:Client/Layout Manager.py"
+
+[[legacy_id]]
+old = "Guild Wars/Customization/Window Renamer.py"
+new = "widgets:Client/Window Renamer.py"
+
+[[legacy_id]]
+old = "Guild Wars/Triggers/Disable Alcohol Effect.py"
+new = "widgets:Client/Disable Alcohol Effect.py"
+
+[[legacy_id]]
+old = "Guild Wars/Triggers/Titles.py"
+new = "widgets:Upkeep/Titles.py"
+
+
+# ============================================================================
+# SOURCES — demoted to reference. Contributed trees, not shipped code.
+# One [[override]] beats every [[rule]]; the marks_sources override wins over
+# it on literal-prefix length, so own-code stays in its pack.
+# ============================================================================
+
+[[override]]
+match = "Sources/**"
+dest = "dev/reference/{rel:Sources}"
+tier = "reference"
+note = "read-only reference. 27 files outside Sources import from it - see docs/sources_demotion.md"
+
+[[override]]
+match = "Sources/marks_sources/**"
+dest = "keep"
+tier = "lib"
+note = "own code, and TeamInventoryViewer.py:35 hardcodes the string path 'Sources/marks_sources/mods_data'. Relocating needs a string codemod on top of the import rewrite; pinned until that is worth doing."
+
+[[override]]
+match = "Sources/ApoSource/InvPlus/**"
+dest = "keep"
+tier = "lib"
+note = "carve-out: InventoryPlus.py's 6 lazy imports resolve here. Self-contained (10 files, imports nothing outside itself) and its only get_projects_path use points at Widgets/Config, not its own location."
+
+
+# ============================================================================
+# TABLED — widgets whose eager Sources imports no longer resolve. Parked out of
+# the shipped tree rather than left to fail at load. Un-tabling is a one-line
+# dest change once each is rewritten against Core.
+# ============================================================================
+
+[[override]]
+match = "Widgets/Guild Wars/Items & Loot/MerchantRules.py"
+dest = "dev/tabled/MerchantRules.py"
+tier = "dev"
+note = "4 eager imports of Sources.frenkeyLib. 30378 lines; needs a rewrite, not a patch."
+
+[[override]]
+match = "Widgets/Guild Wars/Customization/MultiBoxing.py"
+dest = "dev/tabled/MultiBoxing.py"
+tier = "dev"
+note = "6 eager imports of Sources.frenkeyLib"
+
+[[override]]
+match = "Widgets/Guild Wars/Screen Overlays/PartyQuestLog.py"
+dest = "dev/tabled/PartyQuestLog.py"
+tier = "dev"
+note = "4 eager imports of Sources.ApoSource + Sources.frenkeyLib"
+
+[[override]]
+match = "Widgets/Automation/Helpers/TitleHelper.py"
+dest = "dev/tabled/TitleHelper.py"
+tier = "dev"
+note = "2 eager imports of Sources.aC_Scripts"
+
+
+# ============================================================================
+# PROJECT IDENTITY — ours, not upstream's. Must survive every regeneration.
+# ============================================================================
+
+[[override]]
+match = "{AGENTS.md,README.md,CLAUDE.md}"
+dest = "keep"
+tier = "docs"
+note = "this project's identity. Upstream's originals are preserved verbatim under docs/reference/."
+
+[[rule]]
+match = ".claude/**"
+dest = "keep"
+tier = "docs"
+
+[[rule]]
+match = "docs/reference/**"
+dest = "keep"
+tier = "docs"
+note = "upstream's README/AGENTS, kept verbatim for lookup"

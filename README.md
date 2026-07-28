@@ -1,103 +1,97 @@
-# Py4GW Reforged
+# mypy4gw
 
-Py4GW Reforged is a Python automation and scripting library for the Guild Wars
-client. It gives you tools for automation, scripting, and in-game interactions,
-from single-character helpers to full multi-account bots.
+**A generated, tier-enforced reorganization of [Py4GW_Reforged](https://github.com/apoguita/Py4GW_Reforged).**
 
-This is the current, actively developed version of Py4GW. It replaces the
-original project at https://github.com/apoguita/Py4GW, which is now retired.
+This is not a fork you merge into. Upstream is *vendored* and never edited. The
+tree you see is *generated* from upstream by a deterministic transform, and your
+own work sits on top as an overlay.
 
-## How it works
+That distinction is the whole project. Everything below follows from it.
 
-Python does not run standalone here. It runs embedded inside the Guild Wars
-process through `Py4GW.dll`, which is injected into the game by the launcher.
-Most of this library is meant to execute in-client against a live game, not from
-a plain interpreter.
+---
 
-The library reaches the game through two parallel paths:
+## The three branches
 
-- Bindings - `Py*` modules (`PyAgent`, `PyPlayer`, `PyImGui`, `PySystem`, and
-  more) provided by the DLL. The `stubs/` folder holds the type stubs for them,
-  and the wrapper classes in `Py4GWCoreLib/` build on top.
-- Shared memory - live game state (agent positions, health, map and world
-  context, and so on) read directly from the game process.
+| Branch | What it is | Rule |
+|---|---|---|
+| `vendor` | byte-identical mirror of `upstream/main` | **fast-forward only. Never edit.** |
+| `layout` | `apply.py(vendor)` — the reorganized tree | **generated. Disposable. Never hand-edit.** |
+| `main` | `layout` + your work | **yours. Edit freely.** |
 
-`Py4GW.dll` itself is built by the companion C++ project:
-https://github.com/apoguita/Py4GW_Reforged_Native
+Because `layout` is regenerated rather than merged, upstream restructuring — and
+they restructure in 300-file sweeps — costs you a manifest edit instead of a
+merge conflict.
 
-## Features
+## Why it exists
 
-- Agent handling - manage NPCs, enemies, and allies.
-- Inventory management - automate item handling and categorization.
-- Pathfinding and navigation - built-in movement tools.
-- Widgets - extensible in-game UI for travel, titles, and more.
-- Event hooks - react to game events with your own logic.
-- Hero AI and combat automation - rule-driven combat and party control.
-- Multi-account support - run and coordinate multiple accounts at once, with a
-  shared-memory layer for cross-account coordination.
-- Lightweight and modular - fast, modular, and easy to extend.
+Upstream is a capable system with poor hygiene: 46% of the "core library" is not
+core, the package facade eagerly imports 241 modules including the combat AI, and
+the widget tree gets re-nested periodically. Those are structural problems you
+cannot fix by editing files, because your edits are what get destroyed.
 
-## Requirements
+So instead: leave upstream alone, and express the reorganization as **data** —
+one manifest that maps every upstream path to where it belongs here. The manifest
+is the product. The tree is a build artifact.
 
-- Python 3.13.0 32-bit (other versions can crash the Guild Wars client):
-  https://www.python.org/downloads/release/python-3130/
-- A Guild Wars client.
+## The tiers
+
+Every file has a tier, and a file may only import at or below its own. This is
+enforced by `tools/reforge/tiercheck.py`, which exits non-zero on violation.
+
+| Tier | What | Where |
+|---|---|---|
+| 0 | native surface — the injected DLL's bindings | `stubs/`, `offsets/`, `Py4GW.dll` |
+| 0.5 | vendored memory access, pinned to game layout | `Core/native_src/`, `Scanner.py`, `Context.py` |
+| 1 | domain source-of-truth wrappers | `Core/` — Agent, Player, Map, Item, … |
+| 2 | support infrastructure | `Core/py4gwcorelib_src/`, `GlobalCache/`, `routines_src/` |
+| 3 | combat & automation | `HeroAI/`, `Core/Builds/`, `Core/botting_src/`, … |
+| 4 | leaf consumers | `Widgets/`, `Scripts/`, `dev/` |
+
+`Py4GW.dll` is built by a separate C++ project and is **consumed, not built**
+here. Tier 0 is a binary you vendor. `stubs/` is your contract with it.
+
+## Layout
+
+```
+Core/        the library (upstream Py4GWCoreLib, renamed by codemod)
+HeroAI/      combat AI — tier 3, despite what upstream's layout implies
+Widgets/     shipped in-game UI, 12 flat categories
+Scripts/     packs — community-bots, devtools, examples, marks-corner, …
+dev/         not shipped: reference/, legacy/, tabled/, tests/, harness/
+Runtime/     settings, db seeds, account data
+tools/       the transform itself — tracked, because it IS the project
+docs/        architecture notes; docs/reference/ holds upstream's originals
+```
 
 ## Getting started
 
-1. Clone this repository:
+```bash
+git clone <this> && cd mypy4gw
+python tools/reforge/drift.py       # manifest covers every upstream path?
+python tools/reforge/verify.py      # postconditions on the tree
+python tools/reforge/tiercheck.py --core Core
+```
 
-       git clone https://github.com/apoguita/Py4GW_Reforged.git
+Read next, in order: **`AGENTS.md`** (what you may change and what will conflict),
+then `.claude/context/hard-rules.md` (rules that make code wrong even when it
+runs), then `docs/tier_map_and_separation_plan.md` (the measured analysis this is
+all built on).
 
-2. Enter the project directory:
+## Relationship to upstream
 
-       cd Py4GW_Reforged
+Changes flow **both ways**, on different paths:
 
-3. Get the injected DLL and launcher from the Releases page, and follow the
-   setup instructions there:
-   https://github.com/apoguita/Py4GW_Reforged/releases
+- **Down** — `git fetch upstream && sync`. Upstream's work arrives through
+  `vendor`, is re-transformed, and your overlay rebases on top.
+- **Up** — `tools/reforge/backport.py layout..main` maps a change here onto
+  upstream's layout so it can be a normal PR. It also tells you which of your
+  changes *can't* be back-ported because they only exist in this structure.
 
-## Project layout
+Nothing here is hostile to upstream. The transform is motion plus derived
+rewrites; every semantic fix is worth sending up, and the manifest doubles as a
+reorganization proposal if they ever want it.
 
-    Py4GW_Reforged/
-    |-- Py4GWCoreLib/        Core library: the single source-of-truth layer
-    |                        (Agent, Player, Map, Inventory, Skill, Party, ImGui,
-    |                        Pathing, GlobalCache, shared memory, and more)
-    |-- HeroAI/              Hero AI automation and combat logic
-    |-- Widgets/             In-game widgets (folder-based discovery)
-    |-- Sources/             Larger script projects (ModularBot, tools, libraries)
-    |-- Bots/ , bot_factory/ Bot implementations and scaffolding
-    |-- BridgeRuntime/       Bridge stack for external tools and MCP integration
-    |-- stubs/               Type stubs for the Py* binding modules
-    |-- Textures/ , fonts/ , Styles/   UI assets
-    |-- Examples/            Example scripts demonstrating library usage
-    |-- docs/                Architecture notes and subsystem guides
-    |-- Py4GW_Launcher.py            External launcher and injector
-    |-- Py4GW_widget_manager.py      In-client widget bootstrap
-    |-- bridge_daemon.py , bridge_cli.py , py4gw_mcp_server.py
-    |                                Bridge daemon, operator CLI, and MCP adapter
+---
 
-## Entry points
-
-- Py4GW_Launcher.py - the external launcher and injector UI.
-- Py4GW_widget_manager.py - the in-client widget host. Widgets are discovered by
-  folder: any folder under `Widgets/` containing a `.widget` marker is loaded.
-- Bridge stack - lets external tools talk to injected clients: the in-client
-  Bridge Client widget, the `bridge_daemon.py` daemon, the `bridge_cli.py`
-  operator CLI, and the `py4gw_mcp_server.py` MCP adapter.
-
-## Documentation
-
-See the `docs/` folder for architecture notes and per-subsystem guides. `AGENTS.md`
-is a good starting point for how the repository is organized.
-
-## Contributing
-
-Contributions are welcome:
-
-1. Fork the repository.
-2. Create a branch for your feature or fix.
-3. Commit your changes and push the branch.
-4. Open a pull request for review.
-
-------------------------------------------------------------------------------
+Upstream's own `README.md` and `AGENTS.md` are preserved verbatim under
+`docs/reference/`.

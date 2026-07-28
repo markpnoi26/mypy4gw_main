@@ -1,141 +1,144 @@
 # AGENTS.md
 
-- No repo-level CI/test runner is configured: no `.github/workflows`, no `pytest`/`tox` config, no `Makefile`, and `requirements.txt` is empty. Verify with targeted scripts instead of guessing a global command.
-- `pyproject.toml` only configures formatting. Preserve Black at `line-length = 120`, keep single quotes if already present (`skip-string-normalization = true`), and keep `isort`'s one-import-per-line style (`force_single_line = true`).
-- `pyrightconfig.json` only sets `stubPath = ./stubs` and suppresses missing module source noise. Use `pyright` only if it is installed in the environment.
-- README explicitly targets Python 3.13.0 32-bit for injected/runtime work. Do not casually switch interpreter versions when debugging launcher or injection issues.
-- `Py4GWCoreLib/__init__.py` is a broad convenience facade, not a minimal import surface: it manually appends system `site-packages`, re-exports most high-level modules, and redirects `sys.stdout`/`sys.stderr` into the Py4GW console. Avoid treating `import Py4GWCoreLib` as a neutral import when debugging startup/import side effects.
+Operating rules for this repo. If you read one thing before changing a file,
+read **§2 — where you may edit**.
 
-## Persistence — HARD RULE (no exceptions)
+## 1. The one thing to understand
 
-**Every file that touches disk in this project must go through one of the two sanctioned classes. There are NO bypasses, ever.**
+**This tree is generated.** `layout` is produced by running
+`tools/reforge/apply.py` against `vendor` (a pristine mirror of `upstream/main`).
+Most files here arrived by transform, not by authorship.
 
-- **All INI / flat config → `Settings`** (`Py4GWCoreLib/py4gwcorelib_src/Settings.py`, wraps native `PySettings`).
-- **All JSON / structured data → `JsonFactory`** (`Py4GWCoreLib/py4gwcorelib_src/JsonFactory.py`, wraps native `PyJson`).
+Consequence: an edit to a transformed file is not automatically durable. It
+survives only if it lives as a commit on `main` that gets rebased onto each new
+`layout`. Edit `layout` directly and your change is gone at the next sync.
 
-Both are self-throttled, self-persisting singletons keyed by `(name, scope)`; scope is `"account"` or `"global"` (both jailed under `settings/` / `json/`). **There is no `"root"` scope** — it now raises. The single project-root file, `Py4GW.ini`, is reached ONLY via the hardcoded, path-less accessor `Settings.py4gw_ini()`.
+## 2. Where you may edit — the conflict map
 
-**Forbidden anywhere in project code** (not just "discouraged"): `open()` for config/data, `json.load`/`json.dump`, `configparser`, `pickle`, `codecs.open`, `pathlib` `read_text`/`write_text` for persistence, `shutil` copies of config, and hand-rolled atomic-write / lock-file / directory-enumeration machinery (the native side already does atomic writes, cross-process locking on `global` scope, and autosave). No IPC or cross-account comms through files — use the messaging layer (`GLOBAL_CACHE.ShMem`). Never read another account's file directly; put shared data in `global` scope.
+### SAFE — upstream never touches these, no conflict possible
 
-**If `Settings` / `JsonFactory` (or their native backends) do NOT provide functionality you need, STOP and notify the user to add it** — propose the missing method/primitive on the class or in `Py4GW_Reforged_Native`. Do NOT work around a gap with a raw handler. (Known open gap: reading bundled read-only catalogs shipped in the source tree needs a Native "read bundled file" primitive or a `json/Defaults/` seed template.)
+| Path | Why |
+|---|---|
+| `Scripts/<pack>/` | packs are ours; upstream has no such tree |
+| `tools/` | the transform itself, excluded from codemods |
+| `.claude/`, `CLAUDE.md`, `AGENTS.md`, `README.md` | our identity; upstream's originals live in `docs/reference/` |
+| `docs/` (our own files) | `docs/reference/` is upstream's, leave it verbatim |
+| `tools/reforge/layout.toml`, `tier_map.toml` | **the manifest is the preferred place to make structural change** |
 
-The only sanctioned non-class disk access: `Py4GWCoreLib/database_src/DBMgr.py` (sqlite, reworked later), and separate non-injected processes that physically cannot load the embedded modules (the external launcher, the bridge/MCP stack). Full audit + rationale in `docs/persistence_jail/`.
+### CAREFUL — you may edit, but understand the cost
 
-## Backend: legacy GWCA → Reforged Native (active migration)
+| Path | Cost |
+|---|---|
+| `Core/`, `HeroAI/`, `Widgets/` | these came from upstream. Your edit must be a commit on `main`, and it will be replayed onto every future `layout`. If upstream edits the same file, that replay conflicts. |
+| anything with a `note =` in the manifest | the note explains a pin or a hazard. Read it first. |
 
-- The `Py4GW.dll` this Python library loads is built by a **separate sibling C++ project, `Py4GW_Reforged_Native`** (`../Py4GW_Reforged_Native`) — a 32-bit injected DLL that embeds CPython (pybind11), hooks D3D9, and renders ImGui. It is a ground-up rework **replacing the legacy GWCA backend**, itself under parity migration (GWCA managers → `GW/<module>/`). Build there is CMake (`cmake -S . -B build -A Win32` / `vs2022-win32` presets) — no build command from this Python repo applies to it.
-- This Python library reaches the game via **two data paths**: the **bindings path** (`Py*` embedded modules, type-stubbed in `stubs/*.pyi`) and the **context path** (ctypes structs from shared memory, read by `Py4GWCoreLib/native_src/context/*.py`).
-- The library is being repointed from the legacy GWCA-era binding surface to the Reforged Native surface; session log in `docs/migration_to_reforged/`. Assume Reforged names in new code: `Py2DRenderer`→`PyDXOverlay`, `PyCombatEvents`→`PyAgentEvents`, `PyPointers` retired, `Py4GW.Console.*`→`PySystem.Console.*`, `Py4GW.Game.*`→`PySystem`/`PyGameThread`, `Point2D/3D`→`Vec2f/Vec3f`, `PyScanCodeKeystroke`→`PyKeyHandler`. Reforged `Py*` classes favor getter methods + module-level functions over legacy data fields.
-- `Py4GWCoreLib.ImGui` is the single ImGui wrapper — the class previously called `ImGui_Legacy`, restored to its original name. The from-scratch `ImGuiRuntime` facade rebuild was abandoned and deleted (its specs under `docs/ImGui_Facade_Migration_Plan.md` are dead).
+Prefer, in order: **change the manifest** → **wrap the behaviour from a Tier 4
+file you own** → **edit the upstream file and send it up as a PR** → edit and
+carry it locally forever (worst).
 
-## Docs Hierarchy
+### NEVER
 
-- `docs/Py4GW_Conceptual_Model.md` is the canonical architecture/source-of-truth document for project layers and terminology.
-- `docs/MCP_bridge.md` is the MCP-facing bridge planning summary; use it for bridge/MCP modeling, not as the primary architecture source.
-- `BridgeRuntime/README.md` is the operator/runtime usage reference for daemon + injected bridge client + CLI.
-- `docs/Py4GW_Model_Features_Detail.txt` is a derived plain-text export for quick scanning, not a separate authority.
-- `docs/widget_manager_and_catalog.md` is the highest-value reference before changing widget discovery, widget metadata defaults, `WidgetHandler`, or `WidgetCatalog` behavior.
+- **Never edit `vendor`.** It must stay byte-identical to `upstream/main`.
+  Fast-forward only. If it won't fast-forward, something was committed by
+  mistake — fix that first.
+- **Never hand-edit `layout`.** It is regenerated and disposable.
+- **Never `git reset --hard layout` onto `main`** once `main` carries real work —
+  that discards your overlay history. Rebase instead.
+- **Never move a file by hand.** Motion is the manifest's job, so that it stays
+  reproducible and reversible.
 
-## RE (Reverse Engineering) — `docs/RE/`
+### What actually conflicts
 
-- **WASM-first workflow (do this by default).** Reverse-engineer on `/Gw.wasm` first, then map the confirmed result to `/Gw.exe`. The WASM retains full debug symbols (`CCharAgent::GetConsiderColor`, `FrameCreate`, `CtlTextMl::Markup`, …), so behaviour, control flow, struct fields, and call chains are far faster and less error-prone to read there. The EXE is stripped (`FUN_xxxxxxxx`) — only enter it at the **end**, to resolve the concrete address the injector needs. Reading architecture in the EXE first is slow and mistake-prone. Watch for genuine ABI differences (WASM `call_indirect` table indices vs. x86 real pointers; possible `Color4b`/struct channel-order repacks) — the architecture transfers, but re-confirm low-level calling/ABI details on the EXE. When calling Ghidra MCP tools, always pass the explicit `program` path (the project has multiple same-named `Gw.exe` images; a name-omitted call silently hits the wrong one). See `docs/RE/CPP_WASM_MAPPING.md` for the translation procedure.
-- **Authoritative C++ backend is now `Py4GW_Reforged_Native`, not GWCA.** The migrated managers live at `../Py4GW_Reforged_Native/src/GW/<module>/` + `include\GW\<module>\` (each module declares named ownership of every resolved symbol; `<module>_patterns.cpp` holds the `Resolve*` functions), and runtime addresses come from `Py4GW_Reforged_Native\offsets\<module>.json` (byte patterns/masks + step resolvers), **not** hardcoded. See that repo's `docs/06-pattern-json-system.md`, `docs/module-migration-guide.md`, and `docs/gwca-manager-dependency-map.md`. The legacy GWCA tree at `../Py4GW/vendor/gwca` still exists and is a useful cross-reference for how a subsystem worked pre-Reforged, but it is no longer the source of truth. The `Gw.exe`/`Gw.wasm` address tables below describe the actual game and remain valid regardless of wrapper.
-- **Start with `docs/RE/reverse_engineering_reference.md`** — the comprehensive library reference. Covers the three-layer architecture (Python `native_src`, C++ GWCA, Ghidra), key function catalogs with EXE↔WASM↔CPP mappings, bridging techniques, UI message dispatch architecture, and workflows for adding new functions.
-- `docs/RE/CPP_WASM_MAPPING.md` — the full CPP↔WASM↔EXE translation procedure with worked examples and pitfall notes.
-- `docs/RE/rosetta_stone.txt` — GwA2 (AutoIt) to Py4GW function mapping reference.
-- `docs/RE/gw_combat_ai_reverse_engineering.md` — combat AI RE analysis.
-- `docs/RE/native_gw_ui_function_catalog.json` — catalog of native GW UI functions with addresses.
-- `docs/RE/native_gw_window_creation_investigation.md` — window proc creation RE.
-- `docs/RE/native_ui_title_and_encoded_string_reference.md` — UI title and encoding reference.
-- `docs/agent_name_tag_color.md` — **feature/usage guide** for `PyAgentTagColor` (recolor agent name tags natively): Python API, ARGB color format, examples, gotchas. SHIPPED & validated in-client.
-- `docs/RE/name_tag_color_reverse_engineering.md` — the RE behind it: agent/item name-tag color pipeline, the `GetConsiderColor` resolver detour recipe/ABI (hook the resolver `FUN_007f02e0`; the wrapper `FUN_007d9cf0` is only an anchor), allegiance→ARGB table, and item-rarity markup. Native module: `Py4GW/src/py_agent_tag_color.cpp`. In-client test harness: `tests/name_tag_color/name_tag_color_test.py`.
+Only one thing: **you and upstream editing the same upstream-owned file.**
+Everything else — upstream adding files, deleting files, moving files, renaming
+whole trees — is absorbed by the manifest. That is the point of the design.
 
-### RE Tool Locations
+So: keep your work in paths upstream has never created, and the conflict surface
+stays near zero.
 
-| Layer | Path | Key Files |
-|-------|------|-----------|
-| **C++ (Reforged Native, primary)** | `../Py4GW_Reforged_Native/src/GW/<module>/` + `include\GW\<module>\` | `<module>.cpp`/`.h`, `<module>_patterns.cpp` (`Resolve*` fns) |
-| **C++ pattern/offset data** | `../Py4GW_Reforged_Native/offsets/` | `agent.json`, `ui.json`, `native_ui.json`, … (byte patterns + resolvers) |
-| **C++ (legacy GWCA, cross-ref only)** | `../Py4GW/vendor/gwca` | `Source/AgentMgr.cpp`, `Include/GWCA/Managers/AgentMgr.h` |
-| **Python native** | `Py4GWCoreLib\native_src\` | `methods/PlayerMethods.py`, `internals/native_function.py` |
-| **Python Scanner** | `Py4GWCoreLib\Scanner.py` | FindAssertion, FindInRange, ToFunctionStart |
-| **Ghidra EXE** | `/Gw.exe(Symbols)` via MCP | 18,017 functions, x86:LE:32, base `0x00400000` |
-| **Ghidra WASM** | `/Gw.wasm` via MCP | 18,004 functions, Wasm:LE:32, base `ram:80000000` |
+## 3. Updating from upstream
 
-### Key Function Mappings (quick reference)
+```bash
+git fetch upstream
+git checkout vendor && git merge --ff-only upstream/main
 
-| GWCA Name | WASM Symbol | EXE Address |
-|-----------|-------------|-------------|
-| `DoWorldActon_Func` | `CoreActionExecuteWorldAction` | `0x0050e5e0` |
-| `CallTarget_Func` | `CharCliPlayerOrderAlertSimple` | `0x00917740` |
-| `ChangeTarget_Func` | `IAgentView::SetSelections` | `0x007e0f60` |
-| `MoveTo_Func` | `IUi::Game::Walk*` | `0x00534fa0` |
-| `SendAgentDialog_Func` | (thunk) | `0x008105b0` |
+git checkout -B layout vendor
+git checkout main -- tools docs .claude AGENTS.md README.md CLAUDE.md
+git commit -m "toolchain for regeneration"
 
-Full catalog with sub-function breakdowns in `docs/RE/reverse_engineering_reference.md`.
+python tools/reforge/drift.py        # must be clean before applying
+python tools/reforge/apply.py
+python tools/reforge/verify.py
+python tools/reforge/tiercheck.py --core Core
+git commit -am "reforge layout @ $(git rev-parse --short vendor)"
 
-### UI Message System
+git checkout main && git rebase --onto layout <previous-layout-sha> main
+python tools/reforge/compare.py
+```
 
-The game uses a **hash table** (`THashTable<IFrame::Msg::CHandler>` at `DAT_ram_005a0338`) for message dispatch, not a switch statement. Messages fall into three ranges:
-- `0x00–0x55` — base frame lifecycle
-- `0x100000xx` — server→client notifications (~90 mapped, ~15 unknown, ~6 newly discovered via WASM)
-- `0x300000xx` — client→server commands (~30 mapped, all send-to-server actions)
+**`drift.py` failing is the normal signal that upstream changed something.** It
+reports four things, and each means something different:
 
-The authoritative UIMessage enum is now the migrated `enum class UIMessage : uint32_t` in `../Py4GW_Reforged_Native/include/GW/common/constants/ui.h` (aliased as `GW::ui::UIMessage` in `include\GW\ui\ui.h`). The legacy GWCA enum at `../Py4GW/vendor/gwca/Include/GWCA/Managers/UIMgr.h` remains a cross-reference. To discover missing messages, either hook the send path at runtime (Reforged Native registers UI-message callbacks; legacy GWCA hooked `SendUIMessage_Func`) or run a Ghidra script against WASM callers of `FrameMsgSendRegistered`. Full procedure including the script is in `docs/RE/reverse_engineering_reference.md` Section 4.
+| Signal | Meaning | Action |
+|---|---|---|
+| `UNCOVERED` | upstream added a path no rule covers | add a rule — prefer a glob |
+| `STALE rules` | a rule matches nothing — upstream moved or deleted its target | retarget or remove it |
+| `STALE ids` | a `legacy_id` points at a path that no longer exists | same |
+| `AMBIGUOUS` | two entries claim one path at equal specificity | add an `[[override]]` or narrow a glob |
 
-### RE Tool Locations
+A **stale rule plus an uncovered path in the same run is a rename.** That pairing
+is how upstream's periodic mass-restructures become readable instead of fatal.
 
-| Layer | Path | Key Files |
-|-------|------|-----------|
-| **C++ (Reforged Native, primary)** | `../Py4GW_Reforged_Native/src/GW/<module>/` + `include\GW\<module>\` | `<module>.cpp`/`.h`, `<module>_patterns.cpp` (`Resolve*` fns) |
-| **C++ pattern/offset data** | `../Py4GW_Reforged_Native/offsets/` | `agent.json`, `ui.json`, `native_ui.json`, … (byte patterns + resolvers) |
-| **C++ (legacy GWCA, cross-ref only)** | `../Py4GW/vendor/gwca` | `Source/AgentMgr.cpp`, `Include/GWCA/Managers/AgentMgr.h` |
-| **Python native** | `Py4GWCoreLib\native_src\` | `methods/PlayerMethods.py`, `internals/native_function.py` |
-| **Python Scanner** | `Py4GWCoreLib\Scanner.py` | FindAssertion, FindInRange, ToFunctionStart |
-| **Ghidra EXE** | `/Gw.exe(Symbols)` via MCP | 18,017 functions, x86:LE:32, base `0x00400000` |
-| **Ghidra WASM** | `/Gw.wasm` via MCP | 18,004 functions, Wasm:LE:32, base `ram:80000000` |
+Prefer globs over per-file entries: a glob keeps covering new upstream files in
+that subtree, where per-file entries turn every upstream addition into drift.
 
-### Key Function Mappings (quick reference)
+## 4. Sending changes upstream
 
-| GWCA Name | WASM Symbol | EXE Address |
-|-----------|-------------|-------------|
-| `DoWorldActon_Func` | `CoreActionExecuteWorldAction` | `0x0050e5e0` |
-| `CallTarget_Func` | `CharCliPlayerOrderAlertSimple` | `0x00917740` |
-| `ChangeTarget_Func` | `IAgentView::SetSelections` | `0x007e0f60` |
-| `MoveTo_Func` | `IUi::Game::Walk*` | `0x00534fa0` |
-| `SendAgentDialog_Func` | (thunk) | `0x008105b0` |
+```bash
+python tools/reforge/backport.py layout..main
+python tools/reforge/backport.py --path Core/Agent.py HEAD   # map one path back
+```
 
-Full catalog with sub-function breakdowns in `docs/RE/reverse_engineering_reference.md`.
+Path mapping inverts the manifest exactly. Content mapping is deliberately
+narrow: the forward codemod renames the unique token `Py4GWCoreLib` to `Core`,
+but `Core` is an ordinary English word, so only import statements and quoted path
+strings are rewritten back. Files with no upstream counterpart are reported as
+layout-only rather than guessed at.
 
-## Entry Points
+Semantic fixes are worth upstreaming individually — they stand on their own merit
+and, once merged, survive upstream's next restructure. Local-only edits do not.
 
-- `Py4GW_widget_manager.py` is the in-client widget bootstrap: it creates the manager INI key, runs widget discovery, and hands off to `Widgets/WidgetCatalog/Py4GW_widget_catalog.py`.
-- `Py4GW_Launcher.py` is the external launcher/injector UI.
-- Bridge stack wiring is split across:
-  - injected widget: `Widgets/Coding/Tools/Bridge Client.py`
-  - daemon: `bridge_daemon.py`
-  - operator CLI: `bridge_cli.py`
-- MCP adapter entrypoint is `py4gw_mcp_server.py`; it talks to the daemon over stdio->daemon bridging rather than directly to injected clients.
-- Bridge defaults are verified in code: widget server `127.0.0.1:47811`, control server `127.0.0.1:47812`, and the CLI targets control port `47812` by default.
-- `Sources/modular_bot/` contains the real ModularBot implementation. Files under `Widgets/Automation/modularbot/` are mostly thin wrappers that expose those tools/prebuilts through Widget Manager.
+## 5. Gates
 
-## Focused Checks
+| Tool | Checks | Fails on |
+|---|---|---|
+| `drift.py` | manifest covers the tree; no stale or ambiguous entries | uncovered paths |
+| `verify.py` | core imports no higher tier; no stale module names; idempotent; `legacy_id` coverage | any |
+| `tiercheck.py` | AST tier enforcement + eager import closure of the facade | any violation |
 
-- Bridge help / argument discovery:
-  - `python "bridge_daemon.py" --help`
-  - `python "bridge_cli.py" --help`
-- MCP adapter help / surface discovery:
-  - `python "py4gw_mcp_server.py" --help`
-- ModularBot docs coverage check:
-  - `python "Sources/modular_bot/tools/validate_modular_docs.py"`
+`tiercheck.py` currently **fails by design** — the facade eagerly pulls 17
+`HeroAI` modules, and `Core/py4gwcorelib_src/AutoInventoryHandler.py` still
+reaches into `dev/reference`. Those are known and tracked in
+`docs/tier_map_and_separation_plan.md`. Do not silence them; fix or waive with a
+reason in `tier_map.toml`.
 
-## Repo-Specific Gotchas
+## 6. Navigation
 
-- For architecture questions, prefer module-specific imports and docs over the broad `Py4GWCoreLib` facade. The conceptual model treats `Py4GWCoreLib` as the single Python-facing source-of-truth layer, `py4gwcorelib_src` as support infrastructure, and `GLOBAL_CACHE` as a derivative consumer/cache layer.
-- The current MCP adapter intentionally exposes a narrow safe tool set over daemon control, not generic arbitrary bridge calls: `list_clients`, `list_namespaces`, `list_commands`, `describe_runtime`, `get_map_state`, `get_player_state`, and `list_agents`.
-- Widget discovery is folder-based, not file-based: `WidgetHandler` walks `Widgets/`, and only folders containing a `.widget` marker are discovery roots; every `.py` file in that same folder is loaded as a widget.
-- Widget metadata defaults are non-obvious and come from `Py4GWCoreLib/py4gwcorelib_src/WidgetManager.py`: `MODULE_CATEGORY` defaults to the first `widget_path` segment, `MODULE_TAGS` defaults to all path segments, and `OPTIONAL` defaults to `False` only for `System` and `Py4GW` categories.
-- Before touching follow-system code, read `FOLLOW_REFACTOR_HANDOVER.md`.
-- `Py4GWCoreLib/GlobalCache/SharedMemory.py` is startup-sensitive and currently imports `HeroAI.follow.leader_publish` directly. Do not replace that with broad package-root imports.
-- `HeroAI/follow/__init__.py` intentionally exports nothing. Import exact submodules such as `HeroAI.follow.leader_publish`, not `HeroAI.follow`.
-- Avoid committing local runtime/config churn unless the task is specifically about them: `Py4GW.ini`, `Py4GW_Launcher.ini`, and `Py4GW_injection_log.txt`. README documents `git update-index --skip-worktree` for those files.
+`.claude/LINE_INDEX.md` is an auto-generated symbol index of every `.py` in the
+tree (`L<line> <signature>`, grouped by file), regenerated by git hooks on
+commit, checkout, merge and rebase. **Grep it first** — one search against one
+file beats ripgrep across ~1,700 files.
+
+```bash
+python tools/generate_line_index.py     # regenerate by hand
+```
+
+## 7. Code rules
+
+The rules that make code wrong even when it runs — persistence, native binding
+names, import constraints, toolchain, formatting — are in
+`.claude/context/hard-rules.md`. Naming and comment style is in
+`.claude/context/code-style.md`. Both apply to everything written here.
+
+Upstream's `AGENTS.md` is preserved at `docs/reference/upstream-AGENTS.md`. Its
+code rules still hold; its layout claims describe upstream's tree, not this one.
