@@ -227,7 +227,7 @@ def main() -> int:
         write_status(report, facts)
         return 1
 
-    facts["divergence"] = divergence.measure()
+    facts["divergence"] = divergence.measure("staging")
     divergence.append(facts["divergence"])
     report.add(
         "divergence",

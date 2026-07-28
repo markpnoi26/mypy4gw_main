@@ -46,8 +46,11 @@ def area_of(path: str) -> str:
     return "(root)"
 
 
-def measure() -> dict:
-    ours = name_status("layout..main")
+def measure(ref: str = "main") -> dict:
+    """`ref` is the branch carrying our work. During a sync that is `staging`:
+    `main` has not been promoted yet, so measuring it compares the new layout
+    against the old main and inflates every number."""
+    ours = name_status("layout..%s" % ref)
     transform = name_status("vendor..layout")
 
     by_area: dict[str, int] = defaultdict(int)
