@@ -3,6 +3,37 @@
 Operating rules for this repo. If you read one thing before changing a file,
 read **§2 — where you may edit**.
 
+## 0. The three repos
+
+This repo is one of three. Know which you are in before touching anything.
+
+```
+mypy4gw_main            ← YOU ARE HERE. Freeform. Commit anything.
+  |                       The primary source of changes.
+  |  backport.py maps a change onto upstream's layout
+  v
+Py4GW_Reforged          ← the fork. Staging ground for anything going public.
+  |                       Also holds work not yet ported here (HEROAI_MIGRATION).
+  |  normal PR
+  v
+apoguita/Py4GW_Reforged ← upstream. Read-only to us; arrives via `vendor`.
+```
+
+The point of the split: **here you are free** — commit whatever, restructure
+whatever, no collaboration overhead — while still taking upstream's work through
+`vendor`. Only what you deliberately choose to publish goes through the fork.
+
+Nothing is obligated to flow upward. A change that only makes sense in this
+layout can simply stay here; `backport.py` reports those as "layout-only" rather
+than guessing.
+
+Other repos on this machine, for reference: `Py4GW` is the retired pre-Reforged
+project. `MyPy4GW` is a working symlink-overlay runtime that ran in-client on
+2026-07-22 — it is the proof that owning `Py4GW_widget_manager.py` plus
+`sys.path` precedence is enough to control the runtime without touching
+upstream's tree. `Py4GW_Reforged_Native`, the C++ project that builds
+`Py4GW.dll`, is **not present** — Tier 0 is a binary you consume.
+
 ## 1. The one thing to understand
 
 **This tree is generated.** `layout` is produced by running
@@ -145,6 +176,24 @@ layout-only rather than guessed at.
 Semantic fixes are worth upstreaming individually — they stand on their own merit
 and, once merged, survive upstream's next restructure. Local-only edits do not.
 
+
+### Getting it into the fork
+
+`backport.py` gives you upstream-shaped content. Landing it publicly:
+
+```bash
+python tools/reforge/backport.py layout..main     # what is portable, what is not
+cd ../Py4GW_Reforged
+git checkout -b fix/<thing> main
+# apply the mapped content, commit, push, PR to upstream
+```
+
+`Py4GW_Reforged` is the only repo that talks to GitHub. This one has no `origin`
+on purpose, so nothing can be pushed by accident.
+
+Send semantic fixes individually. They stand on their own merit, and once merged
+they survive upstream's next restructure — a local-only edit does not.
+
 ## 5. Gates
 
 | Tool | Checks | Fails on |
@@ -179,3 +228,53 @@ names, import constraints, toolchain, formatting — are in
 
 Upstream's `AGENTS.md` is preserved at `docs/reference/upstream-AGENTS.md`. Its
 code rules still hold; its layout claims describe upstream's tree, not this one.
+
+## 8. Known state — read before assuming something is broken
+
+**Gates that fail by design.** `tiercheck.py` exits non-zero: the `Core` facade
+eagerly imports 241 modules including 17 from `HeroAI`, and
+`Core/py4gwcorelib_src/AutoInventoryHandler.py` reaches into `dev/reference`.
+`verify.py` reports the same 6 tier violations. These are measured, tracked in
+`docs/tier_map_and_separation_plan.md`, and **not** to be silenced.
+
+**Never run in the game client.** Nothing in this tree has been loaded by
+`Py4GW.dll`. 2,098 file moves and ~1,020 codemod rewrites are statically checked
+only. Treat runtime behaviour as unverified. `MyPy4GW` is the ready-made harness:
+repoint its `vendor/py4gw` here and run its `setup.sh`.
+
+**Four widgets are tabled** in `dev/tabled/` — `MerchantRules`, `MultiBoxing`,
+`PartyQuestLog`, `TitleHelper`. They import `Sources` eagerly and cannot load.
+Un-tabling is a one-line `dest` change once rewritten against `Core`.
+
+**Credentials live here and must never be committed.** `accounts.json`,
+`Py4GW.ini`, `Settings/<account>/`, `json/<account>/` are real account data,
+gitignored. Verify with `git check-ignore` before any `git add -A`.
+
+**No `.venv` in this repo.** Tooling runs from the sibling:
+`../Py4GW_Reforged/.venv/Scripts/python.exe` (3.13.0, 32-bit).
+
+## 9. Gotchas that have already bitten
+
+Each of these cost real time; none is obvious from the code.
+
+- **The codemod rewrote its own toolchain.** `Py4GWCoreLib -> Core` over
+  `**/*.py` turned `backport.py`'s prose into "renames the unique token `Core` to
+  `Core`". `tools/` is excluded from codemods for this reason, in both `apply.py`
+  and `verify.py`.
+- **`.claude/`, `AGENTS.md` and `CLAUDE.md` are gitignored** — the first two by
+  the global ignore, the latter two also by upstream's `.gitignore`. They need
+  explicit negations or the project identity silently fails to track. A commit
+  can look successful while dropping them.
+- **`Settings/` and `Widgets/Data/` are native-read paths.** The persistence jail
+  roots at `<projects_path>/settings` and `<projects_path>/json`; template seeding
+  reads `settings/Defaults/*.cfg`. Both are pinned `keep`. Moving them breaks
+  seeding silently.
+- **A tool commit on `main` conflicts with itself** on the next sync. That is why
+  `base` exists. See §3.
+- **`drift.py` against a transformed tree** reported 2,113 false uncovered paths
+  before it learned to refuse. It only means anything on `base`/`vendor`.
+- **`apply.py` prunes empty directories.** Empty account dirs under `json/`
+  disappear during a transform. Harmless — the native side recreates them — but
+  do not read it as data loss.
+- **`git check-ignore` exits 0 when *any* pattern matches, including a negation.**
+  Read the printed rule, not the exit code.

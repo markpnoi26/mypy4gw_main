@@ -79,6 +79,17 @@ all built on).
 
 ## Relationship to upstream
 
+Three repos, one direction of obligation — none.
+
+```
+mypy4gw_main  →  Py4GW_Reforged  →  apoguita/Py4GW_Reforged
+(freeform)       (the fork, PRs)     (upstream)
+```
+
+You work here without collaboration overhead and still take upstream's work
+through `vendor`. Only what you choose to publish moves through the fork; this
+repo has no `origin`, so nothing can be pushed by accident.
+
 Changes flow **both ways**, on different paths:
 
 - **Down** — `git fetch upstream && sync`. Upstream's work arrives through

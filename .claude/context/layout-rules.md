@@ -2,6 +2,22 @@
 
 This tree is generated. Getting this wrong loses work silently.
 
+## Three repos
+
+`mypy4gw_main` (here — freeform, primary source of changes) → `Py4GW_Reforged`
+(the fork; the only one with a GitHub remote, staging for PRs) →
+`apoguita/Py4GW_Reforged` (upstream; arrives here through `vendor`).
+
+Commit freely here. Only what you deliberately publish goes through the fork.
+Nothing has to flow upward — `backport.py` marks layout-only changes as such.
+
+## Credentials are in this working tree
+
+`accounts.json`, `Py4GW.ini`, `Settings/<account>/`, `json/<account>/` are real
+account data, gitignored. **Never `git add -A` without checking.** Note that
+`git check-ignore` exits 0 when any pattern matches, negations included — read
+the printed rule, not the exit code.
+
 ## Branch discipline
 
 - `vendor` — pristine `upstream/main`. **Fast-forward only, never edit.**
