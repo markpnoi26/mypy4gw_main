@@ -14,6 +14,12 @@ dest = "keep"
 tier = "dev"
 note = "the transform itself; promoted out of .claude so it ships with the repo"
 
+[[rule]]
+match = "qa/**"
+dest = "keep"
+tier = "dev"
+note = "our gates. Named qa/ because upstream owns tests/, which moves to dev/tests/imgui/."
+
 [[override]]
 match = "docs/tier_map_and_separation_plan.md"
 dest = "keep"
