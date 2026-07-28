@@ -87,8 +87,8 @@ mypy4gw_main  →  Py4GW_Reforged  →  apoguita/Py4GW_Reforged
 ```
 
 You work here without collaboration overhead and still take upstream's work
-through `vendor`. Only what you choose to publish moves through the fork; this
-repo has no `origin`, so nothing can be pushed by accident.
+through `vendor`. Only what you choose to publish moves through the fork;
+`origin` is a private backup, guarded by a pre-push credential check.
 
 Changes flow **both ways**, on different paths:
 

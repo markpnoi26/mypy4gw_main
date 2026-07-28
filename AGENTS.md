@@ -188,8 +188,11 @@ git checkout -b fix/<thing> main
 # apply the mapped content, commit, push, PR to upstream
 ```
 
-`Py4GW_Reforged` is the only repo that talks to GitHub. This one has no `origin`
-on purpose, so nothing can be pushed by accident.
+This repo has an `origin` (`markpnoi26/mypy4gw_main`, private backup) and a
+`fork` remote — but PRs to upstream go through `../Py4GW_Reforged` only. Before
+any push here, confirm no credential-shaped file is tracked — a pre-push hook
+(`.git/hooks/pre-push`) enforces it: `git ls-files` must match none of
+`accounts.json`, `Py4GW.ini`, `Settings/` outside `Defaults/`, or `json/`.
 
 Send semantic fixes individually. They stand on their own merit, and once merged
 they survive upstream's next restructure — a local-only edit does not.
@@ -232,7 +235,7 @@ code rules still hold; its layout claims describe upstream's tree, not this one.
 ## 8. Known state — read before assuming something is broken
 
 **Gates that fail by design.** `tiercheck.py` exits non-zero: the `Core` facade
-eagerly imports 241 modules including 17 from `HeroAI`, and
+eagerly imports 244 modules including 17 from `HeroAI`, and
 `Core/py4gwcorelib_src/AutoInventoryHandler.py` reaches into `dev/reference`.
 `verify.py` reports the same 6 tier violations. These are measured, tracked in
 `docs/tier_map_and_separation_plan.md`, and **not** to be silenced.
@@ -250,8 +253,21 @@ Un-tabling is a one-line `dest` change once rewritten against `Core`.
 `Py4GW.ini`, `Settings/<account>/`, `json/<account>/` are real account data,
 gitignored. Verify with `git check-ignore` before any `git add -A`.
 
-**No `.venv` in this repo.** Tooling runs from the sibling:
-`../Py4GW_Reforged/.venv/Scripts/python.exe` (3.13.0, 32-bit).
+**Tooling runs from `.venv/Scripts/python.exe`** (3.13.0, 32-bit, gitignored).
+It holds the pinned formatters (`tools/reforge/requirements.lock`) plus pytest.
+The `apply.py` format stage and `forwardport.py` both use it; recreate with
+`python -m venv .venv` from any 32-bit 3.13 and `pip install -r tools/reforge/requirements.lock`.
+
+**The generated tree is formatted.** `apply.py` ends with isort+black driven by
+the root `pyproject.toml` (ours — upstream's is in `docs/reference/`). Because
+`layout` is regenerated, this costs zero overlay commits. Import order is
+semantic in a few files (`Core/__init__.py`, `Core/GlobalCache/`,
+`HeroAI/follow/`, `Py4GW_widget_manager.py`) — they are in isort's
+`extend_skip_glob` and must stay there.
+
+**Importing fork/upstream-shaped work:** `tools/reforge/forwardport.py
+upstream/main..BRANCH [--filter GLOB]` — backport's inverse: manifest path map,
+forward codemod, same formatters. Unmapped paths are reported, never guessed.
 
 ## 9. Gotchas that have already bitten
 
