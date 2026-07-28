@@ -10,3 +10,4 @@ Before changing a file, know which of those three you are on, and read
 @.claude/context/hard-rules.md
 @.claude/context/code-style.md
 @.claude/context/layout-rules.md
+@.claude/context/runtime-behaviour.md
