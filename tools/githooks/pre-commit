@@ -1,0 +1,68 @@
+#!/bin/sh
+# Blocks the four commit mistakes this layout makes easy. See CHEATSHEET.md.
+ROOT="$(git rev-parse --show-toplevel)"
+branch="$(git rev-parse --abbrev-ref HEAD)"
+
+die() {
+    echo "" >&2
+    echo "  [BLOCKED] $1" >&2
+    shift
+    for line in "$@"; do echo "  $line" >&2; done
+    echo "" >&2
+    exit 1
+}
+
+case "$branch" in
+vendor)
+    die "'vendor' must stay byte-identical to upstream/main." \
+        "" \
+        "  It is fast-forward only. Regenerating the tree depends on it." \
+        "  Your change belongs on 'base' (the machine) or 'main' (the code)." \
+        "" \
+        "  git stash && git checkout main && git stash pop"
+    ;;
+layout)
+    if [ "$REFORGE_ALLOW_LAYOUT" != "1" ]; then
+        die "'layout' is generated, and is DELETED on the next sync." \
+            "" \
+            "  Anything committed here is lost when apply.py runs again." \
+            "" \
+            "  git stash && git checkout main && git stash pop" \
+            "" \
+            "  (The sync itself commits here with REFORGE_ALLOW_LAYOUT=1.)"
+    fi
+    ;;
+esac
+
+staged="$(git diff --cached --name-only)"
+
+creds="$(printf '%s\n' "$staged" | grep -E '(^|/)accounts\.json$|^Py4GW\.ini|^Settings/[^D]|^json/')"
+if [ -n "$creds" ]; then
+    die "real account credentials are staged." \
+        "" \
+        "$creds" \
+        "" \
+        "  git restore --staged <file>"
+fi
+
+if [ "$branch" = "main" ]; then
+    tooling="$(printf '%s\n' "$staged" | grep -E '^tools/|^pyproject\.toml$|^AGENTS\.md$|^README\.md$|^CLAUDE\.md$|^CHEATSHEET\.md$|^\.claude/|^\.vscode/')"
+    if [ -n "$tooling" ]; then
+        die "toolchain and identity files belong on 'base', not 'main'." \
+            "" \
+            "$tooling" \
+            "" \
+            "  On main they conflict with themselves at the next sync: layout is" \
+            "  rebuilt from base and already contains the final state, so the" \
+            "  overlay commit re-applies a diff that is already applied." \
+            "" \
+            "  git stash && git checkout base && git stash pop" \
+            "" \
+            "  Override only if you know why:  git commit --no-verify"
+    fi
+fi
+
+PY="$ROOT/.venv/Scripts/python.exe"
+[ -x "$PY" ] || PY="$(command -v python3 || command -v python)"
+[ -n "$PY" ] && "$PY" "$ROOT/tools/generate_line_index.py" >/dev/null 2>&1
+exit 0

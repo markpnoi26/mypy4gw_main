@@ -72,7 +72,8 @@ python tools/reforge/verify.py      # postconditions on the tree
 python tools/reforge/tiercheck.py --core Core
 ```
 
-Read next, in order: **`AGENTS.md`** (what you may change and what will conflict),
+Read next: **`CHEATSHEET.md`** first if you just want to not break anything —
+it is one page and covers the five real mistakes. Then **`AGENTS.md`** (what you may change and what will conflict),
 then `.claude/context/hard-rules.md` (rules that make code wrong even when it
 runs), then `docs/tier_map_and_separation_plan.md` (the measured analysis this is
 all built on).

@@ -1,0 +1,14 @@
+#!/bin/sh
+# Refuses to push while any credential-shaped path is tracked. See CHEATSHEET.md.
+bad="$(git ls-files | grep -E '(^|/)accounts\.json$|^Py4GW\.ini$|^Settings/[^D]|^json/')"
+if [ -n "$bad" ]; then
+    echo "" >&2
+    echo "  [BLOCKED] push refused - credential-shaped files are tracked:" >&2
+    echo "" >&2
+    echo "$bad" >&2
+    echo "" >&2
+    echo "  git rm --cached <file>   then commit before pushing." >&2
+    echo "" >&2
+    exit 1
+fi
+exit 0

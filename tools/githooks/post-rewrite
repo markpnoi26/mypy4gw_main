@@ -1,0 +1,6 @@
+#!/bin/sh
+ROOT="$(git rev-parse --show-toplevel)"
+PY="$ROOT/.venv/Scripts/python.exe"
+[ -x "$PY" ] || PY="$(command -v python3 || command -v python)"
+[ -n "$PY" ] && "$PY" "$ROOT/tools/generate_line_index.py" >/dev/null 2>&1
+exit 0

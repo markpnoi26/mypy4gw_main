@@ -797,10 +797,16 @@ note = "2 eager imports of Sources.aC_Scripts"
 # ============================================================================
 
 [[override]]
-match = "{AGENTS.md,README.md,CLAUDE.md}"
+match = "{AGENTS.md,README.md,CLAUDE.md,CHEATSHEET.md}"
 dest = "keep"
 tier = "docs"
 note = "this project's identity. Upstream's originals are preserved verbatim under docs/reference/."
+
+[[rule]]
+match = ".vscode/**"
+dest = "keep"
+tier = "docs"
+note = "interpreter + format-on-save contract, not local IDE state"
 
 [[rule]]
 match = ".claude/**"
