@@ -10,13 +10,16 @@ That distinction is the whole project. Everything below follows from it.
 
 ---
 
-## The three branches
+## The four branches
 
 | Branch | What it is | Rule |
 |---|---|---|
 | `vendor` | byte-identical mirror of `upstream/main` | **fast-forward only. Never edit.** |
-| `layout` | `apply.py(vendor)` — the reorganized tree | **generated. Disposable. Never hand-edit.** |
-| `main` | `layout` + your work | **yours. Edit freely.** |
+| `base` | `vendor` + the toolchain, manifest, and this project's identity | **yours. Commit the *machine* here.** |
+| `layout` | `apply.py(base)` — the reorganized, formatted tree | **generated. Disposable. Never hand-edit.** |
+| `main` | `layout` + your work | **yours. Commit the *code* here.** |
+
+Commit hooks enforce that split. `CHEATSHEET.md` is the one-page version.
 
 Because `layout` is regenerated rather than merged, upstream restructuring — and
 they restructure in 300-file sweeps — costs you a manifest edit instead of a
