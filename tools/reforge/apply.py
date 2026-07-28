@@ -10,6 +10,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+import fmt
 import manifest as manifest_mod
 
 REPO = Path(__file__).resolve().parents[2]
@@ -202,6 +203,7 @@ def summarize(moves, drops, uncovered, markers, packs) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--no-format", action="store_true")
     parser.add_argument("--reverse", metavar="PATH")
     args = parser.parse_args()
 
@@ -237,6 +239,10 @@ def main() -> int:
     if args.dry_run:
         print("\n(dry run — nothing written)")
         return 0
+
+    if not args.no_format:
+        print("\nformat stage (isort + black, config from pyproject.toml):")
+        fmt.run_formatters()
 
     git("add", "-A")
     print("staged — index now reflects the transformed tree")
