@@ -10,6 +10,11 @@ so `stale_pins` reports how far behind each one has fallen.
 
 from __future__ import annotations
 
+import sys as _sys
+
+if hasattr(_sys.stdout, "reconfigure"):
+    _sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 import subprocess
 from pathlib import Path
 

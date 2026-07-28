@@ -10,6 +10,11 @@ which is what `main` *would* become; if a gate fails you delete that branch and
 
 from __future__ import annotations
 
+import sys as _sys
+
+if hasattr(_sys.stdout, "reconfigure"):
+    _sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 import argparse
 import subprocess
 import sys
@@ -145,6 +150,12 @@ def main() -> int:
         sys.exit("working tree is dirty — commit or stash first")
 
     start_branch = out("rev-parse", "--abbrev-ref", "HEAD")
+
+    def restore():
+        """Never strand HEAD on vendor or a half-built layout."""
+        if out("rev-parse", "--abbrev-ref", "HEAD") != start_branch:
+            git("checkout", start_branch, check=False)
+
     vendor_before = out("rev-parse", "--short", pristine)
     facts = {"date": date.today().isoformat(), "vendor_before": vendor_before}
 

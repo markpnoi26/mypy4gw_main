@@ -10,6 +10,11 @@ Two different distances, and conflating them hides the interesting one:
 
 from __future__ import annotations
 
+import sys as _sys
+
+if hasattr(_sys.stdout, "reconfigure"):
+    _sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 import subprocess
 from collections import defaultdict
 from datetime import date
