@@ -1,4 +1,5 @@
 """Reports tracked files that no layout rule covers, plus ambiguous matches."""
+
 from __future__ import annotations
 
 import argparse

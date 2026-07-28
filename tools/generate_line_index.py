@@ -21,32 +21,34 @@ merges/pulls.
 Runs manually with:
     python tools/generate_line_index.py
 """
+
 import re
 import sys
 from pathlib import Path
-
 
 WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
 OUTPUT_PATH = WORKSPACE_ROOT / ".claude" / "LINE_INDEX.md"
 
 # Directory names we never want to descend into. Matched against any path
 # component, so ``foo/bar/__pycache__/x.py`` is skipped by ``__pycache__``.
-SKIP_DIR_NAMES = frozenset({
-    ".git",
-    ".venv",
-    "venv",
-    ".vscode",
-    ".claude",
-    "__pycache__",
-    ".ipynb_checkpoints",
-    ".mypy_cache",
-    ".pytest_cache",
-    "node_modules",
-    "build",
-    "dist",
-    ".backups",
-    ".opencode",
-})
+SKIP_DIR_NAMES = frozenset(
+    {
+        ".git",
+        ".venv",
+        "venv",
+        ".vscode",
+        ".claude",
+        "__pycache__",
+        ".ipynb_checkpoints",
+        ".mypy_cache",
+        ".pytest_cache",
+        "node_modules",
+        "build",
+        "dist",
+        ".backups",
+        ".opencode",
+    }
+)
 
 
 # Dunders are noise — the interesting surface is public API + typed constructors.

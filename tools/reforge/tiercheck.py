@@ -3,6 +3,7 @@
 Also reports the eager import closure of the core facade, which is the metric that
 actually decides whether the tiers hold at runtime rather than only on paper.
 """
+
 from __future__ import annotations
 
 import argparse

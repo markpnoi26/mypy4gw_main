@@ -1,4 +1,5 @@
 """Applies the layout transform: moves, drops, derived markers, codemods."""
+
 from __future__ import annotations
 
 import argparse
@@ -17,9 +18,7 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 def git(*args: str) -> str:
-    out = subprocess.run(
-        ["git", "-C", str(REPO), *args], capture_output=True, text=True, check=True
-    )
+    out = subprocess.run(["git", "-C", str(REPO), *args], capture_output=True, text=True, check=True)
     return out.stdout
 
 
@@ -58,11 +57,7 @@ def plan(mf: manifest_mod.Manifest, files: list[str]):
 
 
 def widget_marker_dirs(moves) -> set[str]:
-    return {
-        res.dest.rsplit("/", 1)[0]
-        for res in moves
-        if res.entry.tier == "widget" and "/" in res.dest
-    }
+    return {res.dest.rsplit("/", 1)[0] for res in moves if res.entry.tier == "widget" and "/" in res.dest}
 
 
 def pack_roots(moves) -> dict[str, str]:

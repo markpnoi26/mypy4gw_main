@@ -6,6 +6,7 @@ which is safe, but ``Core`` is an ordinary English word so a blind reverse token
 swap would corrupt prose and unrelated identifiers. Only import statements and
 quoted path/module strings are rewritten back.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -54,11 +55,7 @@ def reverse_content(text: str, old: str, new: str) -> str:
 
 
 def renames(mf: manifest_mod.Manifest) -> list[tuple[str, str]]:
-    return [
-        (mod["new"], mod["old"])
-        for mod in mf.codemods
-        if mod.get("kind") == "module_rename"
-    ]
+    return [(mod["new"], mod["old"]) for mod in mf.codemods if mod.get("kind") == "module_rename"]
 
 
 def changed_files(rev: str) -> list[tuple[str, str]]:

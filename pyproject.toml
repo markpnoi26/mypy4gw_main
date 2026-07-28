@@ -26,6 +26,7 @@ extend_skip_glob = [
     "dev/*",
     "docs/*",
     "Core/__init__.py",
+    "Core/GlobalCache/*",
     "GlobalCache/*",
     "HeroAI/follow/*",
     "Py4GW_widget_manager.py",

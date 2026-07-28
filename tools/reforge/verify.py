@@ -1,4 +1,5 @@
 """Postconditions for a transformed tree. Run after apply.py."""
+
 from __future__ import annotations
 
 import re
@@ -15,9 +16,7 @@ FORBIDDEN_FROM_CORE = ("Widgets", "Scripts", "Bots", "Sources")
 
 
 def git(*args: str) -> str:
-    out = subprocess.run(
-        ["git", "-C", str(REPO), *args], capture_output=True, text=True, check=True
-    )
+    out = subprocess.run(["git", "-C", str(REPO), *args], capture_output=True, text=True, check=True)
     return out.stdout
 
 
@@ -25,11 +24,7 @@ def python_files(under: str) -> list[Path]:
     base = REPO / under
     if not base.is_dir():
         return []
-    return [
-        p
-        for p in base.rglob("*.py")
-        if not any(part in ("__pycache__", ".venv") for part in p.parts)
-    ]
+    return [p for p in base.rglob("*.py") if not any(part in ("__pycache__", ".venv") for part in p.parts)]
 
 
 def check_core_purity() -> list[str]:

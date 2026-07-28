@@ -1,4 +1,5 @@
 """Resolves upstream paths to their transformed destinations via layout.toml."""
+
 from __future__ import annotations
 
 import re
@@ -142,10 +143,7 @@ class Manifest:
 
     @staticmethod
     def build(row: dict, is_override: bool) -> Entry:
-        variants = [
-            (glob_to_regex(pattern), literal_prefix_len(pattern))
-            for pattern in expand_braces(row["match"])
-        ]
+        variants = [(glob_to_regex(pattern), literal_prefix_len(pattern)) for pattern in expand_braces(row["match"])]
         return Entry(
             match=row["match"],
             dest=row["dest"],
@@ -168,10 +166,7 @@ class Manifest:
         top_key, top_entry = ranked[0]
         rivals = [e for key, e in ranked[1:] if key == top_key and e.dest != top_entry.dest]
         if rivals:
-            raise Ambiguous(
-                "%s matches %r and %r at equal specificity"
-                % (src, top_entry.match, rivals[0].match)
-            )
+            raise Ambiguous("%s matches %r and %r at equal specificity" % (src, top_entry.match, rivals[0].match))
         return Resolution(src=src, dest=render_dest(top_entry.dest, src), entry=top_entry)
 
 

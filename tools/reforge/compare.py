@@ -1,4 +1,5 @@
 """Decomposes this repo's divergence into the three diffs that mean different things."""
+
 from __future__ import annotations
 
 import argparse

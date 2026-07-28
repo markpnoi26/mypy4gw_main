@@ -4,6 +4,7 @@ The inverse direction of backport.py: path via the manifest, content via the
 forward codemods, then the pinned formatters — so a ported file is
 byte-identical to what apply.py would have produced from the same input.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -76,8 +77,9 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("rev_range", help="range in the source repo, e.g. upstream/main..HEROAI_MIGRATION")
     parser.add_argument("--source", default=str(REPO.parent / "Py4GW_Reforged"))
-    parser.add_argument("--filter", action="append", default=[], metavar="GLOB",
-                        help="only port upstream paths matching (repeatable)")
+    parser.add_argument(
+        "--filter", action="append", default=[], metavar="GLOB", help="only port upstream paths matching (repeatable)"
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--no-format", action="store_true")
     args = parser.parse_args()
@@ -86,10 +88,7 @@ def main() -> int:
     tip = range_tip(args.rev_range)
     changes = changed_files(args.source, args.rev_range)
     if args.filter:
-        changes = [
-            (st, p) for st, p in changes
-            if any(fnmatch.fnmatch(p, g) for g in args.filter)
-        ]
+        changes = [(st, p) for st, p in changes if any(fnmatch.fnmatch(p, g) for g in args.filter)]
 
     written: list[str] = []
     deleted: list[str] = []
@@ -125,8 +124,10 @@ def main() -> int:
     if py_written and not args.dry_run and not args.no_format:
         fmt.run_formatters(py_written)
 
-    print("\nported %d, deleted %d, dropped-by-manifest %d, UNMAPPED %d"
-          % (len(written), len(deleted), len(dropped), len(unmapped)))
+    print(
+        "\nported %d, deleted %d, dropped-by-manifest %d, UNMAPPED %d"
+        % (len(written), len(deleted), len(dropped), len(unmapped))
+    )
     for src in unmapped:
         print("  UNMAPPED (place by hand): %s" % src)
     for src in dropped:
