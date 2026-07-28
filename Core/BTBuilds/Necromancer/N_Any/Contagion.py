@@ -11,11 +11,11 @@ getattr with a default, matching the legacy lazy-init pattern.
 
 from Core import AgentArray, BldMgrBT, GLOBAL_CACHE, Profession, Range, Routines, Utils
 from Core.Agent import Agent
-from Core.Builds.Any.HeroAI import HeroAI_Build
 from Core.Builds.Skills import SkillsTemplate
 from Core.Player import Player
 from Core.Skill import Skill
 from Core.py4gwcorelib_src.BehaviorTree import BehaviorTree
+from HeroAI.bt.bt_engine import HeroAIBTEngine
 
 from ...nodes import cast, cond, guarded_cast, rotation_tree
 
@@ -74,7 +74,7 @@ class Contagion(BldMgrBT):
         if match_only:
             return
 
-        self.SetFallback("HeroAI", HeroAI_Build(standalone_fallback=True))
+        self.SetFallback("HeroAI", HeroAIBTEngine(standalone_fallback=True))
         self.skills: SkillsTemplate = SkillsTemplate(self)
         self.melee_hint_logged = False
 

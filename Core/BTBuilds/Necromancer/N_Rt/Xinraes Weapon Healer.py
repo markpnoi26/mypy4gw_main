@@ -8,10 +8,10 @@ order is preserved verbatim.
 from Core import BldMgrBT
 from Core import Profession
 from Core import Routines
-from Core.Builds.Any.HeroAI import HeroAI_Build
 from Core.Builds.Skills import SkillsTemplate
 from Core.Skill import Skill
 from Core.py4gwcorelib_src.BehaviorTree import BehaviorTree
+from HeroAI.bt.bt_engine import HeroAIBTEngine
 
 from ...nodes import cast, cond, guarded_cast, rotation_tree, selector, sequence
 
@@ -67,7 +67,7 @@ class Xinraes_Weapon_Healer(BldMgrBT):
         if match_only:
             return
 
-        self.SetFallback("HeroAI", HeroAI_Build(standalone_fallback=True))
+        self.SetFallback("HeroAI", HeroAIBTEngine(standalone_fallback=True))
         self.skills: SkillsTemplate = SkillsTemplate(self)
 
     def build_rotation_tree(self) -> BehaviorTree:

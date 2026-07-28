@@ -449,18 +449,6 @@ class Settings:
             return
         ini_handler.set("ResurrectionScroll", "Enabled", str(bool(enabled)))
 
-    def get_account_bt_rotation_enabled(self) -> bool:
-        ini_handler = self._get_account_settings_handler()
-        if ini_handler is None:
-            return False
-        return ini_handler.get_bool("RotationEngine", "UseBT", False)
-
-    def set_account_bt_rotation_enabled(self, enabled: bool) -> None:
-        ini_handler = self._get_account_settings_handler()
-        if ini_handler is None:
-            return
-        ini_handler.set("RotationEngine", "UseBT", str(bool(enabled)))
-
     def get_account_resurrection_scroll_skip_if_res_available(self) -> bool:
         ini_handler = self._get_account_settings_handler()
         if ini_handler is None:

@@ -5,9 +5,9 @@ guarded rungs keep their inline eligibility checks.
 """
 
 from Core import Agent, BldMgrBT, Player, Profession, Range, Routines
-from Core.Builds.Any.HeroAI import HeroAI_Build
 from Core.Skill import Skill
 from Core.py4gwcorelib_src.BehaviorTree import BehaviorTree
+from HeroAI.bt.bt_engine import HeroAIBTEngine
 
 from ...nodes import cast, cond, guarded_cast, rotation_tree, selector, sequence
 
@@ -37,7 +37,7 @@ class Pre_Searing_ele(BldMgrBT):
         if match_only:
             return
 
-        self.SetFallback("HeroAI", HeroAI_Build(standalone_fallback=True))
+        self.SetFallback("HeroAI", HeroAIBTEngine(standalone_fallback=True))
 
     def resurrection_signet(self):
         dead_ally_id = Routines.Agents.GetResurrectionTarget(

@@ -80,9 +80,9 @@ just via the fallback path. A trailing `match_only` parameter is added here so
 the first attempt succeeds cleanly; existing keyword callers are unaffected.
 
 `super().__init__(name=...)` passes no professions and no required_skills, so
-ScoreMatch returns 0 for everyone. HeroAI_Build treats `best_score <= 0` as
-"no match" and HeroAIBTEngine requires `score > 0`, so it is not selectable by
-either engine even before the FarmBuilds exclusion. Belt, braces, and location.
+ScoreMatch returns 0 for everyone, and HeroAIBTEngine requires `score > 0`, so
+it is not selectable even before the FarmBuilds exclusion. Belt, braces, and
+location.
 """
 
 import ctypes
@@ -105,8 +105,8 @@ from Core import (
     Range,
     Routines,
 )
-from Core.Builds.Any.HeroAI import HeroAI_Build
 from Core.py4gwcorelib_src.BehaviorTree import BehaviorTree
+from HeroAI.bt.bt_engine import HeroAIBTEngine
 
 from ...nodes import cast, rotation_tree
 
@@ -232,7 +232,7 @@ class KeiranThackerayEOTN(BldMgrBT):
             return
 
         self.debug_fn: Callable[[], bool] = debug_fn if debug_fn is not None else (lambda: False)
-        self.hero_ai_handler = HeroAI_Build(standalone_fallback=True)
+        self.hero_ai_handler = HeroAIBTEngine(standalone_fallback=True)
 
         self.natures_blessing = GLOBAL_CACHE.Skill.GetID("Natures_Blessing")
         self.relentless_assault = GLOBAL_CACHE.Skill.GetID("Relentless_Assault")

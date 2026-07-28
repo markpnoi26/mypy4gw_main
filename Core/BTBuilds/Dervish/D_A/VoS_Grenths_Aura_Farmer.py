@@ -22,9 +22,9 @@ from Core import Player
 from Core import Profession
 from Core import Range
 from Core import Routines
-from Core.Builds.Any.HeroAI import HeroAI_Build
 from Core.Skill import Skill
 from Core.py4gwcorelib_src.BehaviorTree import BehaviorTree
+from HeroAI.bt.bt_engine import HeroAIBTEngine
 
 from ...nodes import cond, guarded_cast, rotation_tree
 
@@ -75,7 +75,7 @@ class VoS_Grenths_Aura_Farmer(BldMgrBT):
         if match_only:
             return
 
-        self.SetFallback("HeroAI", HeroAI_Build(standalone_fallback=True))
+        self.SetFallback("HeroAI", HeroAIBTEngine(standalone_fallback=True))
         self.SetBlockedSkills(
             [
                 Sand_Shards_ID,

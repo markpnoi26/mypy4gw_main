@@ -77,8 +77,8 @@ from Core import Range
 from Core import Routines
 from Core import ThrottledTimer
 from Core import Weapon
-from Core.Builds.Any.HeroAI import HeroAI_Build
 from Core.py4gwcorelib_src.BehaviorTree import BehaviorTree
+from HeroAI.bt.bt_engine import HeroAIBTEngine
 
 from ....nodes import cast, rotation_tree
 
@@ -141,7 +141,7 @@ class AssassinShadowTheftDaggerSpammer(BldMgrBT):
         )
         if match_only:
             return
-        self.SetFallback("HeroAI", HeroAI_Build(standalone_fallback=True))
+        self.SetFallback("HeroAI", HeroAIBTEngine(standalone_fallback=True))
 
         (
             self.exhausting_assault,

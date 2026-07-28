@@ -1,6 +1,10 @@
-"""BT-native HeroAI engine. Satisfies the same driver protocol as HeroAI_Build
-(set_cached_data / ProcessOOC / ProcessCombat / DidTickSucceed / contract
-methods) so headless_tree.py and the widget need no structural changes."""
+"""The HeroAI combat engine.
+
+Exposes the driver protocol headless_tree.py and the widget call
+(set_cached_data / ProcessOOC / ProcessCombat / ProcessSkillCasting /
+DidTickSucceed / contract methods). The generator-shaped Process* signatures
+and the DidTickSucceed side channel are kept because both drivers still
+advance a fresh generator once per frame."""
 
 from Core.Agent import Agent
 from Core.BldMgrBT import BldMgrBT
@@ -145,6 +149,11 @@ class HeroAIBTEngine(BldMgrBT):
         signature = self.current_rotation_signature()
         if self.contract_build is not None and self.contract_signature == signature:
             return self.contract_build
+
+        if self.standalone_fallback:
+            self.contract_signature = signature
+            self.contract_build = self
+            return self
 
         from Core import Profession
 

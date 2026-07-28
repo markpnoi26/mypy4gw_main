@@ -11,9 +11,9 @@ ladder which computed them once per pass.
 
 from Core import BldMgrBT, Profession, Routines, Skill
 from Core.Builds.Any.Any_Dhuum import _DhuumModeTracker
-from Core.Builds.Any.HeroAI import HeroAI_Build
 from Core.Builds.Skills.any.PvE import PvE
 from Core.py4gwcorelib_src.BehaviorTree import BehaviorTree
+from HeroAI.bt.bt_engine import HeroAIBTEngine
 
 from ..nodes import cast, cond, guarded_cast, rotation_tree
 
@@ -73,7 +73,7 @@ class Any_Dhuum(BldMgrBT):
         _DhuumModeTracker._ensure_timers()
 
         self.pve = PvE(self)
-        self.SetFallback("HeroAI", HeroAI_Build(standalone_fallback=True))
+        self.SetFallback("HeroAI", HeroAIBTEngine(standalone_fallback=True))
 
     def seed_blackboard(self, blackboard: dict) -> None:
         drest_mode = _DhuumModeTracker.is_dhuums_rest_mode()
