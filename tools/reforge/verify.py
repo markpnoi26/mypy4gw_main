@@ -108,10 +108,21 @@ def report(title: str, problems: list[str], limit: int = 15) -> bool:
     return False
 
 
+def is_transformed() -> bool:
+    """Ask git, not the filesystem: leftover __pycache__ makes Core/ exist as a
+    directory long after a checkout moved away from the transformed tree."""
+    out = subprocess.run(
+        ["git", "-C", str(REPO), "ls-files", "Core/__init__.py"],
+        capture_output=True,
+        text=True,
+    )
+    return bool(out.stdout.strip())
+
+
 def main() -> int:
     mf = manifest_mod.load()
     tracked = {line for line in git("ls-files").splitlines() if line.strip()}
-    transformed = (REPO / "Core").is_dir()
+    transformed = is_transformed()
 
     print("verify (%s tree)" % ("transformed" if transformed else "pre-transform"))
     ok = True

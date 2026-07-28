@@ -23,6 +23,17 @@ def tracked_files() -> list[str]:
     return [line for line in out.stdout.splitlines() if line.strip()]
 
 
+def is_transformed() -> bool:
+    """Ask git, not the filesystem: leftover __pycache__ makes Core/ exist as a
+    directory long after a checkout moved away from the transformed tree."""
+    out = subprocess.run(
+        ["git", "-C", str(REPO), "ls-files", "Core/__init__.py"],
+        capture_output=True,
+        text=True,
+    )
+    return bool(out.stdout.strip())
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--quiet", action="store_true")
@@ -30,7 +41,7 @@ def main() -> int:
 
     mf = manifest_mod.load()
 
-    if (REPO / "Core").is_dir():
+    if is_transformed():
         print(
             "this tree is already transformed - drift only means anything against the\n"
             "pristine tree. Run it on %r." % mf.meta.get("base", "vendor"),
