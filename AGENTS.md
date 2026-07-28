@@ -307,6 +307,13 @@ eagerly imports 244 modules including 17 from `HeroAI`, and
 `verify.py` reports the same 6 tier violations. These are measured, tracked in
 `rules/TIER_MAP.md`, and **not** to be silenced.
 
+**`pytest qa` opens a socket.** `Core/debug_hatch.py` calls `_start_server_once()`
+at module scope, so importing it binds `127.0.0.1:9977`. That is by design — the
+point is that `from Core.debug_hatch import snap` just works at a breakpoint
+site. Harmless in the gate: the thread is a daemon, a failed bind is caught into
+`_bind_error`, and the facade does not import it, so widgets only pay when they
+ask for it. Worth knowing before you wonder why a test run is listening.
+
 **Never run in the game client.** Nothing in this tree has been loaded by
 `Py4GW.dll`. 2,098 file moves and ~1,020 codemod rewrites are statically checked
 only. Treat runtime behaviour as unverified. `MyPy4GW` is the ready-made harness:
