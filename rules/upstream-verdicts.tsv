@@ -1,0 +1,33 @@
+# does upstream's copy of this file load? LOADS = we broke it.
+Scripts/py4gw-community-bots/legacy/Elite Tome Farm/elite_tome_farmer.py	FAILS
+Scripts/py4gw-community-bots/legacy/Example Bots/YAVB 1.0 by Apo (Vaettir bot).py	FAILS
+Scripts/py4gw-community-bots/legacy/Example Bots/YAVB/FSM.py	FAILS
+Scripts/py4gw-community-bots/legacy/Example Bots/YAVB/FSMHelpers.py	FAILS
+Scripts/py4gw-community-bots/legacy/Example Bots/YAVB/GUI.py	FAILS
+Scripts/py4gw-community-bots/legacy/Example Bots/YAVB/YAVBMain.py	FAILS
+Scripts/py4gw-community-bots/legacy/Halloween/Every bit Helps.py	LOADS
+Scripts/py4gw-community-bots/scripts/Missions/Dungeons/Frog Scepter bot.py	LOADS
+Scripts/py4gw-community-bots/scripts/Missions/Dungeons/SoO.py	LOADS
+Scripts/py4gw-community-bots/scripts/Runners/Sulfurous Runner.py	FAILS
+Scripts/py4gw-devtools/scripts/Examples/Skills/SkillInfo.py	FAILS
+Scripts/py4gw-devtools/scripts/Tools/Bridge Client.py	LOADS
+Scripts/py4gw-examples/Coord_Logger.py	FAILS
+Scripts/py4gw-examples/PingHandler.py	FAILS
+Scripts/py4gw-examples/get_icons.py	FAILS
+Scripts/py4gw-examples/mod handler.py	FAILS
+Scripts/py4gw-examples/package_template_tester.py	FAILS
+Scripts/py4gw-examples/scraper_model_id_list.py	FAILS
+Scripts/py4gw-examples/style_test.py	FAILS
+Scripts/py4gw-marks-corner/scripts/AlcoholProc.py	FAILS
+Scripts/py4gw-marks-corner/scripts/ConsPrinter.py	LOADS
+Scripts/py4gw-marks-corner/scripts/DervCOFFarmBT.py	ABSENT
+Scripts/py4gw-marks-corner/scripts/DervDustFarm.py	LOADS
+Scripts/py4gw-marks-corner/scripts/DervFeatherFarm.py	LOADS
+Scripts/py4gw-marks-corner/scripts/VaettirMarksMods.py	LOADS
+Scripts/py4gw-marks-corner/scripts/VoltaicSpearTeamFarm.py	LOADS
+Scripts/py4gw-tasks/scripts/EliteSkillsCapture.py	LOADS
+Widgets/Client/Layout Manager.py	FAILS
+Widgets/Combat/EZ Cast.py	LOADS
+Widgets/Overlays/Map Overlay.py	FAILS
+Widgets/Panels/Messaging.py	LOADS
+Widgets/Panels/Style Manager.py	FAILS

@@ -9,4 +9,4 @@ in our own namespaces are free.
 
 | date | vendor | ours | added | modified | deleted | conflict surface | where |
 |---|---|---|---|---|---|---|---|
-| 2026-07-28 | `55ec88a6` | 246 | 111 | 133 | 2 | 20 | Core 107, dev 78, Scripts 28, HeroAI 12 |
+| 2026-07-28 | `55ec88a6` | 135 | 112 | 22 | 1 | 19 | Core 106, HeroAI 12, docs 9, Scripts 4 |
