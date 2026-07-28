@@ -15,6 +15,7 @@ rule is reversed, its entry says so rather than being deleted.
 | [RS-003](#rs-003) | widgets that are tasks become scripts | active, 1 of ~146 done |
 | [RS-004](#rs-004) | breakage outside a protected pack is a deprecation | active |
 | [RS-005](#rs-005) | packs cannot reach their own `lib/` | **OPEN — blocks 6 scripts** |
+| [RS-006](#rs-006) | the tier map is instruction, not reference | active |
 
 ---
 
@@ -147,3 +148,28 @@ not a detail to settle silently.
 3. Leave it. The six scripts stay broken and the `lib` tier stays decorative.
 
 Option 2 is the one that costs upstream nothing.
+
+## RS-006
+
+**The tier map is part of the instruction set, and lives here — not in `docs/`.**
+
+[TIER_MAP.md](TIER_MAP.md) says which tier a file belongs to, what changing it
+costs, and which parts upstream contests. That is a rule about where new code
+goes, not background reading, so it sits in `rules/` and outranks `docs/`.
+
+*Why it moved.* It only ever existed as an untracked file in the fork's working
+copy, while `AGENTS.md` §5 and a `layout.toml` override both cited it by its old
+`docs/` path. Two references pointed at a file this repo did not have — and
+because it was untracked, one `git clean` in the fork would have destroyed the
+only copy.
+
+*What changed on the way.* 29 paths translated through the manifest, a standing
+table marking which parts are current versus superseded, and the stale
+`docs/tier_map_and_separation_plan.md` override deleted — `rules/**` already
+covers it.
+
+*Enforced by.* `tiercheck.py` implements Part 6's assignment rule. Its known
+failures — the facade's eager 17-module `HeroAI` closure, and
+`Core/py4gwcorelib_src/AutoInventoryHandler.py` reaching into `dev/reference` —
+are Part 4's unfinished Move 2. Do not silence them; fix, or waive with a reason
+in `tier_map.toml`.

@@ -16,6 +16,7 @@ it — grep for it.
 | file | written by | what it is |
 |---|---|---|
 | [RESTRUCTURE.md](RESTRUCTURE.md) | hand | every deliberate divergence from upstream, numbered `RS-nnn`. Start here. |
+| [TIER_MAP.md](TIER_MAP.md) | hand | which tier a file belongs to and what changing it costs. Read before adding code. |
 | [DEPRECATED.md](DEPRECATED.md) | generated | leaves we decided not to keep. Tracked, not deleted. |
 | [BREAKAGE.md](BREAKAGE.md) | generated | what does not load, why, and which pile it falls in. |
 | [DIVERGENCE.md](DIVERGENCE.md) | generated | how far `main` has drifted, one row per sync. |
