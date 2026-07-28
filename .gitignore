@@ -272,3 +272,6 @@ Py4GW_Reforged_Launcher/dev_notes/
 !.vscode/
 .vscode/*
 !.vscode/settings.json
+
+# scratch output of the last sync run; the trend lives in docs/DIVERGENCE.md
+STATUS.md

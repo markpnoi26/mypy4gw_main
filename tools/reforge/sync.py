@@ -236,6 +236,13 @@ def main() -> int:
     )
 
     write_status(report, facts)
+
+    # The ledger is committed so the trend survives; STATUS.md is scratch for
+    # this run and is gitignored. Committing also leaves the tree clean, which
+    # promote.py insists on.
+    run(["git", "add", "docs/DIVERGENCE.md"])
+    run(["git", "commit", "-m", "divergence @ %s" % vendor_after], {"REFORGE_ALLOW_LAYOUT": "1"})
+
     print("\nstaged and green. Review STATUS.md, then: python tools/reforge/promote.py")
     return 0
 
