@@ -1,6 +1,6 @@
 ---
 name: heroai-bt-engine
-description: Working on the HeroAI BT combat engine (HeroAI/bt/), BldMgrBT builds (BTBuilds/, FarmBuilds/), CombatServices, the legacy/bt engine toggle, or porting/authoring builds. Load before touching HeroAI/bt/, HeroAI/engine.py, Core/BldMgrBT.py, Core/build_src/, or Core/BTBuilds/.
+description: Working on the HeroAI BT combat engine (HeroAI/bt/), BldMgrBT builds (BTBuilds/, FarmBuilds/), CombatServices, or porting/authoring builds. Load before touching HeroAI/bt/, HeroAI/engine.py, Core/BldMgrBT.py, Core/build_src/, or Core/BTBuilds/.
 ---
 
 # HeroAI BT engine + BldMgrBT builds — working knowledge
@@ -9,21 +9,27 @@ Full record with rationale, diagrams and history:
 `docs/heroai_bt_migration_complete.md`. Port patterns:
 `docs/build_port_to_bldmgrbt.md`. This skill is the condensed version.
 
-## State: COMPLETE and working
+## State: the BT engine is the only HeroAI engine
 
 All 32 matchable builds ported (28 combat → `BTBuilds/`, 4 farm →
-`BTBuilds/FarmBuilds/`). Legacy (`Builds/**`, `combat.py`,
-`Builds/Any/HeroAI.py`) untouched — git-clean — and still the default engine.
+`BTBuilds/FarmBuilds/`). The `[RotationEngine] UseBT` toggle, the
+`HeroAIEngineRouter`, and the "Combat Engine" tab are gone —
+`create_heroai_engine` returns `HeroAIBTEngine` unconditionally.
+
+`HeroAI_Build` and `BuildMgr` still exist and are still exercised: legacy
+`Builds/**` reach the game through `AddBuild` / `Upkeepers.py:126`, not through
+HeroAI. `HeroAI/combat.py` is untouched and still load-bearing — see the
+dependency note below. Rollback is a git revert, not a setting.
 
 ## Architecture (as built)
 
 ```
-drivers: headless_tree.py:31 | widget HeroAI.py:39
-  └ create_heroai_engine() → HeroAIEngineRouter        HeroAI/engine.py
-      toggle OFF (default) → HeroAI_Build (legacy, untouched)
-      toggle ON  → HeroAIBTEngine(BldMgrBT)            HeroAI/bt/bt_engine.py
+drivers: headless_tree.py:31 | widget Multibox/HeroAI.py:41
+  └ create_heroai_engine() → HeroAIBTEngine(BldMgrBT)  HeroAI/engine.py
           EnsureBuildContract → matchable_bt_builds (BldMgrBT-native ONLY,
              FarmBuilds excluded; legacy generator builds invisible BY DESIGN)
+          standalone_fallback=True short-circuits to self (generic rotation,
+             no contract resolution) — mirrors HeroAI_Build:83
           matched build.tick_rotation(bb,ooc) → FAILURE → generic rotation
           generic rotation (HeroAI/bt/rotation.py):
              Slot0..7: Ready → Decide → Cast, then AutoAttack
@@ -37,10 +43,16 @@ class hierarchy:
   BTBuildMgr = BldMgrBT (alias at bottom of BldMgrBT.py; old module deleted)
 ```
 
-Toggle: `Settings().get_account_bt_rotation_enabled()` — ini
-`[RotationEngine] UseBT`, per-account, HeroAI config → "Combat Engine" tab,
-takes effect next frame. `Settings` is a singleton (settings.py:91) — per-frame
-reads are cheap.
+## The BT engine is not independent of combat.py
+
+Removing the legacy *engine* did not remove the legacy *oracle*. Every rotation
+leaf calls `CacheData().combat_handler` (`CombatClass`, `HeroAI/combat.py`, an
+upstream file with zero local patches): `IsSkillReady`/`IsOOCSkill`,
+`GetAppropiateTarget`, `HasEffect`, `SpiritBuffExists`, the skill/spike locks,
+alcohol, `HandleAutoAttack`, and — with `NATIVE_DECIDE = False` — the whole
+`IsReadyToCast` decision. Treat `combat.py` as the primitives library the tree
+calls. Reimplementing it inside `HeroAI/bt/` would mean carrying a permanent
+divergence against a file upstream keeps editing.
 
 Registry: `_scan_build_types` walks `Builds` AND `BTBuilds`, filters on the
 `is_build_type = True` class marker (NOT issubclass — neither base imports the
@@ -95,9 +107,11 @@ draft). Mapping from legacy ladders:
 Rung ORDER is preserved verbatim, including duplicates at different
 thresholds. `match_only` early-return preserved (registry swallows ctor
 TypeError and retries — broken signature = "never matches", not an error).
-Fallback stays `SetFallback("HeroAI", HeroAI_Build(standalone_fallback=True))`
-— duck-typed, intended. Ported builds work under BOTH engines (legacy reaches
-them via ProcessCombat→run_phase→tick_rotation).
+Fallback is `SetFallback("HeroAI", HeroAIBTEngine(standalone_fallback=True))`.
+HeroAI itself never reaches it — `run_engine_phase` catches a matched build's
+FAILURE and runs the generic rotation directly — but a bot that adds the build
+does, via `Upkeepers.py:126` → `ProcessSkillCasting` → `run_phase` →
+`ResolveFallback`. That path is why the fallback must stay wired.
 
 FarmBuilds decision rule: "would HeroAI, seeing a matching bar, want to run
 this?" No (one route/boss/escort) → FarmBuilds; reached only by script or
@@ -162,12 +176,17 @@ rewrite would need.
 - VoS_Grenths_Aura_Farmer is named a farmer but carries no exclusion flag →
   kept matchable in the port to preserve behaviour (flagged).
 
-## Verification path before flipping anything
+## Verification path
 
-1. Toggle ON, `NATIVE_DECIDE=False`, one account, live party — decisions
-   byte-identical, only dispatch is a tree. Cadence regression ⇒ ActionNode
-   where a ConditionNode belonged.
-2. `NATIVE_DECIDE=True` same account; compare via windows.py:322
+Nothing here has ever run against a live client — the whole migration was
+verified by compile checks and AST analysis (`docs/heroai_bt_migration_complete.md`
+§9). The engine swap did not change that.
+
+1. Live party at `NATIVE_DECIDE=False` — decisions still come from
+   `IsReadyToCast`, only dispatch is a tree, so any difference from the old
+   behaviour is a dispatch bug. Cadence regression ⇒ ActionNode where a
+   ConditionNode belonged.
+2. `NATIVE_DECIDE=True`; compare per-slot verdicts via windows.py:322
    DrawPrioritizedSkills.
-3. Shrink `FALLBACK_FAMILIES` one at a time.
-4. Ported builds: verify on legacy engine first (must be identical), then BT.
+3. Shrink `FALLBACK_FAMILIES` one family at a time, IsCasting last (it has the
+   `_queue_outcome` side effect).
