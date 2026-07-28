@@ -46,7 +46,7 @@ if [ -n "$creds" ]; then
 fi
 
 if [ "$branch" = "main" ]; then
-    tooling="$(printf '%s\n' "$staged" | grep -E '^tools/|^pyproject\.toml$|^AGENTS\.md$|^README\.md$|^CLAUDE\.md$|^CHEATSHEET\.md$|^\.claude/|^\.vscode/')"
+    tooling="$(printf '%s\n' "$staged" | grep -E '^qa/|^tools/|^pyproject\.toml$|^AGENTS\.md$|^README\.md$|^CLAUDE\.md$|^CHEATSHEET\.md$|^\.claude/|^\.vscode/')"
     if [ -n "$tooling" ]; then
         die "toolchain and identity files belong on 'base', not 'main'." \
             "" \

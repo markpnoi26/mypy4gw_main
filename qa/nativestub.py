@@ -149,13 +149,48 @@ def permissive_class(cls: type) -> None:
         pass
 
 
+def flag_like(cls: type) -> bool:
+    """A bitmask wearing an IntEnum's clothes.
+
+    Mostly powers of two, plus a few named combinations (WindowFlags scores
+    21/22; ProfessionType, whose values are just 1..10, scores 4/10).
+    """
+    try:
+        values = [m.value for m in cls]
+    except Exception:
+        return False
+    if not all(isinstance(v, int) and v >= 0 for v in values):
+        return False
+    nonzero = [v for v in values if v]
+    if len(nonzero) < 4:
+        return False
+    powers = [v for v in nonzero if v & (v - 1) == 0]
+    return len(powers) / len(nonzero) >= 0.7
+
+
+def widen_flags(module, name: str, cls: type) -> None:
+    """Callers pass real combinations — `WindowFlags(65)` is NoTitleBar|
+    AlwaysAutoResize — but the stub declares IntEnum, so construction raises.
+    Upstream's .pyi is wrong here; the native binding behaves like IntFlag.
+    Worth sending upstream as a stub fix."""
+    try:
+        widened = enum.IntFlag(cls.__name__, {m.name: m.value for m in cls}, boundary=enum.KEEP)
+    except Exception:
+        return
+    widened.__module__ = getattr(cls, "__module__", module.__name__)
+    setattr(module, name, widened)
+
+
 def make_permissive(module) -> None:
     """Enums keep their real values; everything else absorbs."""
     for name, value in list(vars(module).items()):
         if name.startswith("__"):
             continue
         if isinstance(value, type):
-            if not issubclass(value, enum.Enum):
+            if issubclass(value, enum.Enum):
+                if issubclass(value, int) and not issubclass(value, enum.Flag) and flag_like(value):
+                    widen_flags(module, name, value)
+            else:
                 permissive_class(value)
         elif inspect.isfunction(value):
             setattr(module, name, returning(return_type(value)))
