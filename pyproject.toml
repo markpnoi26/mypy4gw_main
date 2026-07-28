@@ -1,6 +1,13 @@
+# Ours. Upstream's original is docs/reference/upstream-pyproject.toml.
+# Drives VS Code, the CLI, and the apply.py format stage — one source of truth.
+# Formatter versions are pinned in tools/reforge/requirements.lock; bumping them
+# reformats the generated layout, so bump deliberately, in one commit on base.
+
 [tool.black]
 line-length = 120
 skip-string-normalization = true
+# force-exclude (not extend-exclude) so editor format-on-save can't reach dev/
+force-exclude = '^/(dev|docs)/'
 
 [tool.isort]
 profile = "black"
@@ -11,3 +18,20 @@ use_parentheses = true
 include_trailing_comma = true
 ensure_newline_before_comments = true
 order_by_type = true
+filter_files = true
+# import ORDER is semantic in these: Core/__init__.py facade star-imports shadow
+# by position; GlobalCache startup order is load-bearing; follow/__init__ exports
+# nothing on purpose; Py4GW_widget_manager.py is the pinned DLL entry point
+extend_skip_glob = [
+    "dev/*",
+    "docs/*",
+    "Core/__init__.py",
+    "GlobalCache/*",
+    "HeroAI/follow/*",
+    "Py4GW_widget_manager.py",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["."]

@@ -265,3 +265,10 @@ Py4GW_Reforged_Launcher/dev_notes/
 
 # CLAUDE.md is in the global ignore as local IDE state; here it is project identity
 !CLAUDE.md
+
+# .vscode/settings.json is the interpreter + format-on-save contract, not local
+# state. Re-include the dir, re-ignore its contents, then allow the one file —
+# a file can't be un-ignored while its parent directory is excluded.
+!.vscode/
+.vscode/*
+!.vscode/settings.json
