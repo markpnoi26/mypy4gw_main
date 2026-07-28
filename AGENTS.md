@@ -8,16 +8,30 @@ read **§2 — where you may edit**.
 This repo is one of three. Know which you are in before touching anything.
 
 ```
-mypy4gw_main            ← YOU ARE HERE. Freeform. Commit anything.
-  |                       The primary source of changes.
-  |  backport.py maps a change onto upstream's layout
-  v
-Py4GW_Reforged          ← the fork. Staging ground for anything going public.
-  |                       Also holds work not yet ported here (HEROAI_MIGRATION).
-  |  normal PR
-  v
-apoguita/Py4GW_Reforged ← upstream. Read-only to us; arrives via `vendor`.
+                        ┌──────────────────────────────────────────┐
+                        │ apoguita/Py4GW_Reforged — upstream       │
+                        │ read-only supplier. Never merged.        │
+                        └──────────────────────────────────────────┘
+                             │                          ▲
+             git fetch upstream                          │  normal PR
+             (direct — remote `upstream`)                │
+                             ▼                          │
+mypy4gw_main  ← YOU START HERE ─── backport.py ──→  Py4GW_Reforged
+the primary source of changes.      maps a change    the fork. PR staging,
+Freeform: commit anything.          onto upstream's  and the `--source` that
+                                    layout           forwardport.py reads from.
+        ▲                                                    │
+        └──────────────── forwardport.py ────────────────────┘
+                  (its HEROAI_MIGRATION delta is already absorbed)
 ```
+
+**Upstream is reached from here, directly.** `upstream` is a remote on this repo,
+so `sync.py` fetches apoguita without going through the fork. Nothing routes
+through the sibling — it is needed only to stage a PR, or to pull work that was
+authored there and never ported.
+
+Remotes here: `origin` (this repo's backup), `upstream` (apoguita), `fork`
+(markpnoi26/Py4GW_Reforged on GitHub), `local-src` (the sibling working copy).
 
 The point of the split: **here you are free** — commit whatever, restructure
 whatever, no collaboration overhead — while still taking upstream's work through
