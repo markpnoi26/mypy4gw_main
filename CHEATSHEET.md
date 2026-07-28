@@ -56,6 +56,18 @@ fast-forward. `git status` saying "diverged" after a sync is normal.
 Never plain `--force`. The lease is what tells "I rebased" apart from "I'm about
 to clobber something I haven't seen".
 
+Typing that every time is annoying, so `install-hooks.sh` sets up aliases:
+
+```bash
+git pushmain     # push --force-with-lease origin main
+git pushall      # that, plus base and vendor (the real backup)
+```
+
+A hook *cannot* do this for you — git decides what to send before `pre-push`
+runs, so a hook can only accept or refuse, never rewrite your command. What the
+hook does do is refuse `layout` and `staging`: they are rebuilt every sync, so a
+pushed copy is stale on arrival.
+
 ## Getting upstream's changes
 
 Two commands. The first one **cannot hurt you** — it never touches `main`.
