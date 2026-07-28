@@ -130,6 +130,8 @@ from .SkillManager import *
 from .GlobalCache import GLOBAL_CACHE
 from .Pathing import AutoPathing
 from .BuildMgr import BuildMgr
+from .BldMgrBT import BldMgrBT
+from .BldMgrBT import BTBuildMgr
 from .Botting import BottingClass as Botting
 from .Context import GWContext
 

@@ -44,12 +44,17 @@ class Inventory:
     SALVAGE_CHOICE_DIALOG_LABEL = "Salvage Window"
     SALVAGE_CHOICE_OPTION_CONTAINER_LABEL = "Salvage Window.Options"
     SALVAGE_CHOICE_CONFIRM_LABEL = "Salvage Window.Salvage Button"
-    SALVAGE_CHOICE_MATERIAL_CONFIRM_YES_LABEL = "Salvage Materials Dialog.Yes Button"
     SALVAGE_CHOICE_FALLBACK_DIALOG_HASH = 684387150
     SALVAGE_CHOICE_FALLBACK_OPTION_CONTAINER_OFFSET = 5
     SALVAGE_CHOICE_FALLBACK_CONFIRM_OFFSET = 2
-    SALVAGE_CHOICE_FALLBACK_MATERIAL_CONFIRM_ROOT_OFFSET = 0
-    SALVAGE_CHOICE_FALLBACK_MATERIAL_CONFIRM_YES_OFFSET = 6
+    MATERIAL_CONFIRM_SCREEN_TEMPLATE = 0
+    MATERIAL_CONFIRM_SCREEN_OFFSET = 6
+    MATERIAL_CONFIRM_DIALOG_TEMPLATE = 2
+    MATERIAL_CONFIRM_ICON_TEMPLATE = 6
+    MATERIAL_CONFIRM_ICON_OFFSET = 0
+    MATERIAL_CONFIRM_BUTTON_TEMPLATE = 7
+    MATERIAL_CONFIRM_YES_OFFSET = 6
+    MATERIAL_CONFIRM_NO_OFFSET = 4
 
     @staticmethod
     def inventory_instance():
@@ -391,18 +396,14 @@ class Inventory:
 
     @staticmethod
     def AcceptSalvageMaterialsWindow():
-        """
-        Checks if the Salvage Materials Dialog frame exists and clicks it if it hasn't already been clicked.
-        Returns:
-            bool: True if click was performed, False otherwise.
-        """
-        from .FrameTree import Frame, FrameId, FrameKeyError
+        """Accept the salvage materials confirm dialog, but only once the full dialog
+        signature has been verified."""
+        from .UIManager import UIManager
 
-        yes = Frame(FrameId.ScreenFrame.C6.SalvageMaterialsDialog.YesButton)
-        if yes.exists:
-            yes.click()
-
-        # return Inventory.inventory_instance().AcceptSalvageWindow()
+        yes_frame_id = Inventory._get_salvage_choice_material_confirm_yes_frame_id()
+        if yes_frame_id == 0:
+            return
+        UIManager.FrameClick(yes_frame_id)
 
     @staticmethod
     def _frame_by_alias(frame_label: str) -> Frame:
@@ -419,15 +420,80 @@ class Inventory:
         return [f.frame_id for f in FrameTree.frames_under(root_frame_id, child_offsets)]
 
     @staticmethod
-    def _salvage_material_confirm_yes() -> Frame:
-        frame = Inventory._frame_by_alias(Inventory.SALVAGE_CHOICE_MATERIAL_CONFIRM_YES_LABEL)
-        if frame.exists:
-            return frame
-        return Frame(FrameId.SalvageWindow.OptionsWindowConfirmMaterialsWindow.Confirm)
+    def _get_salvage_choice_material_confirm_yes_frame_id() -> int:
+        return Inventory.find_material_confirm_yes_frame()
+
+    @staticmethod
+    def find_material_confirm_yes_frame() -> int:
+        """Identify the confirm dialog's Yes button purely by template_type + child
+        offset. This dialog carries no frame_hash and no label, and its own child
+        offset is a creation-order slot (98/100/109/110/111/113 all seen), so the
+        surrounding tree pattern is the only stable identity available:
+
+            template 0, offset 6      screen frame
+            └── template 2            dialog (its offset varies -- ignored)
+                ├── template 6, offset 0   icon
+                ├── template 7, offset 4   No button
+                └── template 7, offset 6   Yes button
+        """
+        from .UIManager import UIManager
+        import PyUIManager
+
+        frames: dict[int, tuple[int, int, int]] = {}
+        children_by_parent: dict[int, dict[int, int]] = {}
+        for frame_id in UIManager.GetFrameArray():
+            try:
+                frame = PyUIManager.UIFrame(frame_id)
+                parent_id = int(frame.parent_id or 0)
+                child_offset = int(frame.child_offset_id or 0)
+                template_type = int(frame.template_type or 0)
+            except Exception:
+                continue
+            frames[frame_id] = (parent_id, child_offset, template_type)
+            children_by_parent.setdefault(parent_id, {})[child_offset] = frame_id
+
+        def matches(frame_id: int, offset: int, template_type: int) -> bool:
+            record = frames.get(frame_id)
+            return record is not None and record[1] == offset and record[2] == template_type
+
+        for dialog_frame_id, (screen_frame_id, _, dialog_template) in frames.items():
+            if dialog_template != Inventory.MATERIAL_CONFIRM_DIALOG_TEMPLATE:
+                continue
+            if not matches(
+                screen_frame_id,
+                Inventory.MATERIAL_CONFIRM_SCREEN_OFFSET,
+                Inventory.MATERIAL_CONFIRM_SCREEN_TEMPLATE,
+            ):
+                continue
+
+            dialog_children = children_by_parent.get(dialog_frame_id, {})
+            icon_frame_id = dialog_children.get(Inventory.MATERIAL_CONFIRM_ICON_OFFSET, 0)
+            no_frame_id = dialog_children.get(Inventory.MATERIAL_CONFIRM_NO_OFFSET, 0)
+            yes_frame_id = dialog_children.get(Inventory.MATERIAL_CONFIRM_YES_OFFSET, 0)
+
+            if not matches(
+                icon_frame_id, Inventory.MATERIAL_CONFIRM_ICON_OFFSET, Inventory.MATERIAL_CONFIRM_ICON_TEMPLATE
+            ):
+                continue
+            if not matches(
+                no_frame_id, Inventory.MATERIAL_CONFIRM_NO_OFFSET, Inventory.MATERIAL_CONFIRM_BUTTON_TEMPLATE
+            ):
+                continue
+            if not matches(
+                yes_frame_id, Inventory.MATERIAL_CONFIRM_YES_OFFSET, Inventory.MATERIAL_CONFIRM_BUTTON_TEMPLATE
+            ):
+                continue
+
+            if not (UIManager.FrameExists(dialog_frame_id) and UIManager.FrameExists(yes_frame_id)):
+                continue
+
+            return yes_frame_id
+
+        return 0
 
     @staticmethod
     def IsSalvageChoiceMaterialConfirmVisible() -> bool:
-        return Inventory._salvage_material_confirm_yes().exists
+        return Inventory._get_salvage_choice_material_confirm_yes_frame_id() != 0
 
     @staticmethod
     def _salvage_dialog() -> Frame:
@@ -871,25 +937,25 @@ class Inventory:
         from .UIManager import UIManager
 
         item_prefix = f"item_id={item_id} " if item_id else ""
-        yes_frame = Inventory._salvage_material_confirm_yes()
-        if not yes_frame.exists:
+        yes_frame_id = Inventory._get_salvage_choice_material_confirm_yes_frame_id()
+        if yes_frame_id == 0:
             return "not_visible"
 
         if not auto_confirm:
             Inventory._salvage_choice_debug_log(
                 debug_enabled,
                 log_module,
-                f"{item_prefix}destructive materials confirm visible yes={yes_frame}; auto-confirm disabled.",
+                f"{item_prefix}destructive materials confirm visible yes_frame_id={yes_frame_id}; auto-confirm disabled.",
             )
             return "confirm_pending"
 
         Inventory._salvage_choice_debug_log(
             debug_enabled,
             log_module,
-            f"{item_prefix}destructive materials confirm detected yes={yes_frame}.",
+            f"{item_prefix}destructive materials confirm detected yes_frame_id={yes_frame_id}.",
         )
-        ActionQueueManager().AddAction(queue_name, yes_frame.click)
-        ActionQueueManager().AddAction(queue_name, yes_frame.mouse_action, 8, 0, 0)
+        ActionQueueManager().AddAction(queue_name, UIManager.FrameClick, yes_frame_id)
+        ActionQueueManager().AddAction(queue_name, UIManager.TestMouseAction, yes_frame_id, 8, 0, 0)
         queue_drained = yield from Routines.Yield.Items._wait_for_empty_queue(
             queue_name,
             timeout_ms=queue_wait_timeout_ms,

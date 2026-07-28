@@ -439,7 +439,8 @@ class Sequential:
                 cost = quantity * value
                 GLOBAL_CACHE.Trading.Merchant.SellItem(item_id, cost)
 
-            while not ActionQueueManager().IsEmpty("MERCHANT"):
+            # Merchant buy/sell land on the shared "ACTION" queue, not "MERCHANT".
+            while not ActionQueueManager().IsEmpty("ACTION"):
                 sleep(0.35)
 
             if log:
@@ -470,7 +471,7 @@ class Sequential:
                 value = GLOBAL_CACHE.Item.Properties.GetValue(item_id) * 2  # value reported is sell value not buy value
                 GLOBAL_CACHE.Trading.Merchant.BuyItem(item_id, value)
 
-            while not ActionQueueManager().IsEmpty("MERCHANT"):
+            while not ActionQueueManager().IsEmpty("ACTION"):
                 sleep(0.35)
 
             if log:
@@ -501,7 +502,7 @@ class Sequential:
                 value = GLOBAL_CACHE.Item.Properties.GetValue(item_id) * 2
                 GLOBAL_CACHE.Trading.Merchant.BuyItem(item_id, value)
 
-            while not ActionQueueManager().IsEmpty("MERCHANT"):
+            while not ActionQueueManager().IsEmpty("ACTION"):
                 sleep(0.35)
 
             if log:

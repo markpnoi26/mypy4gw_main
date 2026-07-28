@@ -1,6 +1,11 @@
-from typing import Callable, Sequence
+from typing import TYPE_CHECKING
+from typing import Callable
+from typing import Sequence
 
 from ..py4gwcorelib_src.BehaviorTree import BehaviorTree
+
+if TYPE_CHECKING:
+    from ..BldMgrBT import BTBuildMgr
 
 
 class BottingTreeUpkeepMixin:
@@ -42,6 +47,9 @@ class BottingTreeUpkeepMixin:
 
     def GetUpkeepTreeNames(self) -> list[str]:
         return self.GetServiceTreeNames()
+
+    def AddBuild(self, build: "BTBuildMgr") -> None:
+        self.AddServiceTree(f"Build:{build.build_name}", build.get_rotation_tree)
 
     def AddPartyWipeRecoveryService(
         self,

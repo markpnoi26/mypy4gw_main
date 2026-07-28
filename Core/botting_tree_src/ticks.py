@@ -4,10 +4,11 @@ from typing import Protocol
 import PySystem
 
 from ..GlobalCache import GLOBAL_CACHE
-from ..Routines import Routines
 from ..py4gwcorelib_src.BehaviorTree import BehaviorTree
+from ..Routines import Routines
 from .account_config import BottingTreeAccountConfig
-from .enums import HeroAIStatus, PlannerStatus
+from .enums import HeroAIStatus
+from .enums import PlannerStatus
 
 
 class _BottingTreeTicksHost(Protocol):
@@ -246,16 +247,12 @@ class BottingTreeTicksMixin:
         service_result = BehaviorTree.Node._normalize_state(service_tree.tick())
         if service_result is None:
             raise TypeError(f"Service tree '{service_name}' returned a non-NodeState result.")
-        if service_result in (BehaviorTree.NodeState.SUCCESS, BehaviorTree.NodeState.FAILURE):
-            PySystem.Console.Log(
-                'BottingTree',
-                f"Upkeep tree '{service_name}' returned {service_result.name}.",
-                (
-                    PySystem.Console.MessageType.Info
-                    if service_result == BehaviorTree.NodeState.SUCCESS
-                    else PySystem.Console.MessageType.Warning
-                ),
-            )
+        # if service_result in (BehaviorTree.NodeState.SUCCESS, BehaviorTree.NodeState.FAILURE):
+        #     PySystem.Console.Log(
+        #         'BottingTree',
+        #         f"Upkeep tree '{service_name}' returned {service_result.name}.",
+        #         PySystem.Console.MessageType.Info if service_result == BehaviorTree.NodeState.SUCCESS else PySystem.Console.MessageType.Warning,
+        #     )
         if service_result in (BehaviorTree.NodeState.SUCCESS, BehaviorTree.NodeState.FAILURE):
             service_tree.reset()
         return BehaviorTree.NodeState.RUNNING

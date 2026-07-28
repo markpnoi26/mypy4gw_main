@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .agents import BTAgents
+    from .cast_events import BTCastEvents
     from .composite import BTComposite, BTCompositeHelpers
     from .items import BTItems
     from .keybinds import BTKeybinds
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "BTAgents",
+    "BTCastEvents",
     "BTComposite",
     "BTCompositeHelpers",
     "BTItems",
@@ -42,6 +44,10 @@ def __getattr__(name: str) -> Any:
         from .agents import BTAgents
 
         return BTAgents
+    if name == "BTCastEvents":
+        from .cast_events import BTCastEvents
+
+        return BTCastEvents
     if name == "BTComposite":
         from .composite import BTComposite
 

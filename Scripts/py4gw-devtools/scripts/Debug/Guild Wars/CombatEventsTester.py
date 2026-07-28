@@ -429,19 +429,22 @@ def draw_event_log_tab():
     """Draw the event log tab - shows real-time events from callbacks."""
     # Status display
     try:
-        import PyAgentEvents
-
-        queue = PyCombatEvents.GetCombatEventQueue()
-        is_init = queue.IsInitialized()
+        is_init = CombatEvents.IsInitialized()
+        is_active = CombatEvents.IsActive()
         raw_events = CombatEvents.GetEvents()
 
-        if is_init:
+        if is_init and is_active:
             PyImGui.text_colored(f"Combat Events: ACTIVE ({len(raw_events)} events captured)", (100, 255, 100, 255))
+        elif is_init:
+            PyImGui.text_colored("Combat Events: CAPTURING, DISPATCH OFF", (255, 200, 100, 255))
+            if PyImGui.button("Activate dispatch"):
+                CombatEvents.Activate()
+                state.event_log.add("SYSTEM", "dispatch activated")
         else:
             PyImGui.text_colored("Combat Events: NOT INITIALIZED", (255, 100, 100, 255))
             if PyImGui.button("Initialize"):
-                queue.Initialize()
-                state.event_log.add("SYSTEM", "C++ hooks initialized")
+                CombatEvents.Activate()
+                state.event_log.add("SYSTEM", "capture hooks installed and dispatch activated")
     except Exception as e:
         PyImGui.text_colored(f"Error: {e}", (255, 0, 0, 255))
 

@@ -410,9 +410,15 @@ def _process_event(event):
         _create_estimated_recharge(ts, agent, val)
         _fire("skill_activated", agent, val, target)
     elif etype in (EventType.SKILL_FINISHED, EventType.ATTACK_SKILL_FINISHED):
-        _fire("skill_finished", agent, _get_pending_skill(agent))
+        # These carry val=skill_id (Event_enums.py:16-17); _get_pending_skill is a
+        # backstop for a missing field, not the primary source — it walks back to the
+        # agent's last activation with no age bound, so it mis-attributes on
+        # back-to-back casts.
+        _fire("skill_finished", agent, val or _get_pending_skill(agent))
     elif etype == EventType.INTERRUPTED:
-        _fire("skill_interrupted", agent, _get_pending_skill(agent))
+        _fire("skill_interrupted", agent, val or _get_pending_skill(agent))
+    elif etype in (EventType.SKILL_STOPPED, EventType.ATTACK_SKILL_STOPPED):
+        _fire("skill_stopped", agent, val or _get_pending_skill(agent))
     elif etype == EventType.ATTACK_STARTED:
         _fire("attack_started", agent, target)
     elif etype == EventType.DISABLED:

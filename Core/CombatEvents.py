@@ -1,7 +1,7 @@
 """
 CombatEventQueue - raw combat event access plus higher-level combat state APIs.
 
-The low-level queue facade stays close to the C++ `PyCombatEvents` binding.
+The low-level queue facade stays close to the C++ `PyAgentEvents` binding.
 Higher-level combat-state helpers remain segmented under
 `CombatEventQueue_src.helpers`, while this module serves as the single public
 surface for both layers.
@@ -17,18 +17,20 @@ import PyAgentEvents
 from .CombatEventQueue_src import helpers
 from .enums import EventType
 
-_queue = None
 _initialized = False
 
 
 def _ensure_init():
-    """Initialize the native combat event queue on first use."""
-    global _queue, _initialized
+    """Install the native capture hooks on first use.
+
+    The Reforged binding is `PyAgentEvents` — module-level functions, no queue
+    object. There is no `PyCombatEvents.GetCombatEventQueue()` to call.
+    """
+    global _initialized
     if _initialized:
         return
-    _queue = PyCombatEvents.GetCombatEventQueue()
-    if not _queue.IsInitialized():
-        _queue.Initialize()
+    if not PyAgentEvents.is_enabled():
+        PyAgentEvents.enable()
     _initialized = True
 
 
@@ -44,38 +46,32 @@ class CombatEventQueue:
     @staticmethod
     def GetQueue():
         _ensure_init()
-        return _queue
+        return PyAgentEvents
 
     @staticmethod
     def Initialize():
         _ensure_init()
-        if _queue and not _queue.IsInitialized():
-            _queue.Initialize()
 
     @staticmethod
     def Terminate():
-        _ensure_init()
-        if _queue and _queue.IsInitialized():
-            _queue.Terminate()
+        global _initialized
+        if PyAgentEvents.is_enabled():
+            PyAgentEvents.disable()
+        _initialized = False
 
     @staticmethod
     def IsInitialized() -> bool:
-        _ensure_init()
-        return bool(_queue and _queue.IsInitialized())
+        return bool(PyAgentEvents.is_enabled())
 
     @staticmethod
     def GetAndClearEvents():
         _ensure_init()
-        if not _queue:
-            return []
-        return _queue.GetAndClearEvents()
+        return PyAgentEvents.get_and_clear_events()
 
     @staticmethod
     def PeekEvents():
         _ensure_init()
-        if not _queue:
-            return []
-        return _queue.PeekEvents()
+        return PyAgentEvents.peek_events()
 
     @staticmethod
     def GetAndClearEventTuples() -> List[Tuple[int, int, int, int, int, float]]:
@@ -87,23 +83,18 @@ class CombatEventQueue:
 
     @staticmethod
     def SetMaxEvents(count: int):
-        _ensure_init()
-        if _queue:
-            _queue.SetMaxEvents(count)
+        """No-op: PyAgentEvents owns a fixed-capacity buffer. Kept so callers
+        written against the old queue facade still import."""
 
     @staticmethod
     def GetMaxEvents() -> int:
         _ensure_init()
-        if not _queue:
-            return 0
-        return _queue.GetMaxEvents()
+        return PyAgentEvents.get_capacity()
 
     @staticmethod
     def GetQueueSize() -> int:
         _ensure_init()
-        if not _queue:
-            return 0
-        return _queue.GetQueueSize()
+        return PyAgentEvents.get_event_count()
 
 
 # region CombatEvents
@@ -181,6 +172,10 @@ class CombatEvents:
         helpers._callbacks.setdefault("skill_interrupted", []).append(cb)
 
     @staticmethod
+    def OnSkillStopped(cb: Callable[[int, int], None]):
+        helpers._callbacks.setdefault("skill_stopped", []).append(cb)
+
+    @staticmethod
     def OnAttackStarted(cb: Callable[[int, int], None]):
         helpers._callbacks.setdefault("attack_started", []).append(cb)
 
@@ -226,7 +221,11 @@ class CombatEvents:
 
     @staticmethod
     def Enable():
-        # deactivated by design
+        """Register the per-frame sweep but leave dispatch OFF.
+
+        Opt in with `Activate()`. Every script in the process shares this
+        stream, so nobody pays for the capture hook or the sweep unasked.
+        """
         helpers._set_callback_active(False)
         import PyCallback
 
@@ -237,6 +236,19 @@ class CombatEvents:
             priority=7,
             context=PyCallback.Context.Draw,
         )
+
+    @staticmethod
+    def Activate():
+        _ensure_init()
+        helpers._set_callback_active(True)
+
+    @staticmethod
+    def Deactivate():
+        helpers._set_callback_active(False)
+
+    @staticmethod
+    def IsActive() -> bool:
+        return helpers._is_callback_active()
 
     @staticmethod
     def Disable():

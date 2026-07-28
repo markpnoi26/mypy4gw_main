@@ -2,6 +2,7 @@ from typing import Any, Callable, Optional
 
 from .botting_src.helpers import BottingHelpers
 from .botting_src.config import BotConfig
+from .botting_src.step_logger import StepLogger
 from .BuildMgr import BuildMgr
 
 from .botting_src.subclases_src.STATES_src import _STATES
@@ -221,6 +222,9 @@ class BottingClass:
         self.Multibox = _MULTIBOX(self)
         self.Templates = _TEMPLATES(self)
         self.Quest = _QUEST(self)
+
+        self.step_logger = StepLogger(self)
+        self.step_logger.attach()
 
     # region internal Helpers
     def _start_coroutines(self):
