@@ -58,15 +58,30 @@ stays near zero.
 
 ## 3. Updating from upstream
 
+### Four branches, and which one you commit to
+
+| Branch | Holds | You commit here when |
+|---|---|---|
+| `vendor` | pristine `upstream/main` | never |
+| `base` | `vendor` + toolchain and identity | you change `tools/`, the manifest, `.claude/`, `AGENTS.md`, `README.md` |
+| `layout` | `apply.py(base)` | never — generated |
+| `main` | `layout` + your work | you change anything else |
+
+**Toolchain edits go on `base`, work goes on `main`.** They are separated
+because each rebases against a different thing. Put a tool commit on `main` and
+it will replay onto a `layout` that already contains its own final state, and
+conflict with itself.
+
+### The cycle
+
 ```bash
 git fetch upstream
 git checkout vendor && git merge --ff-only upstream/main
 
-git checkout -B layout vendor
-git checkout main -- tools docs .claude AGENTS.md README.md CLAUDE.md
-git commit -m "toolchain for regeneration"
+git checkout base && git rebase vendor          # toolchain forward, history intact
+python tools/reforge/drift.py                   # must be clean — fix the manifest here
 
-python tools/reforge/drift.py        # must be clean before applying
+git checkout -B layout base
 python tools/reforge/apply.py
 python tools/reforge/verify.py
 python tools/reforge/tiercheck.py --core Core
@@ -75,6 +90,8 @@ git commit -am "reforge layout @ $(git rev-parse --short vendor)"
 git checkout main && git rebase --onto layout <previous-layout-sha> main
 python tools/reforge/compare.py
 ```
+
+Record the previous `layout` sha before regenerating — it is the rebase anchor.
 
 **`drift.py` failing is the normal signal that upstream changed something.** It
 reports four things, and each means something different:
@@ -88,9 +105,29 @@ reports four things, and each means something different:
 
 A **stale rule plus an uncovered path in the same run is a rename.** That pairing
 is how upstream's periodic mass-restructures become readable instead of fatal.
+Retarget the rule's `match` at the new path and the file lands where it always
+did.
 
 Prefer globs over per-file entries: a glob keeps covering new upstream files in
 that subtree, where per-file entries turn every upstream addition into drift.
+
+### What a conflict actually looks like
+
+Only one thing conflicts: **you and upstream editing the same upstream-owned
+file.** It surfaces during the final `git rebase`, as an ordinary 3-way merge:
+
+```
+UU Core/Agent.py
+<<<<<<< HEAD
+# upstream's change
+=======
+# your change
+>>>>>>> (your overlay commit)
+```
+
+Resolve it like any merge, `git add`, `git rebase --continue`. Everything else —
+upstream adding files, deleting them, moving them, renaming whole trees — is
+absorbed by the manifest and never reaches the rebase.
 
 ## 4. Sending changes upstream
 

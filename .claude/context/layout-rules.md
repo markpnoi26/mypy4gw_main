@@ -5,8 +5,13 @@ This tree is generated. Getting this wrong loses work silently.
 ## Branch discipline
 
 - `vendor` — pristine `upstream/main`. **Fast-forward only, never edit.**
-- `layout` — `apply.py(vendor)`. **Generated, disposable, never hand-edit.**
-- `main` — `layout` + your commits. Edit freely here.
+- `base` — `vendor` + toolchain and identity. **Commit tool/manifest edits HERE.**
+- `layout` — `apply.py(base)`. **Generated, disposable, never hand-edit.**
+- `main` — `layout` + your work. Commit everything else here.
+
+Toolchain and work are separated because they rebase against different things. A
+tool commit on `main` replays onto a `layout` that already contains its own final
+state and conflicts with itself.
 
 Never `git reset --hard layout` onto `main` once `main` carries work — it
 discards your overlay history. **Rebase.** (This has already cost nine commits
