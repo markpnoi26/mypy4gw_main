@@ -1504,6 +1504,9 @@
     "enc:\\\\x4B30\\\\x8C3C\\\\xB1D2\\\\x4809": [
       "Sickened Guardsman Tahnjo"
     ],
+    "enc:\\\\x4B71\\\\xCDDD\\\\xE5CC\\\\x3DA8": [
+      "Diseased Soldier"
+    ],
     "enc:\\\\x4B72\\\\xE2E8\\\\xC85E\\\\x23A1": [
       "Diseased Minister"
     ],
@@ -1942,6 +1945,21 @@
     "enc:\\\\x8101\\\\x1C7C\\\\x8C89\\\\xEE9D\\\\x0105": [
       "Corsair Admiral"
     ],
+    "enc:\\\\x8101\\\\x1C7D\\\\x8E4A\\\\xA32C\\\\x013A": [
+      "Corsair Wizard"
+    ],
+    "enc:\\\\x8101\\\\x1C7E\\\\xE685\\\\xAB77\\\\x070E": [
+      "Corsair Blackhand"
+    ],
+    "enc:\\\\x8101\\\\x1C80\\\\xD28E\\\\xCF9C\\\\x6D69": [
+      "Corsair Bosun"
+    ],
+    "enc:\\\\x8101\\\\x1C83\\\\xC289\\\\x9DED\\\\x1777": [
+      "Corsair Berserker"
+    ],
+    "enc:\\\\x8101\\\\x1C84\\\\x9767\\\\xF481\\\\x09E4": [
+      "Corsair Commandant"
+    ],
     "enc:\\\\x8101\\\\x1CB8\\\\xC207\\\\xFADF\\\\x6028": [
       "Thought of Darkness"
     ],
@@ -1990,8 +2008,29 @@
     "enc:\\\\x8101\\\\x1F3F\\\\xFACD\\\\xEE60\\\\x334D": [
       "Anguish Titan"
     ],
+    "enc:\\\\x8101\\\\x2014\\\\xCD2D\\\\xE9B0\\\\x67D6": [
+      "Suubay the Greedy"
+    ],
+    "enc:\\\\x8101\\\\x201F\\\\xABF4\\\\x97B6\\\\x611E": [
+      "Killer Iboga"
+    ],
     "enc:\\\\x8101\\\\x204A\\\\xEC57\\\\xE6ED\\\\x10FB": [
       "Despair Titan"
+    ],
+    "enc:\\\\x8101\\\\x2108\\\\xE960\\\\xC189\\\\x03CD": [
+      "Skree Talon"
+    ],
+    "enc:\\\\x8101\\\\x210A\\\\xB2B6\\\\xCD9C\\\\x054C": [
+      "Skree Warbler"
+    ],
+    "enc:\\\\x8101\\\\x210F\\\\xD5A1\\\\xB598\\\\x577E": [
+      "Juvenile Bladed Termite"
+    ],
+    "enc:\\\\x8101\\\\x2115\\\\x92CF\\\\x03B4": [
+      "Stormseed Jacaranda"
+    ],
+    "enc:\\\\x8101\\\\x2116\\\\xA93A\\\\xFC9B\\\\x2407": [
+      "Fanged Iboga"
     ],
     "enc:\\\\x8101\\\\x25C6\\\\xAB44\\\\xD387\\\\x428C": [
       "Smothering Tendrils"
@@ -2022,6 +2061,24 @@
     ],
     "enc:\\\\x8101\\\\x2D93\\\\xB0E4\\\\xA9EF\\\\x1A03": [
       "Restless Dead"
+    ],
+    "enc:\\\\x8101\\\\x32EF\\\\x8707\\\\x9391\\\\x2FD0": [
+      "Corsair"
+    ],
+    "enc:\\\\x8101\\\\x32F0\\\\xC153\\\\xC6DE\\\\x6052": [
+      "Corsair"
+    ],
+    "enc:\\\\x8101\\\\x3705\\\\xD5FA\\\\x1B14": [
+      "Sunspear Volunteer"
+    ],
+    "enc:\\\\x8101\\\\x370A\\\\x8C0D\\\\xEC56\\\\x42C3": [
+      "Sunspear Volunteer"
+    ],
+    "enc:\\\\x8101\\\\x3816\\\\xE1B0\\\\xC851\\\\x0EB7": [
+      "Elonbel"
+    ],
+    "enc:\\\\x8101\\\\x3819\\\\xB670\\\\x724A": [
+      "Wounded Corsair"
     ],
     "enc:\\\\x8101\\\\x38EC\\\\xD08B\\\\x8C46\\\\x2EB7": [
       "The Darkness"
@@ -2143,11 +2200,80 @@
     "enc:\\\\x8101\\\\x45D5\\\\xEC58\\\\x881D\\\\x5589": [
       "Jahai Rat"
     ],
+    "enc:\\\\x8101\\\\x464A\\\\xD6DA\\\\xD6AD\\\\x2BA0": [
+      "Skree Hatchling"
+    ],
+    "enc:\\\\x8101\\\\x464B\\\\xB117\\\\xFDC3\\\\x517B": [
+      "Skree Fledgeling"
+    ],
+    "enc:\\\\x8101\\\\x4651\\\\x98C5\\\\xA7A1\\\\x708D": [
+      "Grub Lance"
+    ],
+    "enc:\\\\x8101\\\\x4652\\\\xBF41\\\\xB074\\\\x4D76": [
+      "Preying Lance"
+    ],
+    "enc:\\\\x8101\\\\x4656\\\\xAF22\\\\xAF35\\\\x72C1": [
+      "Fanged Iboga"
+    ],
+    "enc:\\\\x8101\\\\x4657\\\\xC7D2\\\\x8CEE\\\\x09E2": [
+      "Fanged Iboga"
+    ],
+    "enc:\\\\x8101\\\\x4658\\\\x9DC1\\\\x7476": [
+      "Stormseed Jacaranda"
+    ],
+    "enc:\\\\x8101\\\\x4659\\\\xBBE3\\\\xE459\\\\x1183": [
+      "Stormseed Jacaranda"
+    ],
+    "enc:\\\\x8101\\\\x465C\\\\xC826\\\\x92E9\\\\x3A2B": [
+      "Skale Blighter"
+    ],
+    "enc:\\\\x8101\\\\x465D\\\\xB4AB\\\\xA0AC\\\\x1976": [
+      "Frigid Skale"
+    ],
+    "enc:\\\\x8101\\\\x465E\\\\xC5B5\\\\xE657\\\\x291A": [
+      "Ridgeback Skale"
+    ],
+    "enc:\\\\x8101\\\\x465F\\\\xC614\\\\xB1C4\\\\x2264": [
+      "Ridgeback Skale"
+    ],
+    "enc:\\\\x8101\\\\x4663\\\\xB1BF\\\\xB8A4\\\\x1BCA": [
+      "Skale Lasher"
+    ],
+    "enc:\\\\x8101\\\\x4664\\\\xE23C\\\\x2CA3": [
+      "Skale Lasher"
+    ],
+    "enc:\\\\x8101\\\\x4665\\\\x9E79\\\\xADAB\\\\x0128": [
+      "Suit of 15 Armor"
+    ],
+    "enc:\\\\x8101\\\\x4666\\\\x883A\\\\xFD69\\\\x1A36": [
+      "Suit of 35 Armor"
+    ],
+    "enc:\\\\x8101\\\\x4667\\\\x8894\\\\xF1DF\\\\x1DB7": [
+      "Suit of 55 Armor"
+    ],
+    "enc:\\\\x8101\\\\x4668\\\\x9A0F\\\\x58D9": [
+      "Practice Target"
+    ],
     "enc:\\\\x8101\\\\x46AA\\\\x4140": [
       "Tusked Howler"
     ],
     "enc:\\\\x8101\\\\x46AB\\\\xB705\\\\x0EB7": [
       "Steelfang Drake"
+    ],
+    "enc:\\\\x8101\\\\x46CC\\\\xFF84\\\\xE7D6\\\\x4273": [
+      "Midshipman Bennis"
+    ],
+    "enc:\\\\x8101\\\\x46D0\\\\xEC0A\\\\x942A\\\\x041A": [
+      "Corsair Mage"
+    ],
+    "enc:\\\\x8101\\\\x46D3\\\\xC879\\\\xBD02\\\\x7FCA": [
+      "Corsair Healer"
+    ],
+    "enc:\\\\x8101\\\\x46D5\\\\xFD6E\\\\x90AC\\\\x034E": [
+      "Corsair Buccaneer"
+    ],
+    "enc:\\\\x8101\\\\x46D8\\\\xD6CB\\\\xF813\\\\x43DB": [
+      "Corsair Spotter"
     ],
     "enc:\\\\x8101\\\\x46EA\\\\xE602\\\\xC496\\\\x117A": [
       "Abaddon"
@@ -2178,6 +2304,27 @@
     ],
     "enc:\\\\x8101\\\\x473A\\\\xFF97\\\\x44BF": [
       "Spirit of Fury"
+    ],
+    "enc:\\\\x8101\\\\x47A2\\\\xA4A9\\\\xC09E\\\\x3F8F": [
+      "Chineh Soaring Light"
+    ],
+    "enc:\\\\x8101\\\\x47A5\\\\xEFAC\\\\xD721\\\\x4E03": [
+      "Bladed Termite"
+    ],
+    "enc:\\\\x8101\\\\x47A7\\\\x8457\\\\xEEC0\\\\x5E50": [
+      "Suneh Stormbringer"
+    ],
+    "enc:\\\\x8101\\\\x491C\\\\xE2ED\\\\xCD02\\\\x2998": [
+      "Skree Talon"
+    ],
+    "enc:\\\\x8101\\\\x491D\\\\xD344\\\\xCE87\\\\x16B5": [
+      "Skree Warbler"
+    ],
+    "enc:\\\\x8101\\\\x49B9\\\\xC647\\\\x381A": [
+      "Irontooth Drake"
+    ],
+    "enc:\\\\x8101\\\\x49EB\\\\xA26F\\\\x9E48\\\\x5FB3": [
+      "Stalking Nephila"
     ],
     "enc:\\\\x8101\\\\x4A03\\\\xD537\\\\x9E2A\\\\x6374": [
       "Veldt Nephila"
@@ -2322,6 +2469,15 @@
     ],
     "enc:\\\\x8101\\\\x5239\\\\x9FAF\\\\x846B\\\\x5B7B": [
       "Mandragor Terror"
+    ],
+    "enc:\\\\x8101\\\\x523C\\\\xD541\\\\xFFBF\\\\x3B6A": [
+      "Tarom Rockbreaker"
+    ],
+    "enc:\\\\x8101\\\\x523F\\\\xEB9F\\\\xADF3\\\\x32FD": [
+      "Mandragor Imp"
+    ],
+    "enc:\\\\x8101\\\\x5244\\\\xEC01\\\\xE989\\\\x08B5": [
+      "Mandragor Slither"
     ],
     "enc:\\\\x8101\\\\x5249\\\\xCA76\\\\x8354\\\\x71D5": [
       "Enadiz the Hardheaded"
@@ -2626,17 +2782,32 @@
     "enc:\\\\x8101\\\\x7710\\\\xA247\\\\x58DC": [
       "Angorodon"
     ],
+    "enc:\\\\x8101\\\\x7836\\\\x913B\\\\x9A4F\\\\x47D7": [
+      "Crypt Slasher"
+    ],
     "enc:\\\\x8101\\\\x790C\\\\xE4FD\\\\xB49B\\\\x03C1": [
       "Mandragor Shadowfang"
     ],
     "enc:\\\\x8101\\\\x790D\\\\x9881\\\\x1289": [
       "Mantid Digger"
     ],
+    "enc:\\\\x8101\\\\x79D0\\\\xADD9\\\\xEA08\\\\x5C21": [
+      "Crypt Ghoul"
+    ],
+    "enc:\\\\x8101\\\\x79D1\\\\x94E7\\\\xCE8C\\\\x022C": [
+      "Crypt Wraith"
+    ],
+    "enc:\\\\x8101\\\\x79D2\\\\x9243\\\\xFDAB\\\\x76C1": [
+      "Shock Phantom"
+    ],
     "enc:\\\\x8101\\\\x7F4D\\\\xFC50\\\\xD378\\\\x2E42": [
       "Mandragor Smoke Devil"
     ],
     "enc:\\\\x8102\\\\x0472\\\\xD05D\\\\xC665\\\\x12C5": [
       "Charr Dominator"
+    ],
+    "enc:\\\\x8102\\\\x0473\\\\xF5D6\\\\xBD0F\\\\x17AB": [
+      "Charr Hexreaper"
     ],
     "enc:\\\\x8102\\\\x0474\\\\xFAE3\\\\x0DFB": [
       "Charr Flameshielder"
@@ -2796,6 +2967,9 @@
     ],
     "enc:\\\\x8102\\\\x23B4\\\\xD7F0\\\\x5DF7": [
       "Tumbled Elemental"
+    ],
+    "enc:\\\\x8102\\\\x23C0\\\\xB7A2\\\\xA57C\\\\x3427": [
+      "Servant of Murakai"
     ],
     "enc:\\\\x8102\\\\x2895\\\\xCEF4\\\\x869A\\\\x65D1": [
       "Agari Tlamatini"

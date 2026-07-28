@@ -292,7 +292,8 @@
       "inferred_primary": "",
       "inferred_secondary": "",
       "model_ids": [
-        155
+        155,
+        4476
       ],
       "observed_maps": {
         "280": {
@@ -300,6 +301,12 @@
           "id": 280,
           "instance_type": "Explorable",
           "name": "Isle of the Nameless"
+        },
+        "456": {
+          "base_id": 456,
+          "id": 456,
+          "instance_type": "Explorable",
+          "name": "Churrhir Fields"
         }
       },
       "observed_skills": {}
@@ -311,7 +318,8 @@
       "inferred_primary": "",
       "inferred_secondary": "",
       "model_ids": [
-        155
+        155,
+        4476
       ],
       "observed_maps": {
         "280": {
@@ -319,6 +327,12 @@
           "id": 280,
           "instance_type": "Explorable",
           "name": "Isle of the Nameless"
+        },
+        "456": {
+          "base_id": 456,
+          "id": 456,
+          "instance_type": "Explorable",
+          "name": "Churrhir Fields"
         }
       },
       "observed_skills": {}
@@ -330,7 +344,8 @@
       "inferred_primary": "",
       "inferred_secondary": "",
       "model_ids": [
-        155
+        155,
+        4476
       ],
       "observed_maps": {
         "280": {
@@ -338,6 +353,12 @@
           "id": 280,
           "instance_type": "Explorable",
           "name": "Isle of the Nameless"
+        },
+        "456": {
+          "base_id": 456,
+          "id": 456,
+          "instance_type": "Explorable",
+          "name": "Churrhir Fields"
         }
       },
       "observed_skills": {}
@@ -349,7 +370,8 @@
       "inferred_primary": "",
       "inferred_secondary": "",
       "model_ids": [
-        155
+        155,
+        4476
       ],
       "observed_maps": {
         "280": {
@@ -357,6 +379,12 @@
           "id": 280,
           "instance_type": "Explorable",
           "name": "Isle of the Nameless"
+        },
+        "456": {
+          "base_id": 456,
+          "id": 456,
+          "instance_type": "Explorable",
+          "name": "Churrhir Fields"
         }
       },
       "observed_skills": {}
@@ -368,7 +396,8 @@
       "inferred_primary": "",
       "inferred_secondary": "",
       "model_ids": [
-        155
+        155,
+        4476
       ],
       "observed_maps": {
         "280": {
@@ -376,6 +405,12 @@
           "id": 280,
           "instance_type": "Explorable",
           "name": "Isle of the Nameless"
+        },
+        "456": {
+          "base_id": 456,
+          "id": 456,
+          "instance_type": "Explorable",
+          "name": "Churrhir Fields"
         }
       },
       "observed_skills": {}
@@ -387,7 +422,8 @@
       "inferred_primary": "",
       "inferred_secondary": "",
       "model_ids": [
-        155
+        155,
+        4476
       ],
       "observed_maps": {
         "280": {
@@ -395,6 +431,12 @@
           "id": 280,
           "instance_type": "Explorable",
           "name": "Isle of the Nameless"
+        },
+        "456": {
+          "base_id": 456,
+          "id": 456,
+          "instance_type": "Explorable",
+          "name": "Churrhir Fields"
         }
       },
       "observed_skills": {}
@@ -406,7 +448,8 @@
       "inferred_primary": "",
       "inferred_secondary": "",
       "model_ids": [
-        155
+        155,
+        4476
       ],
       "observed_maps": {
         "280": {
@@ -414,6 +457,12 @@
           "id": 280,
           "instance_type": "Explorable",
           "name": "Isle of the Nameless"
+        },
+        "456": {
+          "base_id": 456,
+          "id": 456,
+          "instance_type": "Explorable",
+          "name": "Churrhir Fields"
         }
       },
       "observed_skills": {}
@@ -12683,6 +12732,12 @@
           "id": 214,
           "instance_type": "Explorable",
           "name": "Minister Chos Estate outpost"
+        },
+        "245": {
+          "base_id": 245,
+          "id": 245,
+          "instance_type": "Explorable",
+          "name": "Minister Chos Estate (explorable area)"
         }
       },
       "observed_skills": {
@@ -19301,6 +19356,12 @@
           "instance_type": "Explorable",
           "name": "Cursed Lands"
         },
+        "560": {
+          "base_id": 560,
+          "id": 560,
+          "instance_type": "Explorable",
+          "name": "Cathedral of Flames (level 1)"
+        },
         "62": {
           "base_id": 62,
           "id": 62,
@@ -19771,6 +19832,12 @@
           "instance_type": "Explorable",
           "name": "Cursed Lands"
         },
+        "560": {
+          "base_id": 560,
+          "id": 560,
+          "instance_type": "Explorable",
+          "name": "Cathedral of Flames (level 1)"
+        },
         "62": {
           "base_id": 62,
           "id": 62,
@@ -20226,6 +20293,25 @@
           "profession_id": 1
         }
       }
+    },
+    "enc:\\\\x4B71\\\\xCDDD\\\\xE5CC\\\\x3DA8": {
+      "encoded_names": [
+        "\\\\x4B71\\\\xCDDD\\\\xE5CC\\\\x3DA8"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        3284
+      ],
+      "observed_maps": {
+        "257": {
+          "base_id": 257,
+          "id": 257,
+          "instance_type": "Explorable",
+          "name": "Unknown Map ID"
+        }
+      },
+      "observed_skills": {}
     },
     "enc:\\\\x4B72\\\\xE2E8\\\\xC85E\\\\x23A1": {
       "encoded_names": [
@@ -23200,6 +23286,12 @@
           "id": 404,
           "instance_type": "Explorable",
           "name": "Wilderness of Bahdza"
+        },
+        "514": {
+          "base_id": 514,
+          "id": 514,
+          "instance_type": "Explorable",
+          "name": "Unknown Map ID"
         }
       },
       "observed_skills": {
@@ -26966,6 +27058,171 @@
         }
       }
     },
+    "enc:\\\\x8101\\\\x1C7D\\\\x8E4A\\\\xA32C\\\\x013A": {
+      "encoded_names": [
+        "\\\\x8101\\\\x1C7D\\\\x8E4A\\\\xA32C\\\\x013A"
+      ],
+      "inferred_primary": "Mesmer",
+      "inferred_secondary": "",
+      "model_ids": [
+        5111
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        },
+        "432": {
+          "base_id": 432,
+          "id": 432,
+          "instance_type": "Explorable",
+          "name": "Cliffs of Dohjok"
+        }
+      },
+      "observed_skills": {
+        "1335": {
+          "id": 1335,
+          "name": "Wastrel's Demise",
+          "profession": "Mesmer",
+          "profession_id": 5
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x1C7E\\\\xE685\\\\xAB77\\\\x070E": {
+      "encoded_names": [
+        "\\\\x8101\\\\x1C7E\\\\xE685\\\\xAB77\\\\x070E"
+      ],
+      "inferred_primary": "Necromancer",
+      "inferred_secondary": "None",
+      "model_ids": [
+        5112
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        },
+        "432": {
+          "base_id": 432,
+          "id": 432,
+          "instance_type": "Explorable",
+          "name": "Cliffs of Dohjok"
+        }
+      },
+      "observed_skills": {
+        "1433": {
+          "id": 1433,
+          "name": "Corsairs_Net",
+          "profession": "None",
+          "profession_id": 0
+        },
+        "840": {
+          "id": 840,
+          "name": "Poisoned Heart",
+          "profession": "Necromancer",
+          "profession_id": 4
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x1C80\\\\xD28E\\\\xCF9C\\\\x6D69": {
+      "encoded_names": [
+        "\\\\x8101\\\\x1C80\\\\xD28E\\\\xCF9C\\\\x6D69"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        5114
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        }
+      },
+      "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x1C83\\\\xC289\\\\x9DED\\\\x1777": {
+      "encoded_names": [
+        "\\\\x8101\\\\x1C83\\\\xC289\\\\x9DED\\\\x1777"
+      ],
+      "inferred_primary": "Dervish",
+      "inferred_secondary": "None",
+      "model_ids": [
+        5117
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        },
+        "432": {
+          "base_id": 432,
+          "id": 432,
+          "instance_type": "Explorable",
+          "name": "Cliffs of Dohjok"
+        }
+      },
+      "observed_skills": {
+        "1433": {
+          "id": 1433,
+          "name": "Corsairs_Net",
+          "profession": "None",
+          "profession_id": 0
+        },
+        "1486": {
+          "id": 1486,
+          "name": "Reap Impurities",
+          "profession": "Dervish",
+          "profession_id": 10
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x1C84\\\\x9767\\\\xF481\\\\x09E4": {
+      "encoded_names": [
+        "\\\\x8101\\\\x1C84\\\\x9767\\\\xF481\\\\x09E4"
+      ],
+      "inferred_primary": "None",
+      "inferred_secondary": "Paragon",
+      "model_ids": [
+        5118
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        },
+        "432": {
+          "base_id": 432,
+          "id": 432,
+          "instance_type": "Explorable",
+          "name": "Cliffs of Dohjok"
+        }
+      },
+      "observed_skills": {
+        "1433": {
+          "id": 1433,
+          "name": "Corsairs_Net",
+          "profession": "None",
+          "profession_id": 0
+        },
+        "1549": {
+          "id": 1549,
+          "name": "Harrier's Toss",
+          "profession": "Paragon",
+          "profession_id": 9
+        }
+      }
+    },
     "enc:\\\\x8101\\\\x1CB8\\\\xC207\\\\xFADF\\\\x6028": {
       "encoded_names": [
         "\\\\x8101\\\\x1CB8\\\\xC207\\\\xFADF\\\\x6028"
@@ -27856,6 +28113,58 @@
         }
       }
     },
+    "enc:\\\\x8101\\\\x2014\\\\xCD2D\\\\xE9B0\\\\x67D6": {
+      "encoded_names": [
+        "\\\\x8101\\\\x2014\\\\xCD2D\\\\xE9B0\\\\x67D6"
+      ],
+      "inferred_primary": "None",
+      "inferred_secondary": "Paragon",
+      "model_ids": [
+        5118
+      ],
+      "observed_maps": {
+        "432": {
+          "base_id": 432,
+          "id": 432,
+          "instance_type": "Explorable",
+          "name": "Cliffs of Dohjok"
+        }
+      },
+      "observed_skills": {
+        "1433": {
+          "id": 1433,
+          "name": "Corsairs_Net",
+          "profession": "None",
+          "profession_id": 0
+        },
+        "1549": {
+          "id": 1549,
+          "name": "Harrier's Toss",
+          "profession": "Paragon",
+          "profession_id": 9
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x201F\\\\xABF4\\\\x97B6\\\\x611E": {
+      "encoded_names": [
+        "\\\\x8101\\\\x201F\\\\xABF4\\\\x97B6\\\\x611E"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        4439,
+        4441
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        }
+      },
+      "observed_skills": {}
+    },
     "enc:\\\\x8101\\\\x204A\\\\xEC57\\\\xE6ED\\\\x10FB": {
       "encoded_names": [
         "\\\\x8101\\\\x204A\\\\xEC57\\\\xE6ED\\\\x10FB"
@@ -27911,6 +28220,126 @@
           "profession_id": 4
         }
       }
+    },
+    "enc:\\\\x8101\\\\x2108\\\\xE960\\\\xC189\\\\x03CD": {
+      "encoded_names": [
+        "\\\\x8101\\\\x2108\\\\xE960\\\\xC189\\\\x03CD"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        4414
+      ],
+      "observed_maps": {
+        "432": {
+          "base_id": 432,
+          "id": 432,
+          "instance_type": "Explorable",
+          "name": "Cliffs of Dohjok"
+        }
+      },
+      "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x210A\\\\xB2B6\\\\xCD9C\\\\x054C": {
+      "encoded_names": [
+        "\\\\x8101\\\\x210A\\\\xB2B6\\\\xCD9C\\\\x054C"
+      ],
+      "inferred_primary": "Paragon",
+      "inferred_secondary": "",
+      "model_ids": [
+        4416
+      ],
+      "observed_maps": {
+        "432": {
+          "base_id": 432,
+          "id": 432,
+          "instance_type": "Explorable",
+          "name": "Cliffs of Dohjok"
+        }
+      },
+      "observed_skills": {
+        "1550": {
+          "id": 1550,
+          "name": "Unblockable Throw",
+          "profession": "Paragon",
+          "profession_id": 9
+        },
+        "1560": {
+          "id": 1560,
+          "name": "Song of Power",
+          "profession": "Paragon",
+          "profession_id": 9
+        },
+        "1561": {
+          "id": 1561,
+          "name": "Zealous Anthem",
+          "profession": "Paragon",
+          "profession_id": 9
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x210F\\\\xD5A1\\\\xB598\\\\x577E": {
+      "encoded_names": [
+        "\\\\x8101\\\\x210F\\\\xD5A1\\\\xB598\\\\x577E"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        4431
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        },
+        "432": {
+          "base_id": 432,
+          "id": 432,
+          "instance_type": "Explorable",
+          "name": "Cliffs of Dohjok"
+        }
+      },
+      "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x2115\\\\x92CF\\\\x03B4": {
+      "encoded_names": [
+        "\\\\x8101\\\\x2115\\\\x92CF\\\\x03B4"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        4442
+      ],
+      "observed_maps": {
+        "432": {
+          "base_id": 432,
+          "id": 432,
+          "instance_type": "Explorable",
+          "name": "Cliffs of Dohjok"
+        }
+      },
+      "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x2116\\\\xA93A\\\\xFC9B\\\\x2407": {
+      "encoded_names": [
+        "\\\\x8101\\\\x2116\\\\xA93A\\\\xFC9B\\\\x2407"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        4443
+      ],
+      "observed_maps": {
+        "432": {
+          "base_id": 432,
+          "id": 432,
+          "instance_type": "Explorable",
+          "name": "Cliffs of Dohjok"
+        }
+      },
+      "observed_skills": {}
     },
     "enc:\\\\x8101\\\\x25C6\\\\xAB44\\\\xD387\\\\x428C": {
       "encoded_names": [
@@ -28254,6 +28683,127 @@
           "profession_id": 4
         }
       }
+    },
+    "enc:\\\\x8101\\\\x32EF\\\\x8707\\\\x9391\\\\x2FD0": {
+      "encoded_names": [
+        "\\\\x8101\\\\x32EF\\\\x8707\\\\x9391\\\\x2FD0"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        5122
+      ],
+      "observed_maps": {
+        "544": {
+          "base_id": 544,
+          "id": 544,
+          "instance_type": "Explorable",
+          "name": "Chahbek Village outpost"
+        }
+      },
+      "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x32F0\\\\xC153\\\\xC6DE\\\\x6052": {
+      "encoded_names": [
+        "\\\\x8101\\\\x32F0\\\\xC153\\\\xC6DE\\\\x6052"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        5122
+      ],
+      "observed_maps": {
+        "544": {
+          "base_id": 544,
+          "id": 544,
+          "instance_type": "Explorable",
+          "name": "Chahbek Village outpost"
+        }
+      },
+      "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x3705\\\\xD5FA\\\\x1B14": {
+      "encoded_names": [
+        "\\\\x8101\\\\x3705\\\\xD5FA\\\\x1B14"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        5149
+      ],
+      "observed_maps": {
+        "456": {
+          "base_id": 456,
+          "id": 456,
+          "instance_type": "Explorable",
+          "name": "Churrhir Fields"
+        }
+      },
+      "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x370A\\\\x8C0D\\\\xEC56\\\\x42C3": {
+      "encoded_names": [
+        "\\\\x8101\\\\x370A\\\\x8C0D\\\\xEC56\\\\x42C3"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        5148
+      ],
+      "observed_maps": {
+        "456": {
+          "base_id": 456,
+          "id": 456,
+          "instance_type": "Explorable",
+          "name": "Churrhir Fields"
+        }
+      },
+      "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x3816\\\\xE1B0\\\\xC851\\\\x0EB7": {
+      "encoded_names": [
+        "\\\\x8101\\\\x3816\\\\xE1B0\\\\xC851\\\\x0EB7"
+      ],
+      "inferred_primary": "Warrior",
+      "inferred_secondary": "",
+      "model_ids": [
+        4749
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        }
+      },
+      "observed_skills": {
+        "1": {
+          "id": 1,
+          "name": "Healing Signet",
+          "profession": "Warrior",
+          "profession_id": 1
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x3819\\\\xB670\\\\x724A": {
+      "encoded_names": [
+        "\\\\x8101\\\\x3819\\\\xB670\\\\x724A"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        5118
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        }
+      },
+      "observed_skills": {}
     },
     "enc:\\\\x8101\\\\x38EC\\\\xD08B\\\\x8C46\\\\x2EB7": {
       "encoded_names": [
@@ -30151,6 +30701,440 @@
       },
       "observed_skills": {}
     },
+    "enc:\\\\x8101\\\\x464A\\\\xD6DA\\\\xD6AD\\\\x2BA0": {
+      "encoded_names": [
+        "\\\\x8101\\\\x464A\\\\xD6DA\\\\xD6AD\\\\x2BA0"
+      ],
+      "inferred_primary": "Monk",
+      "inferred_secondary": "",
+      "model_ids": [
+        4411
+      ],
+      "observed_maps": {
+        "432": {
+          "base_id": 432,
+          "id": 432,
+          "instance_type": "Explorable",
+          "name": "Cliffs of Dohjok"
+        }
+      },
+      "observed_skills": {
+        "281": {
+          "id": 281,
+          "name": "Orison of Healing",
+          "profession": "Monk",
+          "profession_id": 3
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x464B\\\\xB117\\\\xFDC3\\\\x517B": {
+      "encoded_names": [
+        "\\\\x8101\\\\x464B\\\\xB117\\\\xFDC3\\\\x517B"
+      ],
+      "inferred_primary": "Ranger",
+      "inferred_secondary": "",
+      "model_ids": [
+        4412
+      ],
+      "observed_maps": {
+        "432": {
+          "base_id": 432,
+          "id": 432,
+          "instance_type": "Explorable",
+          "name": "Cliffs of Dohjok"
+        }
+      },
+      "observed_skills": {
+        "1720": {
+          "id": 1720,
+          "name": "Keen Arrow",
+          "profession": "Ranger",
+          "profession_id": 2
+        },
+        "432": {
+          "id": 432,
+          "name": "Read the Wind",
+          "profession": "Ranger",
+          "profession_id": 2
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x4651\\\\x98C5\\\\xA7A1\\\\x708D": {
+      "encoded_names": [
+        "\\\\x8101\\\\x4651\\\\x98C5\\\\xA7A1\\\\x708D"
+      ],
+      "inferred_primary": "Monk",
+      "inferred_secondary": "",
+      "model_ids": [
+        4432
+      ],
+      "observed_maps": {
+        "432": {
+          "base_id": 432,
+          "id": 432,
+          "instance_type": "Explorable",
+          "name": "Cliffs of Dohjok"
+        }
+      },
+      "observed_skills": {
+        "281": {
+          "id": 281,
+          "name": "Orison of Healing",
+          "profession": "Monk",
+          "profession_id": 3
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x4652\\\\xBF41\\\\xB074\\\\x4D76": {
+      "encoded_names": [
+        "\\\\x8101\\\\x4652\\\\xBF41\\\\xB074\\\\x4D76"
+      ],
+      "inferred_primary": "Paragon",
+      "inferred_secondary": "",
+      "model_ids": [
+        4434
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        },
+        "432": {
+          "base_id": 432,
+          "id": 432,
+          "instance_type": "Explorable",
+          "name": "Cliffs of Dohjok"
+        }
+      },
+      "observed_skills": {
+        "1601": {
+          "id": 1601,
+          "name": "Vicious Attack",
+          "profession": "Paragon",
+          "profession_id": 9
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x4656\\\\xAF22\\\\xAF35\\\\x72C1": {
+      "encoded_names": [
+        "\\\\x8101\\\\x4656\\\\xAF22\\\\xAF35\\\\x72C1"
+      ],
+      "inferred_primary": "Mesmer",
+      "inferred_secondary": "",
+      "model_ids": [
+        4441
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        }
+      },
+      "observed_skills": {
+        "76": {
+          "id": 76,
+          "name": "Imagined Burden",
+          "profession": "Mesmer",
+          "profession_id": 5
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x4657\\\\xC7D2\\\\x8CEE\\\\x09E2": {
+      "encoded_names": [
+        "\\\\x8101\\\\x4657\\\\xC7D2\\\\x8CEE\\\\x09E2"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        4439
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        }
+      },
+      "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x4658\\\\x9DC1\\\\x7476": {
+      "encoded_names": [
+        "\\\\x8101\\\\x4658\\\\x9DC1\\\\x7476"
+      ],
+      "inferred_primary": "Elementalist",
+      "inferred_secondary": "",
+      "model_ids": [
+        4440
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        },
+        "432": {
+          "base_id": 432,
+          "id": 432,
+          "instance_type": "Explorable",
+          "name": "Cliffs of Dohjok"
+        }
+      },
+      "observed_skills": {
+        "221": {
+          "id": 221,
+          "name": "Conjure Lightning",
+          "profession": "Elementalist",
+          "profession_id": 6
+        },
+        "222": {
+          "id": 222,
+          "name": "Lightning Strike",
+          "profession": "Elementalist",
+          "profession_id": 6
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x4659\\\\xBBE3\\\\xE459\\\\x1183": {
+      "encoded_names": [
+        "\\\\x8101\\\\x4659\\\\xBBE3\\\\xE459\\\\x1183"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        4438
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        }
+      },
+      "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x465C\\\\xC826\\\\x92E9\\\\x3A2B": {
+      "encoded_names": [
+        "\\\\x8101\\\\x465C\\\\xC826\\\\x92E9\\\\x3A2B"
+      ],
+      "inferred_primary": "Necromancer",
+      "inferred_secondary": "",
+      "model_ids": [
+        4419
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        }
+      },
+      "observed_skills": {
+        "155": {
+          "id": 155,
+          "name": "Vile Touch",
+          "profession": "Necromancer",
+          "profession_id": 4
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x465D\\\\xB4AB\\\\xA0AC\\\\x1976": {
+      "encoded_names": [
+        "\\\\x8101\\\\x465D\\\\xB4AB\\\\xA0AC\\\\x1976"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        4422
+      ],
+      "observed_maps": {
+        "432": {
+          "base_id": 432,
+          "id": 432,
+          "instance_type": "Explorable",
+          "name": "Cliffs of Dohjok"
+        }
+      },
+      "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x465E\\\\xC5B5\\\\xE657\\\\x291A": {
+      "encoded_names": [
+        "\\\\x8101\\\\x465E\\\\xC5B5\\\\xE657\\\\x291A"
+      ],
+      "inferred_primary": "Warrior",
+      "inferred_secondary": "",
+      "model_ids": [
+        4420
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        },
+        "432": {
+          "base_id": 432,
+          "id": 432,
+          "instance_type": "Explorable",
+          "name": "Cliffs of Dohjok"
+        }
+      },
+      "observed_skills": {
+        "337": {
+          "id": 337,
+          "name": "Dismember",
+          "profession": "Warrior",
+          "profession_id": 1
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x465F\\\\xC614\\\\xB1C4\\\\x2264": {
+      "encoded_names": [
+        "\\\\x8101\\\\x465F\\\\xC614\\\\xB1C4\\\\x2264"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        4417
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        }
+      },
+      "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x4663\\\\xB1BF\\\\xB8A4\\\\x1BCA": {
+      "encoded_names": [
+        "\\\\x8101\\\\x4663\\\\xB1BF\\\\xB8A4\\\\x1BCA"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        4421
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        },
+        "432": {
+          "base_id": 432,
+          "id": 432,
+          "instance_type": "Explorable",
+          "name": "Cliffs of Dohjok"
+        }
+      },
+      "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x4664\\\\xE23C\\\\x2CA3": {
+      "encoded_names": [
+        "\\\\x8101\\\\x4664\\\\xE23C\\\\x2CA3"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        4418
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        }
+      },
+      "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x4665\\\\x9E79\\\\xADAB\\\\x0128": {
+      "encoded_names": [
+        "\\\\x8101\\\\x4665\\\\x9E79\\\\xADAB\\\\x0128"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        4473
+      ],
+      "observed_maps": {
+        "456": {
+          "base_id": 456,
+          "id": 456,
+          "instance_type": "Explorable",
+          "name": "Churrhir Fields"
+        }
+      },
+      "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x4666\\\\x883A\\\\xFD69\\\\x1A36": {
+      "encoded_names": [
+        "\\\\x8101\\\\x4666\\\\x883A\\\\xFD69\\\\x1A36"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        4474
+      ],
+      "observed_maps": {
+        "456": {
+          "base_id": 456,
+          "id": 456,
+          "instance_type": "Explorable",
+          "name": "Churrhir Fields"
+        }
+      },
+      "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x4667\\\\x8894\\\\xF1DF\\\\x1DB7": {
+      "encoded_names": [
+        "\\\\x8101\\\\x4667\\\\x8894\\\\xF1DF\\\\x1DB7"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        4475
+      ],
+      "observed_maps": {
+        "456": {
+          "base_id": 456,
+          "id": 456,
+          "instance_type": "Explorable",
+          "name": "Churrhir Fields"
+        }
+      },
+      "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x4668\\\\x9A0F\\\\x58D9": {
+      "encoded_names": [
+        "\\\\x8101\\\\x4668\\\\x9A0F\\\\x58D9"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        4476
+      ],
+      "observed_maps": {
+        "456": {
+          "base_id": 456,
+          "id": 456,
+          "instance_type": "Explorable",
+          "name": "Churrhir Fields"
+        }
+      },
+      "observed_skills": {}
+    },
     "enc:\\\\x8101\\\\x46AA\\\\x4140": {
       "encoded_names": [
         "\\\\x8101\\\\x46AA\\\\x4140"
@@ -30238,6 +31222,126 @@
           "profession_id": 1
         }
       }
+    },
+    "enc:\\\\x8101\\\\x46CC\\\\xFF84\\\\xE7D6\\\\x4273": {
+      "encoded_names": [
+        "\\\\x8101\\\\x46CC\\\\xFF84\\\\xE7D6\\\\x4273"
+      ],
+      "inferred_primary": "Paragon",
+      "inferred_secondary": "",
+      "model_ids": [
+        5074
+      ],
+      "observed_maps": {
+        "544": {
+          "base_id": 544,
+          "id": 544,
+          "instance_type": "Explorable",
+          "name": "Chahbek Village outpost"
+        }
+      },
+      "observed_skills": {
+        "1549": {
+          "id": 1549,
+          "name": "Harrier's Toss",
+          "profession": "Paragon",
+          "profession_id": 9
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x46D0\\\\xEC0A\\\\x942A\\\\x041A": {
+      "encoded_names": [
+        "\\\\x8101\\\\x46D0\\\\xEC0A\\\\x942A\\\\x041A"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        5119
+      ],
+      "observed_maps": {
+        "544": {
+          "base_id": 544,
+          "id": 544,
+          "instance_type": "Explorable",
+          "name": "Chahbek Village outpost"
+        }
+      },
+      "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x46D3\\\\xC879\\\\xBD02\\\\x7FCA": {
+      "encoded_names": [
+        "\\\\x8101\\\\x46D3\\\\xC879\\\\xBD02\\\\x7FCA"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        5120
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        },
+        "544": {
+          "base_id": 544,
+          "id": 544,
+          "instance_type": "Explorable",
+          "name": "Chahbek Village outpost"
+        }
+      },
+      "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x46D5\\\\xFD6E\\\\x90AC\\\\x034E": {
+      "encoded_names": [
+        "\\\\x8101\\\\x46D5\\\\xFD6E\\\\x90AC\\\\x034E"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        5121
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        },
+        "544": {
+          "base_id": 544,
+          "id": 544,
+          "instance_type": "Outpost",
+          "name": "Chahbek Village outpost"
+        }
+      },
+      "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x46D8\\\\xD6CB\\\\xF813\\\\x43DB": {
+      "encoded_names": [
+        "\\\\x8101\\\\x46D8\\\\xD6CB\\\\xF813\\\\x43DB"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        5122
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        },
+        "544": {
+          "base_id": 544,
+          "id": 544,
+          "instance_type": "Explorable",
+          "name": "Chahbek Village outpost"
+        }
+      },
+      "observed_skills": {}
     },
     "enc:\\\\x8101\\\\x46EA\\\\xE602\\\\xC496\\\\x117A": {
       "encoded_names": [
@@ -30485,6 +31589,12 @@
         5771
       ],
       "observed_maps": {
+        "560": {
+          "base_id": 560,
+          "id": 560,
+          "instance_type": "Explorable",
+          "name": "Cathedral of Flames (level 1)"
+        },
         "649": {
           "base_id": 649,
           "id": 649,
@@ -30563,6 +31673,186 @@
           "profession_id": 8
         }
       }
+    },
+    "enc:\\\\x8101\\\\x47A2\\\\xA4A9\\\\xC09E\\\\x3F8F": {
+      "encoded_names": [
+        "\\\\x8101\\\\x47A2\\\\xA4A9\\\\xC09E\\\\x3F8F"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        4384
+      ],
+      "observed_maps": {
+        "432": {
+          "base_id": 432,
+          "id": 432,
+          "instance_type": "Explorable",
+          "name": "Cliffs of Dohjok"
+        }
+      },
+      "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x47A5\\\\xEFAC\\\\xD721\\\\x4E03": {
+      "encoded_names": [
+        "\\\\x8101\\\\x47A5\\\\xEFAC\\\\xD721\\\\x4E03"
+      ],
+      "inferred_primary": "Warrior",
+      "inferred_secondary": "",
+      "model_ids": [
+        4433
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        }
+      },
+      "observed_skills": {
+        "322": {
+          "id": 322,
+          "name": "Power Attack",
+          "profession": "Warrior",
+          "profession_id": 1
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x47A7\\\\x8457\\\\xEEC0\\\\x5E50": {
+      "encoded_names": [
+        "\\\\x8101\\\\x47A7\\\\x8457\\\\xEEC0\\\\x5E50"
+      ],
+      "inferred_primary": "Elementalist",
+      "inferred_secondary": "",
+      "model_ids": [
+        4389
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        }
+      },
+      "observed_skills": {
+        "1369": {
+          "id": 1369,
+          "name": "Lightning Bolt",
+          "profession": "Elementalist",
+          "profession_id": 6
+        },
+        "222": {
+          "id": 222,
+          "name": "Lightning Strike",
+          "profession": "Elementalist",
+          "profession_id": 6
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x491C\\\\xE2ED\\\\xCD02\\\\x2998": {
+      "encoded_names": [
+        "\\\\x8101\\\\x491C\\\\xE2ED\\\\xCD02\\\\x2998"
+      ],
+      "inferred_primary": "Warrior",
+      "inferred_secondary": "",
+      "model_ids": [
+        4409
+      ],
+      "observed_maps": {
+        "432": {
+          "base_id": 432,
+          "id": 432,
+          "instance_type": "Explorable",
+          "name": "Cliffs of Dohjok"
+        }
+      },
+      "observed_skills": {
+        "320": {
+          "id": 320,
+          "name": "Hamstring",
+          "profession": "Warrior",
+          "profession_id": 1
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x491D\\\\xD344\\\\xCE87\\\\x16B5": {
+      "encoded_names": [
+        "\\\\x8101\\\\x491D\\\\xD344\\\\xCE87\\\\x16B5"
+      ],
+      "inferred_primary": "Paragon",
+      "inferred_secondary": "",
+      "model_ids": [
+        4410
+      ],
+      "observed_maps": {
+        "432": {
+          "base_id": 432,
+          "id": 432,
+          "instance_type": "Explorable",
+          "name": "Cliffs of Dohjok"
+        }
+      },
+      "observed_skills": {
+        "1550": {
+          "id": 1550,
+          "name": "Unblockable Throw",
+          "profession": "Paragon",
+          "profession_id": 9
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x49B9\\\\xC647\\\\x381A": {
+      "encoded_names": [
+        "\\\\x8101\\\\x49B9\\\\xC647\\\\x381A"
+      ],
+      "inferred_primary": "Warrior",
+      "inferred_secondary": "",
+      "model_ids": [
+        4407
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        }
+      },
+      "observed_skills": {
+        "324": {
+          "id": 324,
+          "name": "Thrill of Victory",
+          "profession": "Warrior",
+          "profession_id": 1
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x49EB\\\\xA26F\\\\x9E48\\\\x5FB3": {
+      "encoded_names": [
+        "\\\\x8101\\\\x49EB\\\\xA26F\\\\x9E48\\\\x5FB3"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        4397
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        },
+        "432": {
+          "base_id": 432,
+          "id": 432,
+          "instance_type": "Explorable",
+          "name": "Cliffs of Dohjok"
+        }
+      },
+      "observed_skills": {}
     },
     "enc:\\\\x8101\\\\x4A03\\\\xD537\\\\x9E2A\\\\x6374": {
       "encoded_names": [
@@ -32628,6 +33918,77 @@
         }
       },
       "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x523C\\\\xD541\\\\xFFBF\\\\x3B6A": {
+      "encoded_names": [
+        "\\\\x8101\\\\x523C\\\\xD541\\\\xFFBF\\\\x3B6A"
+      ],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        4381
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        }
+      },
+      "observed_skills": {}
+    },
+    "enc:\\\\x8101\\\\x523F\\\\xEB9F\\\\xADF3\\\\x32FD": {
+      "encoded_names": [
+        "\\\\x8101\\\\x523F\\\\xEB9F\\\\xADF3\\\\x32FD"
+      ],
+      "inferred_primary": "Necromancer",
+      "inferred_secondary": "",
+      "model_ids": [
+        4446
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        }
+      },
+      "observed_skills": {
+        "902": {
+          "id": 902,
+          "name": "Blood of the Aggressor",
+          "profession": "Necromancer",
+          "profession_id": 4
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x5244\\\\xEC01\\\\xE989\\\\x08B5": {
+      "encoded_names": [
+        "\\\\x8101\\\\x5244\\\\xEC01\\\\xE989\\\\x08B5"
+      ],
+      "inferred_primary": "Warrior",
+      "inferred_secondary": "",
+      "model_ids": [
+        4447
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
+        }
+      },
+      "observed_skills": {
+        "321": {
+          "id": 321,
+          "name": "Wild Blow",
+          "profession": "Warrior",
+          "profession_id": 1
+        }
+      }
     },
     "enc:\\\\x8101\\\\x5249\\\\xCA76\\\\x8354\\\\x71D5": {
       "encoded_names": [
@@ -37430,6 +38791,56 @@
         }
       }
     },
+    "enc:\\\\x8101\\\\x7836\\\\x913B\\\\x9A4F\\\\x47D7": {
+      "encoded_names": [
+        "\\\\x8101\\\\x7836\\\\x913B\\\\x9A4F\\\\x47D7"
+      ],
+      "inferred_primary": "Dervish",
+      "inferred_secondary": "",
+      "model_ids": [
+        7077
+      ],
+      "observed_maps": {
+        "560": {
+          "base_id": 560,
+          "id": 560,
+          "instance_type": "Explorable",
+          "name": "Cathedral of Flames (level 1)"
+        }
+      },
+      "observed_skills": {
+        "1483": {
+          "id": 1483,
+          "name": "Banishing Strike",
+          "profession": "Dervish",
+          "profession_id": 10
+        },
+        "1486": {
+          "id": 1486,
+          "name": "Reap Impurities",
+          "profession": "Dervish",
+          "profession_id": 10
+        },
+        "1493": {
+          "id": 1493,
+          "name": "Grenth's Fingers",
+          "profession": "Dervish",
+          "profession_id": 10
+        },
+        "1755": {
+          "id": 1755,
+          "name": "Mystic Corruption",
+          "profession": "Dervish",
+          "profession_id": 10
+        },
+        "1756": {
+          "id": 1756,
+          "name": "Grenth's Grasp",
+          "profession": "Dervish",
+          "profession_id": 10
+        }
+      }
+    },
     "enc:\\\\x8101\\\\x790C\\\\xE4FD\\\\xB49B\\\\x03C1": {
       "encoded_names": [
         "\\\\x8101\\\\x790C\\\\xE4FD\\\\xB49B\\\\x03C1"
@@ -37542,6 +38953,162 @@
         }
       }
     },
+    "enc:\\\\x8101\\\\x79D0\\\\xADD9\\\\xEA08\\\\x5C21": {
+      "encoded_names": [
+        "\\\\x8101\\\\x79D0\\\\xADD9\\\\xEA08\\\\x5C21"
+      ],
+      "inferred_primary": "Warrior",
+      "inferred_secondary": "",
+      "model_ids": [
+        7075
+      ],
+      "observed_maps": {
+        "560": {
+          "base_id": 560,
+          "id": 560,
+          "instance_type": "Explorable",
+          "name": "Cathedral of Flames (level 1)"
+        }
+      },
+      "observed_skills": {
+        "1406": {
+          "id": 1406,
+          "name": "Headbutt",
+          "profession": "Warrior",
+          "profession_id": 1
+        },
+        "320": {
+          "id": 320,
+          "name": "Hamstring",
+          "profession": "Warrior",
+          "profession_id": 1
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x79D1\\\\x94E7\\\\xCE8C\\\\x022C": {
+      "encoded_names": [
+        "\\\\x8101\\\\x79D1\\\\x94E7\\\\xCE8C\\\\x022C"
+      ],
+      "inferred_primary": "Mesmer",
+      "inferred_secondary": "",
+      "model_ids": [
+        7079
+      ],
+      "observed_maps": {
+        "560": {
+          "base_id": 560,
+          "id": 560,
+          "instance_type": "Explorable",
+          "name": "Cathedral of Flames (level 1)"
+        }
+      },
+      "observed_skills": {
+        "23": {
+          "id": 23,
+          "name": "Power Spike",
+          "profession": "Mesmer",
+          "profession_id": 5
+        },
+        "24": {
+          "id": 24,
+          "name": "Power Leak",
+          "profession": "Mesmer",
+          "profession_id": 5
+        },
+        "25": {
+          "id": 25,
+          "name": "Power Drain",
+          "profession": "Mesmer",
+          "profession_id": 5
+        },
+        "49": {
+          "id": 49,
+          "name": "Mind Wrack",
+          "profession": "Mesmer",
+          "profession_id": 5
+        },
+        "50": {
+          "id": 50,
+          "name": "Wastrel's Worry",
+          "profession": "Mesmer",
+          "profession_id": 5
+        },
+        "57": {
+          "id": 57,
+          "name": "Cry of Frustration",
+          "profession": "Mesmer",
+          "profession_id": 5
+        },
+        "953": {
+          "id": 953,
+          "name": "Power Flux",
+          "profession": "Mesmer",
+          "profession_id": 5
+        }
+      }
+    },
+    "enc:\\\\x8101\\\\x79D2\\\\x9243\\\\xFDAB\\\\x76C1": {
+      "encoded_names": [
+        "\\\\x8101\\\\x79D2\\\\x9243\\\\xFDAB\\\\x76C1"
+      ],
+      "inferred_primary": "Elementalist",
+      "inferred_secondary": "",
+      "model_ids": [
+        7083
+      ],
+      "observed_maps": {
+        "560": {
+          "base_id": 560,
+          "id": 560,
+          "instance_type": "Explorable",
+          "name": "Cathedral of Flames (level 1)"
+        }
+      },
+      "observed_skills": {
+        "1369": {
+          "id": 1369,
+          "name": "Lightning Bolt",
+          "profession": "Elementalist",
+          "profession_id": 6
+        },
+        "1664": {
+          "id": 1664,
+          "name": "Invoke Lightning",
+          "profession": "Elementalist",
+          "profession_id": 6
+        },
+        "2059": {
+          "id": 2059,
+          "name": "Shell Shock",
+          "profession": "Elementalist",
+          "profession_id": 6
+        },
+        "220": {
+          "id": 220,
+          "name": "Blinding Flash",
+          "profession": "Elementalist",
+          "profession_id": 6
+        },
+        "223": {
+          "id": 223,
+          "name": "Chain Lightning",
+          "profession": "Elementalist",
+          "profession_id": 6
+        },
+        "224": {
+          "id": 224,
+          "name": "Enervating Charge",
+          "profession": "Elementalist",
+          "profession_id": 6
+        },
+        "225": {
+          "id": 225,
+          "name": "Air Attunement",
+          "profession": "Elementalist",
+          "profession_id": 6
+        }
+      }
+    },
     "enc:\\\\x8101\\\\x7F4D\\\\xFC50\\\\xD378\\\\x2E42": {
       "encoded_names": [
         "\\\\x8101\\\\x7F4D\\\\xFC50\\\\xD378\\\\x2E42"
@@ -37602,12 +39169,18 @@
       "encoded_names": [
         "\\\\x8102\\\\x0472\\\\xD05D\\\\xC665\\\\x12C5"
       ],
-      "inferred_primary": "",
+      "inferred_primary": "Mesmer",
       "inferred_secondary": "",
       "model_ids": [
         6668
       ],
       "observed_maps": {
+        "560": {
+          "base_id": 560,
+          "id": 560,
+          "instance_type": "Explorable",
+          "name": "Cathedral of Flames (level 1)"
+        },
         "651": {
           "base_id": 651,
           "id": 651,
@@ -37615,7 +39188,52 @@
           "name": "Sacnoth Valley"
         }
       },
-      "observed_skills": {}
+      "observed_skills": {
+        "67": {
+          "id": 67,
+          "name": "Shatter Hex",
+          "profession": "Mesmer",
+          "profession_id": 5
+        },
+        "69": {
+          "id": 69,
+          "name": "Shatter Enchantment",
+          "profession": "Mesmer",
+          "profession_id": 5
+        }
+      }
+    },
+    "enc:\\\\x8102\\\\x0473\\\\xF5D6\\\\xBD0F\\\\x17AB": {
+      "encoded_names": [
+        "\\\\x8102\\\\x0473\\\\xF5D6\\\\xBD0F\\\\x17AB"
+      ],
+      "inferred_primary": "Necromancer",
+      "inferred_secondary": "Ritualist",
+      "model_ids": [
+        6671
+      ],
+      "observed_maps": {
+        "560": {
+          "base_id": 560,
+          "id": 560,
+          "instance_type": "Explorable",
+          "name": "Cathedral of Flames (level 1)"
+        }
+      },
+      "observed_skills": {
+        "1745": {
+          "id": 1745,
+          "name": "Anguish",
+          "profession": "Ritualist",
+          "profession_id": 8
+        },
+        "808": {
+          "id": 808,
+          "name": "Reaper's Mark",
+          "profession": "Necromancer",
+          "profession_id": 4
+        }
+      }
     },
     "enc:\\\\x8102\\\\x0474\\\\xFAE3\\\\x0DFB": {
       "encoded_names": [
@@ -37627,6 +39245,12 @@
         6674
       ],
       "observed_maps": {
+        "560": {
+          "base_id": 560,
+          "id": 560,
+          "instance_type": "Explorable",
+          "name": "Cathedral of Flames (level 1)"
+        },
         "651": {
           "base_id": 651,
           "id": 651,
@@ -37734,12 +39358,18 @@
       "encoded_names": [
         "\\\\x8102\\\\x0477\\\\xE99F\\\\xE88C\\\\x50A7"
       ],
-      "inferred_primary": "None",
-      "inferred_secondary": "Warrior",
+      "inferred_primary": "Warrior",
+      "inferred_secondary": "None",
       "model_ids": [
         6681
       ],
       "observed_maps": {
+        "560": {
+          "base_id": 560,
+          "id": 560,
+          "instance_type": "Explorable",
+          "name": "Cathedral of Flames (level 1)"
+        },
         "649": {
           "base_id": 649,
           "id": 649,
@@ -37772,6 +39402,12 @@
           "profession": "None",
           "profession_id": 0
         },
+        "332": {
+          "id": 332,
+          "name": "Bull's Strike",
+          "profession": "Warrior",
+          "profession_id": 1
+        },
         "336": {
           "id": 336,
           "name": "Executioner's Strike",
@@ -37796,6 +39432,12 @@
         6682
       ],
       "observed_maps": {
+        "560": {
+          "base_id": 560,
+          "id": 560,
+          "instance_type": "Explorable",
+          "name": "Cathedral of Flames (level 1)"
+        },
         "649": {
           "base_id": 649,
           "id": 649,
@@ -39713,6 +41355,50 @@
           "name": "Irresistible Blow",
           "profession": "Warrior",
           "profession_id": 1
+        }
+      }
+    },
+    "enc:\\\\x8102\\\\x23C0\\\\xB7A2\\\\xA57C\\\\x3427": {
+      "encoded_names": [
+        "\\\\x8102\\\\x23C0\\\\xB7A2\\\\xA57C\\\\x3427"
+      ],
+      "inferred_primary": "Mesmer",
+      "inferred_secondary": "",
+      "model_ids": [
+        7069
+      ],
+      "observed_maps": {
+        "560": {
+          "base_id": 560,
+          "id": 560,
+          "instance_type": "Explorable",
+          "name": "Cathedral of Flames (level 1)"
+        }
+      },
+      "observed_skills": {
+        "19": {
+          "id": 19,
+          "name": "Fragility",
+          "profession": "Mesmer",
+          "profession_id": 5
+        },
+        "31": {
+          "id": 31,
+          "name": "Conjure Phantasm",
+          "profession": "Mesmer",
+          "profession_id": 5
+        },
+        "78": {
+          "id": 78,
+          "name": "Epidemic",
+          "profession": "Mesmer",
+          "profession_id": 5
+        },
+        "899": {
+          "id": 899,
+          "name": "Images of Remorse",
+          "profession": "Mesmer",
+          "profession_id": 5
         }
       }
     },
@@ -43820,6 +45506,40 @@
       },
       "observed_skills": {}
     },
+    "model:3825": {
+      "encoded_names": [],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        3825
+      ],
+      "observed_maps": {
+        "214": {
+          "base_id": 214,
+          "id": 214,
+          "instance_type": "Explorable",
+          "name": "Minister Chos Estate outpost"
+        }
+      },
+      "observed_skills": {}
+    },
+    "model:3965": {
+      "encoded_names": [],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        3965
+      ],
+      "observed_maps": {
+        "238": {
+          "base_id": 238,
+          "id": 238,
+          "instance_type": "Explorable",
+          "name": "Sunqua Vale"
+        }
+      },
+      "observed_skills": {}
+    },
     "model:4058": {
       "encoded_names": [],
       "inferred_primary": "",
@@ -43983,6 +45703,23 @@
       },
       "observed_skills": {}
     },
+    "model:4261": {
+      "encoded_names": [],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        4261
+      ],
+      "observed_maps": {
+        "214": {
+          "base_id": 214,
+          "id": 214,
+          "instance_type": "Explorable",
+          "name": "Minister Chos Estate outpost"
+        }
+      },
+      "observed_skills": {}
+    },
     "model:4266": {
       "encoded_names": [],
       "inferred_primary": "",
@@ -43996,6 +45733,40 @@
           "id": 198,
           "instance_type": "Explorable",
           "name": "Archipelagos"
+        }
+      },
+      "observed_skills": {}
+    },
+    "model:4278": {
+      "encoded_names": [],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        4278
+      ],
+      "observed_maps": {
+        "560": {
+          "base_id": 560,
+          "id": 560,
+          "instance_type": "Explorable",
+          "name": "Cathedral of Flames (level 1)"
+        }
+      },
+      "observed_skills": {}
+    },
+    "model:5122": {
+      "encoded_names": [],
+      "inferred_primary": "",
+      "inferred_secondary": "",
+      "model_ids": [
+        5122
+      ],
+      "observed_maps": {
+        "430": {
+          "base_id": 430,
+          "id": 430,
+          "instance_type": "Explorable",
+          "name": "Plains of Jarin"
         }
       },
       "observed_skills": {}
