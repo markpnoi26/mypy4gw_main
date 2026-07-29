@@ -32,7 +32,14 @@ PY = str(REPO / ".venv" / "Scripts" / "python.exe")
 
 
 def git(*args: str, check: bool = True) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", "-C", str(REPO), *args], capture_output=True, text=True, check=check)
+    # Explicit utf-8 — see variants.git() for what bare text=True costs.
+    return subprocess.run(
+        ["git", "-C", str(REPO), *args],
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+        check=check,
+    )
 
 
 def out(*args: str) -> str:
@@ -45,7 +52,21 @@ def run(cmd: list[str], env_extra: dict | None = None) -> subprocess.CompletedPr
     env = dict(os.environ)
     if env_extra:
         env.update(env_extra)
-    return subprocess.run(cmd, cwd=REPO, capture_output=True, text=True, env=env)
+    return subprocess.run(cmd, cwd=REPO, capture_output=True, encoding="utf-8", errors="replace", env=env)
+
+
+def why(result: subprocess.CompletedProcess) -> str:
+    """git's own account of a failure, rather than our guess about it.
+
+    CONFLICT lines go to stdout and name the file; the stderr summary only names
+    the commit, so it is the weaker answer even though it arrives first.
+    """
+    text = ((result.stderr or "") + "\n" + (result.stdout or "")).strip().splitlines()
+    for prefixes in (("CONFLICT",), ("fatal:", "error:")):
+        for line in text:
+            if line.startswith(prefixes):
+                return line.strip()
+    return text[-1].strip() if text else "failed"
 
 
 class Report:
@@ -110,7 +131,8 @@ def write_status(report: Report, facts: dict) -> None:
             "",
         ]
         for rec in report.conflicts:
-            lines.append("- `%s` — both changed: %s" % (rec["path"], ", ".join(rec["changed"]) or "(no named defs)"))
+            detail = rec["note"] or ("both changed: %s" % (", ".join(rec["changed"]) or "(no named defs)"))
+            lines.append("- `%s` — %s" % (rec["path"], detail))
         lines.append("")
 
     if facts.get("divergence"):
@@ -180,11 +202,16 @@ def main() -> int:
     )
     report.add("fast-forward %s" % pristine, "ok", "%s → %s" % (vendor_before, vendor_after))
 
+    # base's history still *creates* STATUS.md as a tracked file, so the copy the
+    # last run left lying around blocks its own replay with "untracked working
+    # tree files would be overwritten". Every sync after the first one.
+    STATUS.unlink(missing_ok=True)
+
     git("checkout", "base")
     rb = git("rebase", pristine, check=False)
     if rb.returncode != 0:
         git("rebase", "--abort", check=False)
-        report.stop("rebase base", "toolchain conflicts with upstream — resolve by hand")
+        report.stop("rebase base", why(rb))
         git("checkout", start_branch)
         write_status(report, facts)
         return 1
@@ -215,9 +242,17 @@ def main() -> int:
     git("checkout", "-B", "staging", "main")
     rb = git("rebase", "--onto", "layout", old_layout, "staging", check=False)
     if rb.returncode != 0:
-        records = [r for r in (variants_mod.preserve(p) for p in variants_mod.conflicted_paths()) if r]
+        # Count conflicts, not preserved records — a rebase that fails without
+        # conflicting at all used to report "0 conflicted file(s)" and read like
+        # a spurious failure.
+        paths = variants_mod.conflicted_paths()
+        records = [r for r in (variants_mod.preserve(p) for p in paths) if r]
         report.conflicts = records
-        report.stop("stage your work", "%d conflicted file(s) — upstream variants preserved" % len(records))
+        if paths:
+            kept = len([r for r in records if r["variant"]])
+            report.stop("stage your work", "%d conflicted file(s), %d upstream variants kept" % (len(paths), kept))
+        else:
+            report.stop("stage your work", why(rb))
         print(variants_mod.describe(records))
         write_status(report, facts)
         return 1
