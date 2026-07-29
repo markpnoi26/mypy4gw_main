@@ -988,7 +988,10 @@ class WidgetHandler:
             cv = self._get_config_var(widget.folder_script_name, self._widget_var(widget.folder_script_name, "enabled"))
 
             _mgr_cfg = self._manager_cfg()
-            enabled = bool(_mgr_cfg.get_bool(cv.section, "enabled", False)) if cv else False
+            section = cv.section if cv else f"Widget:{widget_id}"
+            if not _mgr_cfg.has(section, "enabled"):
+                self.adopt_legacy_enabled(_mgr_cfg, section, widget)
+            enabled = bool(_mgr_cfg.get_bool(section, "enabled", False))
             if enabled:
                 widget.enable()
 
@@ -997,6 +1000,26 @@ class WidgetHandler:
 
         except Exception as e:
             self._log_error(f"Failed to discover {widget_id}: {e}")
+
+    def adopt_legacy_enabled(self, cfg, section: str, widget: "Widget") -> bool:
+        """Carry a widget's saved enabled-state across a manifest move.
+
+        A widget's INI section key is its path, so moving one orphans the user's
+        setting and silently resets it. MODULE_ALIASES holds the pre-move id,
+        injected by tools/reforge/apply.py from layout.toml's legacy_id map.
+        Adopted once, then the stale section is dropped so this cannot re-run.
+        """
+        for alias in widget.aliases:
+            legacy_section = f"Widget:{alias}"
+            if not cfg.has(legacy_section, "enabled"):
+                continue
+            value = cfg.get_bool(legacy_section, "enabled", False)
+            cfg.set_bool(section, "enabled", value)
+            cfg.delete_section(legacy_section)
+            cfg.save()
+            self._log_success(f"Migrated widget setting {alias} -> {widget.folder_script_name}")
+            return value
+        return False
 
     def _apply_ini_configuration(self):
         """Apply saved enabled states and enforce System widget activation"""

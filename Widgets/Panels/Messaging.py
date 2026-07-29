@@ -26,8 +26,6 @@ from Core.GlobalCache.WhiteboardLocks import post_loot_lock, clear_loot_lock
 from Core.Py4GWcorelib import Keystroke
 from Core.Quest import Quest
 from Core.enums_src.Model_enums import ModelID
-from Widgets.Automation.Helpers import Pycons as PyconsHelper
-from Widgets.Automation.Helpers.Pycons import pycons_should_consume_broadcast_item
 from Core.py4gwcorelib_src.WidgetManager import get_widget_handler
 from Core.GlobalCache.shared_memory_src.SharedMessageStruct import SharedMessageStruct
 from Core.GlobalCache.shared_memory_src.Globals import SHMEM_MAX_NUMBER_OF_SKILLS
@@ -36,7 +34,6 @@ from Core.Item import has_active_party_summon, has_summoning_sickness
 cached_data = CacheData()
 
 
-MODULE_ALIASES = ['System/Messaging.py']
 MODULE_NAME = "Messaging"
 MODULE_ICON = "Textures/Module_Icons/Messaging.png"
 OPTIONAL = False
@@ -615,6 +612,19 @@ def _draw_message_history() -> None:
         PyImGui.end_table()
 
     PyImGui.text(f"Runtime history: {len(_message_history)} / {_MESSAGE_HISTORY_LIMIT} entries.")
+
+
+def pycons_allows_broadcast_item(model_id: int) -> bool:
+    """Consume policy is Pycons' to own, and Pycons is no longer a widget here.
+
+    Resolved dynamically so this module carries no import of it: with no Pycons
+    loaded there is no opt-in policy to consult, so the broadcast is allowed.
+    """
+    module = _get_pycons_widget_module()
+    policy = getattr(module, "pycons_should_consume_broadcast_item", None) if module is not None else None
+    if not callable(policy):
+        return True
+    return bool(policy(model_id))
 
 
 # region ImGui
@@ -2683,7 +2693,7 @@ def UseItem(index: int, message: SharedMessageStruct):
 
     # Consume policy (team opt-in + per-item selected/enabled) is owned by Pycons;
     # the router does no config/file I/O.
-    if not pycons_should_consume_broadcast_item(model_id):
+    if not pycons_allows_broadcast_item(model_id):
         ConsoleLog(MODULE_NAME, "UseItem: blocked by Pycons consume policy.", Console.MessageType.Info, False)
         GLOBAL_CACHE.ShMem.MarkMessageAsFinished(message.ReceiverEmail, index)
         return
@@ -2912,7 +2922,7 @@ def Pycons(index: int, message: SharedMessageStruct):
             handler(message)
             return
 
-        fallback = getattr(PyconsHelper, "pycons_reply_reload_unavailable_for_message", None)
+        fallback = getattr(module, "pycons_reply_reload_unavailable_for_message", None) if module is not None else None
         if callable(fallback):
             fallback(message)
     except Exception as exc:
