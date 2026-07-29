@@ -78,6 +78,10 @@ class SharedCommandType(IntEnum):
     ConsoleMessage = auto()
     SetHeadlessLooting = auto()
     SetResurrectionScroll = auto()
+    # Only a follower's own client knows which build it matched, so the
+    # build-declared fight line is reported to the leader rather than published.
+    # Append only: auto() renumbers everything below an insertion.
+    ReportCombatLine = auto()
     # endregion
 
 

@@ -23,6 +23,7 @@ from HeroAI.follow.follower_runtime import (
     get_follow_destination_distance,
     is_follow_recovery_active,
 )
+from HeroAI.fight.report import CombatLineReporter
 from HeroAI import enemy_party
 from HeroAI import resurrection_scroll
 
@@ -166,11 +167,42 @@ def EnsureFollowModuleIni() -> None:
         )
 
 
-def Follow(cached_data: CacheData) -> BehaviorTree.NodeState:
-    if not cached_data.data.is_leader:
-        return execute_follower_follow(cached_data, follow_execution_state)
+combat_line_reporter = CombatLineReporter()
 
-    return BehaviorTree.NodeState.FAILURE  # leader doesn't follow anyone
+
+def holding_station(cached_data: CacheData) -> bool:
+    """True when the leader has published a party flag — a fight zone or a
+    hand-placed one. Following and holding station are different jobs even
+    though they share a mover, so they get different BT nodes."""
+    options = GLOBAL_CACHE.ShMem.GetHeroAIOptionsByPartyNumber(0)
+    if options is None or not bool(getattr(options, "IsFlagged", False)):
+        return False
+    return abs(float(options.AllFlag.x)) > 0.001 or abs(float(options.AllFlag.y)) > 0.001
+
+
+def fight_zone(cached_data: CacheData) -> BehaviorTree.NodeState:
+    if cached_data.data.is_leader:
+        return BehaviorTree.NodeState.FAILURE
+    try:
+        combat_line_reporter.tick(
+            heroai_build.GetBuildContract(),
+            heroai_build.GetBuildContractName() if hasattr(heroai_build, "GetBuildContractName") else "",
+        )
+    except Exception:
+        pass
+    if not holding_station(cached_data):
+        return BehaviorTree.NodeState.FAILURE
+    # Same mover, different intent: it walks to the published fight slot rather
+    # than to a slot behind the leader.
+    return execute_follower_follow(cached_data, follow_execution_state)
+
+
+def Follow(cached_data: CacheData) -> BehaviorTree.NodeState:
+    if cached_data.data.is_leader:
+        return BehaviorTree.NodeState.FAILURE  # leader doesn't follow anyone
+    if holding_station(cached_data):
+        return BehaviorTree.NodeState.FAILURE  # FightZone owns movement while engaged
+    return execute_follower_follow(cached_data, follow_execution_state)
 
 
 def handle_UI(cached_data: CacheData):
@@ -375,7 +407,14 @@ HeroAI_BT = BehaviorTree.SequenceNode(
                     name="UserInterrupt",
                     action_fn=lambda: user_interrupt(),
                 ),
-                # Follow
+                # Holding station in a fight. Mutually exclusive with Follow:
+                # whichever one owns movement, the other returns FAILURE, so the
+                # debug window shows which job is actually running.
+                BehaviorTree.ActionNode(
+                    name="FightZone",
+                    action_fn=lambda: fight_zone(cached_data),
+                ),
+                # Travelling behind the leader
                 BehaviorTree.ActionNode(
                     name="Follow",
                     action_fn=lambda: Follow(cached_data),

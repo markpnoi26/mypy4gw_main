@@ -119,6 +119,11 @@ class FollowFormationPublisher:
         self.state = FollowPublisherState()
         self.state.selected_id_cache = "builtin_default"
         self.state.points_cache = self._get_default_follow_points()
+        # Built lazily: Core/GlobalCache/SharedMemory.py imports this module during
+        # startup, and HeroAI.fight pulls Core.AgentArray. Constructing it here
+        # would add that edge to the startup import closure.
+        self.fight_publisher = None
+        self.fight_owns_all_flag = False
         self.ini_reload_timer = ThrottledTimer(self.ini.ini_reload_ms)
         self.publish_timer = ThrottledTimer(self.ini.publish_interval_ms)
         self.combat_publish_timer = ThrottledTimer(self.ini.combat_publish_interval_ms)
@@ -449,6 +454,140 @@ class FollowFormationPublisher:
         options.FollowPos.y = float(account.AgentData.Pos.y)
         options.FollowPos.z = float(leader_zplane)
 
+    def _get_fight_publisher(self):
+        if self.fight_publisher is None:
+            from HeroAI.fight.publisher import FightZonePublisher
+
+            self.fight_publisher = FightZonePublisher()
+        return self.fight_publisher
+
+    def _resolve_fight_plan(
+        self,
+        all_accounts: AllAccounts,
+        leader_index: int,
+        leader_account: AccountStruct,
+        leader_options: HeroAIOptionStruct,
+        leader_x: float,
+        leader_y: float,
+    ):
+        """Tick the fight zone and hand back its per-member slots.
+
+        A hand-placed all-flag outranks the zone: the zone borrows the same field,
+        so `fight_owns_all_flag` is what distinguishes "we wrote this" from "the
+        user did". Without it the zone would read its own flag back as manual.
+        """
+        from HeroAI.fight.assignment import MemberLine
+
+        manual_all_flag = (
+            bool(leader_options.IsFlagged)
+            and self._is_nonzero_vec2(leader_options.AllFlag)
+            and not self.fight_owns_all_flag
+        )
+        publisher = self._get_fight_publisher()
+        if manual_all_flag:
+            publisher.assignment.clear()
+            return None
+
+        member_lines: list[MemberLine] = []
+        member_positions: list[tuple[int, tuple[float, float]]] = []
+        party_health: dict[int, float] = {}
+        party_target_ids: dict[int, int] = {}
+        party_in_aggro = False
+        for index in range(self.shared_memory_manager.max_num_players):
+            account = all_accounts.AccountData[index]
+            if not (account.IsSlotActive and account.IsAccount) or all_accounts._is_slot_isolated_from_viewer(
+                index, leader_index
+            ):
+                continue
+            if not self._same_party_and_map(leader_account, account):
+                continue
+            if bool(getattr(account, "InAggro", False)):
+                party_in_aggro = True
+            party_position = int(account.AgentPartyData.PartyPosition)
+            if party_position <= 0:
+                continue
+            character_name = str(getattr(account.AgentData, "CharacterName", "") or "")
+            primary_profession = int(account.AgentData.Profession[0])
+            resolved = publisher.resolve_member_line(character_name, primary_profession)
+            member_lines.append(MemberLine(party_position, character_name, resolved.line))
+            member_positions.append((party_position, (float(account.AgentData.Pos.x), float(account.AgentData.Pos.y))))
+            health = account.AgentData.Health
+            max_health = float(getattr(health, "Max", 0.0) or 0.0)
+            if max_health > 0.0:
+                party_health[party_position] = float(getattr(health, "Current", 0.0)) / max_health
+            party_target_ids[party_position] = int(getattr(account.AgentData, "TargetID", 0) or 0)
+
+        plan = publisher.tick(
+            leader_xy=(leader_x, leader_y),
+            member_lines=member_lines,
+            member_positions=member_positions,
+            party_in_aggro=party_in_aggro,
+            leader_local_aggro=bool(getattr(leader_account, "InAggro", False)),
+            loot_pending=self._is_loot_pending(),
+            now_ms=int(Utils.GetBaseTimestamp()),
+            party_health=party_health,
+            party_target_ids=party_target_ids,
+        )
+        self._apply_fight_all_flag(leader_options, plan)
+        return plan if plan.is_active() else None
+
+    def _is_loot_pending(self) -> bool:
+        try:
+            from Core.py4gwcorelib_src.loot_filters import LootFilters
+
+            return len(LootFilters().GetLootArray(float(Range.Earshot.value))) > 0
+        except Exception:
+            return False
+
+    def _apply_fight_all_flag(self, leader_options: HeroAIOptionStruct, plan) -> None:
+        if plan.is_active():
+            leader_options.IsFlagged = True
+            leader_options.AllFlag.x = float(plan.zone.anchor_x)
+            leader_options.AllFlag.y = float(plan.zone.anchor_y)
+            leader_options.FlagFacingAngle = float(plan.zone.facing)
+            self.fight_owns_all_flag = True
+            return
+        if self.fight_owns_all_flag:
+            leader_options.IsFlagged = False
+            leader_options.AllFlag.x = 0.0
+            leader_options.AllFlag.y = 0.0
+            leader_options.FlagFacingAngle = 0.0
+            self.fight_owns_all_flag = False
+
+    def _publish_fight_slot(
+        self,
+        options: HeroAIOptionStruct,
+        slot,
+        leader_zplane: int,
+        anchor_xy: tuple[float, float],
+        *,
+        bypass_validation: bool = False,
+    ) -> None:
+        """Fight slots deliberately do NOT pass fallback_candidates.
+
+        Those candidates are party positions, so an off-mesh pin would snap to a
+        midpoint between party members — i.e. back into the travelling blob
+        behind the leader, while the zone still reads HOLDING. Falling back to
+        the zone anchor keeps a bad pin inside the fight.
+        """
+        options.FollowOffset.x = 0.0
+        options.FollowOffset.y = 0.0
+        options.FollowMoveThreshold = float(slot.tolerance)
+        options.FollowMoveThresholdCombat = float(slot.tolerance)
+        pos_x, pos_y = self._validate_followpos(
+            float(slot.world_x),
+            float(slot.world_y),
+            float(anchor_xy[0]),
+            float(anchor_xy[1]),
+            int(leader_zplane),
+            bypass_validation=bypass_validation,
+            fallback_candidates=None,
+        )
+        options.FollowPos.x = pos_x
+        options.FollowPos.y = pos_y
+        options.FollowPos.z = float(leader_zplane)
+        options.LeaderFollowReady = True
+
     def _apply_personal_flag_slot(self, options: HeroAIOptionStruct, leader_zplane: int) -> None:
         options.FollowPos.x = float(options.FlagPos.x)
         options.FollowPos.y = float(options.FlagPos.y)
@@ -720,6 +859,15 @@ class FollowFormationPublisher:
                 self.publish_timer.Reset()
                 self.combat_publish_timer.Reset()
 
+        fight_plan = self._resolve_fight_plan(
+            all_accounts,
+            leader_index,
+            leader_account,
+            leader_options,
+            leader_x,
+            leader_y,
+        )
+
         self._update_combat_anchor_facing(leader_in_combat, leader_facing)
         anchor_x, anchor_y, anchor_facing, move_threshold, combat_threshold = self._resolve_anchor(
             leader_options,
@@ -780,6 +928,18 @@ class FollowFormationPublisher:
             if bool(options.IsFlagged) and self._is_nonzero_vec2(options.FlagPos):
                 self._apply_personal_flag_slot(options, leader_zplane)
                 continue
+
+            if fight_plan is not None:
+                fight_slot = fight_plan.slots.get(party_pos)
+                if fight_slot is not None:
+                    self._publish_fight_slot(
+                        options,
+                        fight_slot,
+                        leader_zplane,
+                        fight_plan.zone.anchor(),
+                        bypass_validation=bypass_validation,
+                    )
+                    continue
 
             if leader_in_combat:
                 self._publish_active_slot(

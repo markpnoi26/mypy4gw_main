@@ -1,5 +1,5 @@
 from typing import Optional
-from Core import GLOBAL_CACHE, Allegiance, Overlay, Map, Agent
+from Core import GLOBAL_CACHE, Allegiance, Overlay, Map, Agent, Range
 from Core.GlobalCache.SharedMemory import AccountStruct
 from .constants import MAX_NUM_PLAYERS
 from .targeting import *
@@ -212,12 +212,35 @@ def IsHeroFlagged(index):
         return acc is not None and acc.IsFlagged
 
 
-def DrawFlagAll(pos_x, pos_y):
+FIGHT_ZONE_FLAG_COLOR = (255, 140, 30, 255)
+MANUAL_FLAG_COLOR = (0, 255, 0, 255)
+
+
+def is_fight_zone_flag(leader_options, own_options) -> bool:
+    """Tell an auto-dropped fight pin from a hand-placed party flag.
+
+    Inferred rather than published: HeroAIOptionStruct cannot grow a field
+    without a matching change to the C++-owned shared memory region. The
+    invariant it leans on is that a manual all-flag publishes
+    flagged_follow_threshold (0.0 by default) while a fight slot publishes its
+    line tolerance, which is floored at Adjacent. Raising
+    follow_move_threshold_flagged above Adjacent in FollowRuntime.ini would
+    colour a manual flag as a fight pin — cosmetic only.
+    """
+    if leader_options is None or own_options is None:
+        return False
+    if not bool(getattr(leader_options, "IsFlagged", False)):
+        return False
+    return float(getattr(own_options, "FollowMoveThresholdCombat", -1.0)) >= float(Range.Adjacent.value)
+
+
+def DrawFlagAll(pos_x, pos_y, color=None):
     overlay = Overlay()
     pos_z = overlay.FindZ(pos_x, pos_y)
+    flag_color = Utils.RGBToColor(*(color or MANUAL_FLAG_COLOR))
 
     overlay.BeginDraw()
-    overlay.DrawLine3D(pos_x, pos_y, pos_z, pos_x, pos_y, pos_z - 150, Utils.RGBToColor(0, 255, 0, 255), 3)
+    overlay.DrawLine3D(pos_x, pos_y, pos_z, pos_x, pos_y, pos_z - 150, flag_color, 3)
     overlay.DrawTriangleFilled3D(
         pos_x,
         pos_y,
@@ -228,8 +251,12 @@ def DrawFlagAll(pos_x, pos_y):
         pos_x - 50,
         pos_y,
         pos_z - 135,  # 50 units left, 15 units up
-        Utils.RGBToColor(0, 255, 0, 255),
+        flag_color,
     )
+    if color == FIGHT_ZONE_FLAG_COLOR:
+        # A ring on the ground so the fight pin reads as a zone centre rather
+        # than a waypoint, even with the debug overlay switched off.
+        overlay.DrawPoly3D(pos_x, pos_y, pos_z, radius=90.0, color=flag_color, numsegments=16, thickness=2.0)
 
     overlay.EndDraw()
 
@@ -270,7 +297,12 @@ def DrawSharedMemoryFlags() -> None:
             or abs(float(getattr(leader_options.AllFlag, "y", 0.0))) > 0.001
         )
     ):
-        DrawFlagAll(float(leader_options.AllFlag.x), float(leader_options.AllFlag.y))
+        own_options = GLOBAL_CACHE.ShMem.GetHeroAIOptionsFromEmail(Player.GetAccountEmail())
+        DrawFlagAll(
+            float(leader_options.AllFlag.x),
+            float(leader_options.AllFlag.y),
+            FIGHT_ZONE_FLAG_COLOR if is_fight_zone_flag(leader_options, own_options) else None,
+        )
 
     for i in range(1, MAX_NUM_PLAYERS):
         account = GLOBAL_CACHE.ShMem.GetAccountDataFromPartyNumber(i)

@@ -2389,6 +2389,31 @@ def MessageEnableHeroAI(index: int, message: SharedMessageStruct):
 # endregion
 
 
+# region ReportCombatLine
+def ReportCombatLine(index: int, message: SharedMessageStruct):
+    GLOBAL_CACHE.ShMem.MarkMessageAsRunning(message.ReceiverEmail, index)
+
+    sender_data = GLOBAL_CACHE.ShMem.GetAccountDataFromEmail(message.SenderEmail)
+    character_name = str(getattr(sender_data.AgentData, "CharacterName", "") or "").strip() if sender_data else ""
+
+    if character_name:
+        try:
+            from HeroAI.fight.lines import CombatLine
+
+            publisher = getattr(GLOBAL_CACHE.ShMem, "follow_publisher", None)
+            fight_publisher = getattr(publisher, "fight_publisher", None) if publisher else None
+            if fight_publisher is not None:
+                fight_publisher.report_build_line(character_name, CombatLine(int(message.Params[0])))
+        except Exception:
+            pass
+
+    GLOBAL_CACHE.ShMem.MarkMessageAsFinished(message.ReceiverEmail, index)
+    yield
+
+
+# endregion
+
+
 # region ConsoleMessage
 def ConsoleMessage(index: int, message: SharedMessageStruct):
     GLOBAL_CACHE.ShMem.MarkMessageAsRunning(message.ReceiverEmail, index)
@@ -3438,6 +3463,8 @@ def ProcessMessages():
             GLOBAL_CACHE.Coroutines.append(MessageEnableHeroAI(index, message))
         case SharedCommandType.ConsoleMessage:
             GLOBAL_CACHE.Coroutines.append(ConsoleMessage(index, message))
+        case SharedCommandType.ReportCombatLine:
+            GLOBAL_CACHE.Coroutines.append(ReportCombatLine(index, message))
         case SharedCommandType.SetActiveTitle:
             GLOBAL_CACHE.Coroutines.append(SetActiveTitle(index, message))
         case SharedCommandType.PressKey:

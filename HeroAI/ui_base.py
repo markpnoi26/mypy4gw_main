@@ -27,7 +27,7 @@ from Core.Player import Player
 
 from HeroAI.cache_data import CacheData
 from HeroAI.constants import NUMBER_OF_SKILLS
-from HeroAI.utils import DrawFlagAll, DrawHeroFlag, IsHeroFlagged
+from HeroAI.utils import FIGHT_ZONE_FLAG_COLOR, DrawFlagAll, DrawHeroFlag, IsHeroFlagged, is_fight_zone_flag
 from HeroAI.windows import HeroAI_FloatingWindows, HeroAI_Windows
 from .constants import MAX_NUM_PLAYERS, NUMBER_OF_SKILLS
 
@@ -401,7 +401,12 @@ class HeroAI_BaseUI:
                 hero_globals.capture_mouse_timer.Stop()
 
         if leader_options and leader_options.IsFlagged:
-            DrawFlagAll(leader_options.AllFlag.x, leader_options.AllFlag.y)
+            own_options = GLOBAL_CACHE.ShMem.GetHeroAIOptionsFromEmail(Player.GetAccountEmail())
+            DrawFlagAll(
+                leader_options.AllFlag.x,
+                leader_options.AllFlag.y,
+                FIGHT_ZONE_FLAG_COLOR if is_fight_zone_flag(leader_options, own_options) else None,
+            )
 
         for i in range(1, MAX_NUM_PLAYERS):
             options = options_by_party[i]
@@ -1695,6 +1700,118 @@ class HeroAI_BaseUI:
             PyImGui.end_child()
 
     @staticmethod
+    def _fight_runtime_cfg() -> Settings:
+        return Settings("HeroAI/FightRuntime.ini", "global")
+
+    @staticmethod
+    def _resolved_fight_line(character_name: str):
+        """The line the assigner actually used, or None when it has not run."""
+        try:
+            publisher = getattr(GLOBAL_CACHE.ShMem, "follow_publisher", None)
+            fight_publisher = getattr(publisher, "fight_publisher", None) if publisher else None
+            if fight_publisher is None:
+                return None
+            return fight_publisher.resolved_by_character.get(str(character_name or "").strip())
+        except Exception:
+            return None
+
+    @staticmethod
+    def _draw_fight_lines_tab() -> None:
+        from HeroAI.fight.lines import NAME_BY_LINE
+        from HeroAI.fight.lines import CombatLine
+        from HeroAI.fight.lines import get_manual_line
+        from HeroAI.fight.lines import infer_line_from_profession
+        from HeroAI.fight.lines import set_manual_line
+
+        cfg = HeroAI_BaseUI._fight_runtime_cfg()
+        enabled = bool(cfg.get_bool("FightRuntime", "fight_zone_enabled", False))
+        overlay = bool(cfg.get_bool("FightRuntime", "show_fight_zone_overlay", False))
+
+        new_enabled = PyImGui.checkbox("Enable Fight Zone", enabled)
+        if new_enabled != enabled:
+            cfg.set_bool("FightRuntime", "fight_zone_enabled", new_enabled)
+            cfg.save()
+        new_overlay = PyImGui.checkbox("Draw Fight Zone (3D)", overlay)
+        if new_overlay != overlay:
+            cfg.set_bool("FightRuntime", "show_fight_zone_overlay", new_overlay)
+            cfg.save()
+        PyImGui.text_disabled("Overlay works with the zone disabled — watch where lines form before switching it on.")
+
+        snapshot = hero_globals.fight_zone_debug_snapshot
+        if snapshot is not None:
+            depth = float(snapshot.get("depth", 0.0))
+            worst_case = float(snapshot.get("worst_case", 0.0))
+            cast_range = float(snapshot.get("cast_range", Range.Spellcast.value))
+            if bool(snapshot.get("depth_clamped", False)):
+                PyImGui.text_colored(
+                    f"Depth {depth:.0f} — CLAMPED (backline would have been outside cast range)",
+                    ColorPalette.GetColor("gw_gold").to_tuple_normalized(),
+                )
+            else:
+                PyImGui.text(f"Zone: {snapshot.get('state', '?')}    depth {depth:.0f}")
+            # Worst case is what decides whether a heal lands during a spike:
+            # front and back drifting to opposite edges of their tolerances.
+            PyImGui.text_disabled(
+                f"Front-to-back worst case {worst_case:.0f} / cast range {cast_range:.0f}"
+                f"  ({cast_range - worst_case:.0f} spare)"
+            )
+            # The chain from "zone exists" to "followers actually obey it" has
+            # several links; print each so a failure says which one broke.
+            driving = bool(snapshot.get("driving", False))
+            PyImGui.text_colored(
+                f"Driving followers: {'YES' if driving else 'NO'}"
+                f"   (enabled={bool(snapshot.get('enabled', False))}, slots={int(snapshot.get('slot_count', 0))})",
+                (
+                    ColorPalette.GetColor("dodger_blue").to_tuple_normalized()
+                    if driving
+                    else ColorPalette.GetColor("gw_gold").to_tuple_normalized()
+                ),
+            )
+        else:
+            PyImGui.text_disabled("No fight zone right now (no party aggro, or both toggles off).")
+
+        PyImGui.separator()
+
+        if not HeroAI_BaseUI._build_match_rows:
+            PyImGui.text("No party accounts available.")
+            return
+
+        options = ["Auto", "Front", "Mid", "Back"]
+        for (
+            party_pos,
+            character_name,
+            primary_value,
+            _secondary_value,
+            _profession_label,
+            build_name,
+            _source_label,
+        ) in HeroAI_BaseUI._build_match_rows:
+            manual = get_manual_line(character_name)
+            current_index = int(manual)
+            PyImGui.text(f"{party_pos + 1}. {character_name}")
+            PyImGui.same_line(220, 0)
+            chosen = PyImGui.combo(f"##fight_line_{party_pos}", current_index, options)
+            if chosen != current_index:
+                set_manual_line(character_name, CombatLine(chosen))
+
+            # Show what actually applies, and why — a wrong line is otherwise
+            # indistinguishable from a wrong formation. Read the publisher's own
+            # answer where available: a build-declared line lives only in its
+            # report cache, so recomputing here would silently show the
+            # profession fallback instead.
+            resolved = HeroAI_BaseUI._resolved_fight_line(character_name)
+            if resolved is not None:
+                effective, source = NAME_BY_LINE[resolved.line], resolved.source_label
+            elif manual != CombatLine.AUTO:
+                effective, source = NAME_BY_LINE[manual], "manual"
+            else:
+                effective = NAME_BY_LINE[infer_line_from_profession(primary_value)]
+                source = "inferred"
+            PyImGui.same_line(0, 14)
+            PyImGui.text_disabled(f"{effective} ({source})   {build_name}")
+            PyImGui.separator()
+
+    @staticmethod
     def DrawBuildMatchesWindow(cached_data: CacheData):
         if not HeroAI_BaseUI.show_build_match_window:
             return
@@ -1719,6 +1836,10 @@ class HeroAI_BaseUI:
 
                 if PyImGui.begin_tab_item("Supported Builds"):
                     HeroAI_BaseUI._draw_supported_builds_tab(registry)
+                    PyImGui.end_tab_item()
+
+                if PyImGui.begin_tab_item("Fight Lines"):
+                    HeroAI_BaseUI._draw_fight_lines_tab()
                     PyImGui.end_tab_item()
 
                 if PyImGui.begin_tab_item("Team Viewer"):
@@ -2194,6 +2315,127 @@ class HeroAI_BaseUI:
         except Exception:
             pass
 
+    # Segment budgets for the fight overlay. It redraws every UI frame, so these
+    # trade shape fidelity against per-frame cost.
+    FIGHT_OVERLAY_TRAIL_SEGMENTS = 10
+
+    @staticmethod
+    def DrawFightZone3DOverlay(cached_data: CacheData):
+        # Leader-only: the fight publisher runs there, so it is the only client
+        # holding the whole picture. Renders regardless of whether the zone is
+        # actually driving movement, which is the point — you watch where the
+        # lines would form before switching the feature on.
+        if not hero_globals.show_fight_zone_overlay:
+            return
+        snapshot = hero_globals.fight_zone_debug_snapshot
+        if snapshot is None:
+            return
+
+        line_colors = {
+            "FRONT": Utils.RGBToColor(255, 90, 60, 230),
+            "MID": Utils.RGBToColor(255, 210, 60, 230),
+            "BACK": Utils.RGBToColor(80, 190, 255, 230),
+        }
+
+        try:
+            Overlay().BeginDraw()
+            anchor = snapshot.get("anchor") or (0.0, 0.0)
+            ax, ay = float(anchor[0]), float(anchor[1])
+            az = Overlay().FindZ(ax, ay, 0)
+
+            Overlay().DrawPoly3D(
+                ax,
+                ay,
+                az,
+                radius=float(snapshot.get("radius", 0.0)),
+                color=Utils.RGBToColor(255, 140, 30, 90),
+                numsegments=32,
+                thickness=1.5,
+            )
+            Overlay().DrawPoly3D(
+                ax, ay, az, radius=40.0, color=Utils.RGBToColor(255, 140, 30, 240), numsegments=12, thickness=3.0
+            )
+
+            # Arrow from the pin toward the enemies, so "the fight is in front of
+            # everyone" is verifiable at a glance rather than inferred.
+            facing = float(snapshot.get("facing", 0.0))
+            tip_x = ax + (math.cos(facing) * 260.0)
+            tip_y = ay + (math.sin(facing) * 260.0)
+            Overlay().DrawLine3D(
+                ax,
+                ay,
+                az,
+                tip_x,
+                tip_y,
+                Overlay().FindZ(tip_x, tip_y, 0),
+                Utils.RGBToColor(255, 255, 255, 200),
+                2.5,
+            )
+
+            # The walked-in path and the point the advance axis is measured from.
+            # Without these a wrong formation angle is impossible to diagnose:
+            # you cannot tell a bad axis from a bad formation.
+            # FindZ is a terrain lookup, so resolve each point once and stride
+            # the polyline: drawing every breadcrumb of a 32-point trail cost
+            # 62 FindZ calls per frame for a line whose shape reads fine at a
+            # tenth of that.
+            trail = snapshot.get("trail") or ()
+            trail_color = Utils.RGBToColor(120, 200, 120, 130)
+            if len(trail) >= 2:
+                stride = max(1, len(trail) // HeroAI_BaseUI.FIGHT_OVERLAY_TRAIL_SEGMENTS)
+                sampled = list(trail[::stride])
+                if sampled[-1] != trail[-1]:
+                    sampled.append(trail[-1])
+                resolved = [(float(px), float(py), Overlay().FindZ(float(px), float(py), 0)) for px, py in sampled]
+                for i in range(1, len(resolved)):
+                    x1, y1, z1 = resolved[i - 1]
+                    x2, y2, z2 = resolved[i]
+                    Overlay().DrawLine3D(x1, y1, z1, x2, y2, z2, trail_color, 1.5)
+
+            approach = snapshot.get("approach")
+            if approach is not None:
+                apx, apy = float(approach[0]), float(approach[1])
+                apz = Overlay().FindZ(apx, apy, 0)
+                approach_color = Utils.RGBToColor(120, 255, 120, 220)
+                Overlay().DrawPoly3D(apx, apy, apz, radius=60.0, color=approach_color, numsegments=12, thickness=2.0)
+                Overlay().DrawLine3D(apx, apy, apz, ax, ay, az, approach_color, 2.0)
+                Overlay().DrawText3D(apx, apy, apz, "came from", approach_color)
+
+            depth = float(snapshot.get("depth", 0.0))
+            clamped = bool(snapshot.get("depth_clamped", False))
+            header = f"{snapshot.get('state', '?')}  depth {depth:.0f}"
+            if clamped:
+                header += " (CLAMPED)"
+            Overlay().DrawText3D(
+                ax,
+                ay,
+                az,
+                header,
+                Utils.RGBToColor(255, 120, 120, 255) if clamped else Utils.RGBToColor(255, 255, 255, 255),
+            )
+
+            for slot in snapshot.get("slots") or ():
+                pos = slot.get("pos") or (0.0, 0.0)
+                sx, sy = float(pos[0]), float(pos[1])
+                sz = Overlay().FindZ(sx, sy, 0)
+                color = line_colors.get(str(slot.get("line", "MID")), line_colors["MID"])
+                Overlay().DrawPoly3D(sx, sy, sz, radius=26.0, color=color, numsegments=10, thickness=3.0)
+                Overlay().DrawPoly3D(
+                    sx,
+                    sy,
+                    sz,
+                    radius=float(slot.get("tolerance", 150.0)),
+                    color=color,
+                    numsegments=16,
+                    thickness=1.0,
+                )
+                Overlay().DrawLine3D(ax, ay, az, sx, sy, sz, color, 1.0)
+                Overlay().DrawText3D(sx, sy, sz, str(slot.get("name", "")), color)
+
+            Overlay().EndDraw()
+        except Exception:
+            pass
+
     @staticmethod
     def DrawFlaggingWindow(cached_data: CacheData):
         party_size = GLOBAL_CACHE.Party.GetPartySize()
@@ -2282,6 +2524,7 @@ class HeroAI_BaseUI:
         # Draw the stuck-avoidance 3D overlay first so it renders on every client
         # (the window itself is leader-side; the overlay must work on the follower).
         HeroAI_BaseUI.DrawSmartUnstuck3DOverlay(cached_data)
+        HeroAI_BaseUI.DrawFightZone3DOverlay(cached_data)
 
         if HeroAI_BaseUI.show_follow_formations_quick_window:
             if ImGui.Begin(

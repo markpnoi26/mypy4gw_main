@@ -17,6 +17,18 @@ from .smart_unstuck import (
     reset_smart_unstuck,
     update_smart_unstuck,
 )
+from .steering import (
+    STEERING_CFG,
+    LeaderSteeringState,
+    compute_aim_point,
+    compute_slot_point,
+    get_live_leader_xy,
+    is_leader_moving,
+    mark_move_issued,
+    reset_steering,
+    sample_leader_motion,
+    should_reissue_move,
+)
 
 
 @dataclass(slots=True)
@@ -31,11 +43,18 @@ class FollowExecutionState:
     pet_recovery_notified: bool = False
     relocating_to_flag: bool = False
     stuck: SmartUnstuckState = field(default_factory=SmartUnstuckState)
+    steer: LeaderSteeringState = field(default_factory=LeaderSteeringState)
 
 
 FOLLOW_RECOVERY_DISTANCE = Range.Spirit.value
 FOLLOW_RECOVERY_START_DISTANCE = FOLLOW_RECOVERY_DISTANCE
 FOLLOW_RECOVERY_RELEASE_DISTANCE = Range.Earshot.value
+
+# How far past its tolerance a flagged follower may drift before returning to
+# station outranks fighting where it stands. Wide enough that a follower already
+# on its spot never jitters, tight enough that a backliner pulled into the melee
+# walks back out rather than tanking from the healer slot.
+FLAG_RETURN_MARGIN = Range.Nearby.value
 
 
 def get_follow_destination_distance(cached_data: CacheData) -> float:
@@ -156,6 +175,7 @@ def execute_follower_follow(
         state.recovery_detour_attempted = False
         state.relocating_to_flag = False
         reset_smart_unstuck(state.stuck)
+        reset_steering(state.steer)
 
     def _account_map_signature(account) -> tuple[int, int, int, int, int] | None:
         if account is None or not bool(getattr(account, "IsSlotActive", False)):
@@ -195,14 +215,17 @@ def execute_follower_follow(
     # Idle mode keeps the 250ms throttle since smoothness doesn't matter there.
     if state.stuck.mode != "idle":
         cached_data.follow_throttle_timer.SetThrottleTime(0)
+    elif is_leader_moving(state.steer, STEERING_CFG):
+        cached_data.follow_throttle_timer.SetThrottleTime(STEERING_CFG.moving_throttle_ms)
     else:
-        cached_data.follow_throttle_timer.SetThrottleTime(250)
+        cached_data.follow_throttle_timer.SetThrottleTime(STEERING_CFG.idle_throttle_ms)
 
     if not cached_data.follow_throttle_timer.IsExpired():
         return BehaviorTree.NodeState.FAILURE
 
+    leader_agent_id = int(GLOBAL_CACHE.Party.GetPartyLeaderID())
     player_agent_id = int(Player.GetAgentID())
-    if player_agent_id == GLOBAL_CACHE.Party.GetPartyLeaderID():
+    if player_agent_id == leader_agent_id:
         state.recovery_active = False
         cached_data.follow_throttle_timer.Reset()
         return BehaviorTree.NodeState.FAILURE
@@ -273,7 +296,44 @@ def execute_follower_follow(
             _reset_follow_runtime()
             return BehaviorTree.NodeState.FAILURE
 
+    # Rebuild the formation slot from the leader's LIVE position and travel
+    # heading instead of consuming the published FollowPos, which is stale by
+    # the publish interval plus this follower's throttle (1000ms of it once the
+    # leader is in combat). Only while the leader is actually moving: standing
+    # still there is no heading to derive, and the published point — already
+    # navmesh-validated leader-side — is the better answer.
+    tick_ms = int(Utils.GetBaseTimestamp())
+    live_leader_xy = get_live_leader_xy(leader_agent_id)
+    if live_leader_xy is None:
+        reset_steering(state.steer)
+    else:
+        sample_leader_motion(state.steer, STEERING_CFG, live_leader_xy, tick_ms)
+
     combat_active = bool(cached_data.IsHeadlessCombatPauseActive())
+
+    # Combat tolerance is Range.Adjacent (166u), so station-keeping in a fight
+    # would make followers chase a repositioning leader instead of standing and
+    # fighting. Fight-zone positioning owns movement there instead.
+    steering_active = (
+        live_leader_xy is not None
+        and follow_z == 0
+        and not own_flag_active
+        and not all_flag_active
+        and not combat_active
+        and is_leader_moving(state.steer, STEERING_CFG)
+    )
+    if steering_active and live_leader_xy is not None:
+        local_slot = compute_slot_point(
+            state.steer,
+            float(options.FollowOffset.x),
+            float(options.FollowOffset.y),
+            live_leader_xy,
+        )
+        if local_slot is None:
+            steering_active = False
+        else:
+            follow_x, follow_y = local_slot
+
     is_melee = cached_data.data.weapon_type in {
         Weapon.Axe.value,
         Weapon.Hammer.value,
@@ -327,8 +387,13 @@ def execute_follower_follow(
     # radius of Adjacent so followers that have reached the flag can fight.
     if (own_flag_active or all_flag_active) and effective_follow_distance < float(Range.Adjacent.value):
         effective_follow_distance = float(Range.Adjacent.value)
+    # Station-keeping: arriving inside the threshold is only a reason to stop
+    # when the leader has also stopped. While the leader runs, a follower that
+    # halts on arrival re-acquires only once the slot has drifted a full
+    # threshold away (322u by default), so its duty cycle sits below the
+    # leader's and the gap grows every cycle. That deadband is the straggle.
     dist_to_follow = Utils.Distance((follow_x, follow_y), Player.GetXY())
-    if dist_to_follow <= effective_follow_distance:
+    if dist_to_follow <= effective_follow_distance and not steering_active:
         state.last_recovery_follow_command_ms = 0
         state.recovery_detour_attempted = False
         state.relocating_to_flag = False
@@ -344,11 +409,18 @@ def execute_follower_follow(
     # of the party fights elsewhere. While relocating to a freshly moved flag,
     # do NOT yield — the flag move must win over combat. Recovery (dist >=
     # Spirit) is handled below and also takes priority over fighting.
+    # ...but only while the follower is still roughly ON its spot. A backliner
+    # that got dragged into the melee is exactly the case that must walk back
+    # while the fight is still going: standing where it drifted to is how a monk
+    # ends up in the mob it is meant to be healing from range. Beyond the return
+    # margin, position wins over fighting in place.
+    drifted_off_station = dist_to_follow > (effective_follow_distance + FLAG_RETURN_MARGIN)
     if (
         (own_flag_active or all_flag_active)
         and bool(cached_data.data.local_in_aggro)
         and not recovery_active
         and not state.relocating_to_flag
+        and not drifted_off_station
     ):
         # Drop the cached move point so that once combat ends the arrival/move
         # path below re-issues Player.Move toward the flag instead of skipping
@@ -416,7 +488,11 @@ def execute_follower_follow(
     xx = follow_x
     yy = follow_y
 
-    if not assigned_changed and state.last_follow_move_point is not None:
+    if steering_active:
+        xx, yy = compute_aim_point(state.steer, STEERING_CFG, (follow_x, follow_y), Player.GetXY())
+        if not should_reissue_move(state.steer, STEERING_CFG, Player.GetXY(), (xx, yy), tick_ms):
+            return BehaviorTree.NodeState.FAILURE
+    elif not assigned_changed and state.last_follow_move_point is not None:
         last_x, last_y = state.last_follow_move_point
         if Utils.Distance((last_x, last_y), (xx, yy)) <= 10.0:
             return BehaviorTree.NodeState.FAILURE
@@ -426,6 +502,8 @@ def execute_follower_follow(
 
     if follow_z == 0 or own_flag_active or all_flag_active:
         Player.Move(xx, yy)
+        if steering_active:
+            mark_move_issued(state.steer, Player.GetXY(), (xx, yy), tick_ms)
     else:
         ActionQueueManager().AddAction(
             "ACTION", UIManager.Keypress, ControlAction.ControlAction_TargetPartyMember1.value, 0
