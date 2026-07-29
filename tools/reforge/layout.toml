@@ -62,14 +62,6 @@ note = "Widget-to-widget imports still named the pre-move category. The widget f
 
 [[codemod]]
 kind = "import_rename"
-old = "Widgets.Automation.Helpers"
-new = "Widgets.Upkeep"
-scope = "**/*.py"
-exclude = ["tools/"]
-note = "Same class as the Messaging rename; Messaging.py:27-28 imports Pycons, so this one takes Messaging down with it. Must be the package prefix, not ...Helpers.Pycons: rename_imports matches a prefix of the dotted path, and `from Widgets.Automation.Helpers import Pycons` names only the package. NOT 1:1 — Helpers also held Dialogs/, EZ Cast and Elite Skills, which went to Dialogs/, Combat/ and py4gw-tasks. Safe today because Pycons is the only module anyone imports from it; add a `keep` if that changes."
-
-[[codemod]]
-kind = "import_rename"
 old = "Widgets.Automation.Multiboxing"
 new = "Widgets.Multibox"
 scope = "**/*.py"
@@ -141,6 +133,11 @@ note = "stubs pinned by pyrightconfig.json:stubPath; offsets load path untraced;
 match = "{Py4GW.dll,Py4GW.ini,Py4GW_Reforged_Launcher.exe,README.md,CLAUDE.md,AGENTS.md,pyproject.toml,pyrightconfig.json,requirements.txt,Py4GW_python.pyproj,clean_python_cache.bat}"
 dest = "keep"
 
+[[override]]
+match = "python_icon.ico"
+dest = "keep"
+note = "launch_bar/host.py:48 joins this to the repo root for the widget-browser button. Copies also live under Launcher/assets/ and docs/assets/, but the root one is the referenced path — moving it leaves the browser with no icon."
+
 
 # ============================================================================
 # TIER 1 — WIDGETS
@@ -160,11 +157,6 @@ tier = "widget"
 [[override]]
 match = "Widgets/System/System Settings.py"
 dest = "Widgets/Panels/System Settings.py"
-tier = "widget"
-
-[[override]]
-match = "Widgets/System/Debug Terminal.py"
-dest = "Widgets/Panels/Debug Terminal.py"
 tier = "widget"
 
 [[override]]
@@ -229,12 +221,6 @@ match = "Widgets/Coding/Examples/Skills/SkillInfo.py"
 dest = "Widgets/lib/SkillInfo.py"
 tier = "script"
 note = "Shared library, not a widget: EZ Cast.py subclasses its SkillData. The Widgets/Coding/** sweep put it in py4gw-devtools, whose hyphen makes it unimportable, so EZ Cast dies at load. Widgets/lib/ is importable as Widgets.lib and gets no .widget marker precisely because this entry is tier=script — write_markers() only touches dirs whose tier is widget, so nothing here is loaded as a widget."
-
-[[override]]
-match = "Widgets/Coding/Tools/ScriptManagementSystem.py"
-dest = "Widgets/Panels/ScriptManagementSystem.py"
-tier = "widget"
-note = "Manages scripts, is not one. The Widgets/Coding/** sweep demoted it into the devtools pack, where widget discovery never sees it and its own script registry cannot find it either."
 
 [[override]]
 match = "Widgets/Guild Wars/Customization/HeroAi Skill Editor.py"
@@ -519,10 +505,6 @@ old = "System/System Settings.py"
 new = "widgets:Panels/System Settings.py"
 
 [[legacy_id]]
-old = "System/Debug Terminal.py"
-new = "widgets:Panels/Debug Terminal.py"
-
-[[legacy_id]]
 old = "System/Frame Limiter.py"
 new = "widgets:Panels/Frame Limiter.py"
 
@@ -731,10 +713,6 @@ new = "widgets:Dialogs/Skill Trainer.py"
 [[legacy_id]]
 old = "Automation/Helpers/Elite Skills/EliteSkillsCapture.py"
 new = "scripts:py4gw-tasks/EliteSkillsCapture.py"
-
-[[legacy_id]]
-old = "Coding/Tools/ScriptManagementSystem.py"
-new = "widgets:Panels/ScriptManagementSystem.py"
 
 [[legacy_id]]
 old = "Guild Wars/Items & Loot/InventoryPlus.py"
