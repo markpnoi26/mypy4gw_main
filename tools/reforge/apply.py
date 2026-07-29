@@ -131,6 +131,35 @@ def write_legacy_ids(mf: manifest_mod.Manifest, dry: bool) -> None:
     target.write_text(json.dumps(mf.legacy_ids, indent=2) + "\n", encoding="utf-8")
 
 
+def write_module_aliases(mf: manifest_mod.Manifest, dry: bool) -> list[str]:
+    """Bake each moved widget's pre-move id into the widget as MODULE_ALIASES.
+
+    Runtime cannot read Runtime/config/legacy_widget_ids.json: JsonFactory scopes
+    live strictly under json/ and there is no root scope, so the map has to travel
+    inside the module. WidgetManager.adopt_legacy_enabled consumes it to carry the
+    user's enabled-state across the move.
+    """
+    unanchored = []
+    for old_id, new_dest in mf.legacy_ids.items():
+        if not new_dest.startswith("widgets:"):
+            continue
+        target = REPO / "Widgets" / new_dest[len("widgets:") :]
+        if not target.is_file():
+            continue
+        text = target.read_text(encoding="utf-8")
+        if "MODULE_ALIASES" in text:
+            continue
+        lines = text.splitlines(keepends=True)
+        anchor = next((i for i, line in enumerate(lines) if line.startswith("MODULE_NAME")), None)
+        if anchor is None:
+            unanchored.append(new_dest[len("widgets:") :])
+            continue
+        lines.insert(anchor, f"MODULE_ALIASES = [{old_id!r}]\n")
+        if not dry:
+            target.write_text("".join(lines), encoding="utf-8")
+    return unanchored
+
+
 def prune_empty_dirs(dry: bool) -> int:
     candidates = [p for p in REPO.rglob("*") if p.is_dir()]
     candidates.sort(key=lambda p: len(p.parts), reverse=True)
@@ -251,6 +280,8 @@ def main() -> int:
     write_markers(markers, args.dry_run)
     write_pack_manifests(packs, args.dry_run)
     write_legacy_ids(mf, args.dry_run)
+    for path in write_module_aliases(mf, args.dry_run):
+        print(f"  no MODULE_NAME anchor, alias not injected: {path}")
     touched = run_codemods(mf, args.dry_run)
     pruned = prune_empty_dirs(args.dry_run)
     print("pruned %d empty directories" % pruned)

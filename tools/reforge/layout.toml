@@ -46,6 +46,38 @@ note = "RS-001. 3678 import statements across 1009 files. Also rewrites the dyna
 
 [[codemod]]
 kind = "import_rename"
+old = "Widgets.Coding.Examples.Skills.SkillInfo"
+new = "Widgets.lib.SkillInfo"
+scope = "**/*.py"
+exclude = ["tools/"]
+note = "Pairs with the SkillInfo override. Full module path is correct here, not the package prefix: EZ Cast.py:19 imports the module itself, and Widgets/Coding/Examples/Skills/ held other files that went elsewhere."
+
+[[codemod]]
+kind = "import_rename"
+old = "Widgets.System.Messaging"
+new = "Widgets.Panels.Messaging"
+scope = "**/*.py"
+exclude = ["tools/"]
+note = "Widget-to-widget imports still named the pre-move category. The widget files moved but nothing rewrote their importers, so discovery fails at load with ModuleNotFoundError: No module named 'Widgets.System'."
+
+[[codemod]]
+kind = "import_rename"
+old = "Widgets.Automation.Helpers"
+new = "Widgets.Upkeep"
+scope = "**/*.py"
+exclude = ["tools/"]
+note = "Same class as the Messaging rename; Messaging.py:27-28 imports Pycons, so this one takes Messaging down with it. Must be the package prefix, not ...Helpers.Pycons: rename_imports matches a prefix of the dotted path, and `from Widgets.Automation.Helpers import Pycons` names only the package. NOT 1:1 — Helpers also held Dialogs/, EZ Cast and Elite Skills, which went to Dialogs/, Combat/ and py4gw-tasks. Safe today because Pycons is the only module anyone imports from it; add a `keep` if that changes."
+
+[[codemod]]
+kind = "import_rename"
+old = "Widgets.Automation.Multiboxing"
+new = "Widgets.Multibox"
+scope = "**/*.py"
+exclude = ["tools/"]
+note = "Same class. Dhuum Helper.py:237 imports the HeroAI widget by its old path. 1:1 — Multiboxing held only HeroAI.py and CombatPrep.py, and CombatPrep is dropped."
+
+[[codemod]]
+kind = "import_rename"
 old = "Sources"
 new = "dev.reference"
 scope = "**/*.py"
@@ -161,11 +193,6 @@ dest = "Widgets/Items/TeamInventoryViewer.py"
 tier = "widget"
 
 [[override]]
-match = "Widgets/Guild Wars/Calendar.py"
-dest = "Widgets/World/Calendar.py"
-tier = "widget"
-
-[[override]]
 match = "Widgets/Guild Wars/Travel.py"
 dest = "Widgets/World/Travel.py"
 tier = "widget"
@@ -176,24 +203,9 @@ dest = "Widgets/Multibox/HeroAI.py"
 tier = "widget"
 
 [[override]]
-match = "Widgets/Guild Wars/ChatCommandBroadcast.py"
-dest = "Widgets/Multibox/ChatCommandBroadcast.py"
-tier = "widget"
-
-[[override]]
 match = "Widgets/Guild Wars/Switch Character.py"
 dest = "Widgets/Multibox/Switch Character.py"
 tier = "widget"
-
-[[override]]
-match = "Widgets/Automation/Enhancements/HeroHelper.py"
-dest = "Widgets/Heroes/HeroHelper.py"
-tier = "widget"
-
-
-# ============================================================================
-# TIER 2 — SCRIPTS
-# ============================================================================
 
 [[rule]]
 match = "Widgets/Automation/Bots/**"
@@ -213,6 +225,18 @@ dest = "drop"
 note = "superseded by the core script host"
 
 [[override]]
+match = "Widgets/Coding/Examples/Skills/SkillInfo.py"
+dest = "Widgets/lib/SkillInfo.py"
+tier = "script"
+note = "Shared library, not a widget: EZ Cast.py subclasses its SkillData. The Widgets/Coding/** sweep put it in py4gw-devtools, whose hyphen makes it unimportable, so EZ Cast dies at load. Widgets/lib/ is importable as Widgets.lib and gets no .widget marker precisely because this entry is tier=script — write_markers() only touches dirs whose tier is widget, so nothing here is loaded as a widget."
+
+[[override]]
+match = "Widgets/Coding/Tools/ScriptManagementSystem.py"
+dest = "Widgets/Panels/ScriptManagementSystem.py"
+tier = "widget"
+note = "Manages scripts, is not one. The Widgets/Coding/** sweep demoted it into the devtools pack, where widget discovery never sees it and its own script registry cannot find it either."
+
+[[override]]
 match = "Widgets/Guild Wars/Customization/HeroAi Skill Editor.py"
 dest = "Scripts/py4gw-heroai/scripts/HeroAi Skill Editor.py"
 tier = "script"
@@ -221,7 +245,7 @@ pack = "heroai"
 [[override]]
 match = "Widgets/Automation/Multiboxing/CombatPrep.py"
 dest = "drop"
-note = "BREAKS Bots/marks_coding_corner/VoltaicSpearTeamFarm.py:23 — vendor to marks-corner/lib or strip the import first"
+note = "Not in the preferred-widget set, so it is deliberately not a widget. VoltaicSpearTeamFarm.py:6,392 still imports the class and calls enable_widget('CombatPrep'); that script is slated for refactor and is expected to stop depending on it. Do not restore this as a widget to fix that script."
 
 [[rule]]
 match = "Bots/marks_coding_corner/utils/**"
@@ -568,34 +592,15 @@ dest = "Widgets/Upkeep/{name}"
 tier = "widget"
 
 [[override]]
-match = "Widgets/Automation/Enhancements/Dhuum Helper.py"
-dest = "Widgets/Combat/Dhuum Helper.py"
-tier = "widget"
-
-[[override]]
-match = "Widgets/Automation/Enhancements/Heroic Refrain.py"
-dest = "Widgets/Combat/Heroic Refrain.py"
-tier = "widget"
-
-[[override]]
-match = "Widgets/Automation/Enhancements/Pet Helper.py"
-dest = "Widgets/Heroes/Pet Helper.py"
-tier = "widget"
-
-[[override]]
 match = "Widgets/Automation/Enhancements/{Kamadan Trade Spammer.py,Kamadan Trade Spammer.ini}"
-dest = "Widgets/Trade/{name}"
-tier = "widget"
+dest = "Scripts/orphaned-widgets/scripts/{name}"
+tier = "script"
+pack = "orphaned-widgets"
 
 # --- Automation/Helpers: default to Upkeep ---
 [[rule]]
 match = "Widgets/Automation/Helpers/**"
 dest = "Widgets/Upkeep/{name}"
-tier = "widget"
-
-[[override]]
-match = "Widgets/Automation/Helpers/EZ Cast.py"
-dest = "Widgets/Combat/EZ Cast.py"
 tier = "widget"
 
 [[rule]]
@@ -728,6 +733,10 @@ old = "Automation/Helpers/Elite Skills/EliteSkillsCapture.py"
 new = "scripts:py4gw-tasks/EliteSkillsCapture.py"
 
 [[legacy_id]]
+old = "Coding/Tools/ScriptManagementSystem.py"
+new = "widgets:Panels/ScriptManagementSystem.py"
+
+[[legacy_id]]
 old = "Guild Wars/Items & Loot/InventoryPlus.py"
 new = "widgets:Items/InventoryPlus.py"
 
@@ -846,3 +855,168 @@ match = "docs/reference/**"
 dest = "keep"
 tier = "docs"
 note = "upstream's README/AGENTS, kept verbatim for lookup"
+
+# ---------------------------------------------------------------------------
+# ORPHANED WIDGETS - demoted out of Widgets/ because they are not in the
+# preferred-widget set. Under RS-004 a leaf that fails outside
+# Scripts/py4gw-marks-corner/ is deprecated, not broken: listed in
+# rules/DEPRECATED.md, skipped by the gate, left in the tree until triaged.
+# ---------------------------------------------------------------------------
+
+# 24 widgets demoted to Scripts/orphaned-widgets/
+
+[[override]]
+match = "Widgets/Automation/Helpers/Dialogs/Balthazar Skill Unlock.py"
+dest = "Scripts/orphaned-widgets/scripts/Balthazar Skill Unlock.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "Widgets/Guild Wars/Calendar.py"
+dest = "Scripts/orphaned-widgets/scripts/Calendar.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "Widgets/Guild Wars/ChatCommandBroadcast.py"
+dest = "Scripts/orphaned-widgets/scripts/ChatCommandBroadcast.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "Widgets/Automation/Enhancements/Dhuum Helper.py"
+dest = "Scripts/orphaned-widgets/scripts/Dhuum Helper.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "Widgets/Automation/Helpers/Dialogs/CanthaDialogSender.py"
+dest = "Scripts/orphaned-widgets/scripts/CanthaDialogSender.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "Widgets/Automation/Helpers/Dialogs/NFDialogSender.py"
+dest = "Scripts/orphaned-widgets/scripts/NFDialogSender.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "Widgets/Guild Wars/Customization/Disable Camera Smoothing.py"
+dest = "Scripts/orphaned-widgets/scripts/Disable Camera Smoothing.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "Widgets/Automation/Helpers/EZ Cast.py"
+dest = "Scripts/orphaned-widgets/scripts/EZ Cast.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "Widgets/Automation/Enhancements/HeroHelper.py"
+dest = "Scripts/orphaned-widgets/scripts/HeroHelper.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "Widgets/Automation/Enhancements/Heroic Refrain.py"
+dest = "Scripts/orphaned-widgets/scripts/Heroic Refrain.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "Widgets/Guild Wars/Screen Overlays/Instance Timer.py"
+dest = "Scripts/orphaned-widgets/scripts/Instance Timer.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "Widgets/Guild Wars/Items & Loot/InventoryPlus.py"
+dest = "Scripts/orphaned-widgets/scripts/InventoryPlus.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "Widgets/Guild Wars/Items & Loot/item_eater.py"
+dest = "Scripts/orphaned-widgets/scripts/item_eater.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "Widgets/Guild Wars/Customization/Layout Manager.py"
+dest = "Scripts/orphaned-widgets/scripts/Layout Manager.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "Widgets/Guild Wars/Screen Overlays/Map Overlay.py"
+dest = "Scripts/orphaned-widgets/scripts/Map Overlay.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "Widgets/Automation/Enhancements/Pet Helper.py"
+dest = "Scripts/orphaned-widgets/scripts/Pet Helper.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "Widgets/Automation/Helpers/Dialogs/Profession Unlocker.py"
+dest = "Scripts/orphaned-widgets/scripts/Profession Unlocker.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "Widgets/Automation/Helpers/Pycons.py"
+dest = "Scripts/orphaned-widgets/scripts/Pycons.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "Widgets/Automation/Helpers/Dialogs/Skill Trainer.py"
+dest = "Scripts/orphaned-widgets/scripts/Skill Trainer.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "Widgets/Guild Wars/Items & Loot/SuperItemEater.py"
+dest = "Scripts/orphaned-widgets/scripts/SuperItemEater.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "Widgets/Automation/Enhancements/Survival Title Helper.py"
+dest = "Scripts/orphaned-widgets/scripts/Survival Title Helper.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "Widgets/Guild Wars/Customization/Window Renamer.py"
+dest = "Scripts/orphaned-widgets/scripts/Window Renamer.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "Widgets/Guild Wars/Items & Loot/Xunlaimanager.py"
+dest = "Scripts/orphaned-widgets/scripts/Xunlaimanager.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "light_beacon.py"
+dest = "Scripts/orphaned-widgets/scripts/light_beacon.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "loot_beam.py"
+dest = "Scripts/orphaned-widgets/scripts/loot_beam.py"
+tier = "script"
+pack = "orphaned-widgets"
+
+[[override]]
+match = "radial menu.py"
+dest = "Scripts/orphaned-widgets/scripts/radial menu.py"
+tier = "script"
+pack = "orphaned-widgets"
