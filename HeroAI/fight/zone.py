@@ -69,13 +69,13 @@ class ZoneConfig:
     # from the party centroid instead. Under observation.
     contact_radius: float = float(Range.Area.value)
 
-    # OPEN — small blobs are unstable by construction: removing one of N shifts
-    # the centroid by (centroid - dead) / (N - 1), so at N=3 a mob 300u out from
-    # the centre moves it 150u on death, against 43u at N=8. Movement scales the
-    # same way. The tail of every fight is therefore its twitchiest phase, and
-    # re-aiming there buys nothing — the fight is already won. Candidate fix:
-    # refuse to re-aim below a minimum remaining blob size. Under observation.
-    reaim_min_blob_size: int = 0  # 0 = disabled, not yet enforced
+    # Small blobs are unstable by construction: removing one of N shifts the
+    # centroid by (centroid - dead) / (N - 1), so at N=3 a mob 300u out from the
+    # centre moves it 150u on death, against 43u at N=8. Movement scales the same
+    # way. The tail of every fight is therefore its twitchiest phase, and
+    # re-aiming there buys nothing — the fight is already won. Fewer than this
+    # many still-approaching enemies and the formation just holds what it has.
+    reaim_min_blob_size: int = 3
     # Distance still catches the one case angle cannot see — a mob retreating
     # straight down the axis, where the bearing never changes but the fight has
     # walked away. Deliberately large: this is for relocation, not jitter.
@@ -228,9 +228,9 @@ def resolve_engagement_blob(
     cfg: ZoneConfig,
     party_xy: tuple[float, float],
     enemy_positions: list[tuple[float, float]],
-) -> tuple[float, float] | None:
+) -> list[tuple[float, float]]:
     blob = select_engagement_blob(cluster_enemies(enemy_positions, cfg.blob_weld_distance), party_xy)
-    return centroid(blob if blob else enemy_positions)
+    return list(blob) if blob else list(enemy_positions)
 
 
 def compute_axis(
@@ -276,7 +276,7 @@ def anchor_and_facing(
     the enemies win outright: facing the wrong way is worse than an odd retreat
     direction.
     """
-    blob_centre = resolve_engagement_blob(cfg, party_xy, enemy_positions)
+    blob_centre = centroid(resolve_engagement_blob(cfg, party_xy, enemy_positions))
 
     engagement = (
         clamp_toward(blob_centre, leader_xy, cfg.max_anchor_offset_from_leader)
@@ -352,7 +352,15 @@ def should_reaim(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> bool
         zone.reaim_pending_since_ms = 0
         return False
 
-    blob_centre = resolve_engagement_blob(cfg, inputs.party_xy, approaching)
+    # Counted on the still-approaching set rather than every enemy alive: that
+    # set is what the re-aim maths is measured against, so it is the one whose
+    # instability matters.
+    blob = resolve_engagement_blob(cfg, inputs.party_xy, approaching)
+    if len(blob) < cfg.reaim_min_blob_size:
+        zone.reaim_pending_since_ms = 0
+        return False
+
+    blob_centre = centroid(blob)
     if blob_centre is None:
         zone.reaim_pending_since_ms = 0
         return False
