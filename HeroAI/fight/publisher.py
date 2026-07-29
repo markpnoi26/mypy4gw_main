@@ -1,0 +1,336 @@
+"""Leader-side fight zone driver.
+
+Rides the existing follow channel rather than new shared-memory fields: the
+region is allocated and owned by the C++ multibox module, so HeroAIOptionStruct
+cannot grow without a matching native change. During a fight the leader swaps
+the anchor, the formation and the per-slot tolerance; followers are unchanged.
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+from dataclasses import field
+
+import HeroAI.globals as hero_globals
+from Core import Agent
+from Core import AgentArray
+from Core import Range
+from Core import ThrottledTimer
+from Core.py4gwcorelib_src.Settings import Settings
+
+from .assignment import AssignmentLatch
+from .assignment import MemberLine
+from .engagement import ENGAGEMENT_CFG
+from .engagement import EngagementState
+from .engagement import update_engagement
+from .formation import CAST_RANGE
+from .formation import FightFormationLoader
+from .formation import rotate_fight_local_to_world
+from .lines import CombatLine
+from .lines import LineSource
+from .lines import ResolvedLine
+from .lines import get_manual_line
+from .lines import infer_line_from_profession
+from .trail import TRAIL_CFG
+from .trail import LeaderTrail
+from .trail import approach_point
+from .trail import sample_trail
+from .zone import FightZone
+from .zone import ZONE_CFG
+from .zone import ZoneInputs
+from .zone import ZoneState
+from .zone import tick_zone
+
+RUNTIME_INI_PATH = "HeroAI"
+RUNTIME_INI_NAME = "FightRuntime.ini"
+RUNTIME_SECTION = "FightRuntime"
+ENABLED_KEY = "fight_zone_enabled"
+OVERLAY_KEY = "show_fight_zone_overlay"
+RUNTIME_RELOAD_MS = 1000
+
+
+@dataclass(slots=True)
+class FightRuntimeConfig:
+    # Default off: the whole feature is opt-in so travel behaviour is untouched
+    # until it has been watched through the overlay.
+    enabled: bool = False
+    show_overlay: bool = False
+
+
+def party_centroid(
+    leader_xy: tuple[float, float],
+    member_positions: list[tuple[int, tuple[float, float]]],
+) -> tuple[float, float]:
+    points = [xy for _, xy in member_positions]
+    points.append((float(leader_xy[0]), float(leader_xy[1])))
+    return (
+        sum(p[0] for p in points) / len(points),
+        sum(p[1] for p in points) / len(points),
+    )
+
+
+@dataclass(slots=True)
+class SlotPlan:
+    party_position: int
+    character_name: str
+    # `line` is the pin's line, which drives tolerance. `requested_line` is the
+    # line the member resolved to. They differ when overflow spilled someone —
+    # which is exactly the "why is my monk standing in the midline" question.
+    line: CombatLine
+    requested_line: CombatLine
+    source: LineSource
+    pin_index: int
+    world_x: float
+    world_y: float
+    tolerance: float
+
+
+@dataclass(slots=True)
+class FightPlan:
+    zone: FightZone
+    slots: dict[int, SlotPlan] = field(default_factory=dict)
+    depth_clamped: bool = False
+
+    def is_active(self) -> bool:
+        return self.zone.is_active()
+
+
+class FightZonePublisher:
+    def __init__(self) -> None:
+        self.zone = FightZone()
+        self.trail = LeaderTrail()
+        self.engagement = EngagementState()
+        self.last_approach_xy: tuple[float, float] | None = None
+        self.formation_loader = FightFormationLoader()
+        self.assignment = AssignmentLatch()
+        self.runtime = FightRuntimeConfig()
+        self.runtime_timer = ThrottledTimer(RUNTIME_RELOAD_MS)
+        self.plan = FightPlan(zone=self.zone)
+        self.build_lines_by_character: dict[str, CombatLine] = {}
+        self.resolved_by_character: dict[str, ResolvedLine] = {}
+
+    def runtime_cfg(self) -> Settings:
+        return Settings(f"{RUNTIME_INI_PATH}/{RUNTIME_INI_NAME}", "global")
+
+    def reload_runtime(self) -> None:
+        if not self.runtime_timer.IsExpired():
+            return
+        self.runtime_timer.Reset()
+        try:
+            cfg = self.runtime_cfg()
+            try:
+                cfg.reload()
+            except Exception:
+                pass
+            self.runtime.enabled = bool(cfg.get_bool(RUNTIME_SECTION, ENABLED_KEY, False))
+            self.runtime.show_overlay = bool(cfg.get_bool(RUNTIME_SECTION, OVERLAY_KEY, False))
+            hero_globals.show_fight_zone_overlay = self.runtime.show_overlay
+        except Exception:
+            pass
+
+    def report_build_line(self, character_name: str, line: CombatLine) -> None:
+        """Followers report their build-declared line; only their own client knows
+        which build matched. Cached until the character reports something else."""
+        key = str(character_name or "").strip()
+        if key:
+            self.build_lines_by_character[key] = line
+
+    def resolve_member_line(self, character_name: str, primary_profession: int) -> ResolvedLine:
+        key = str(character_name or "").strip()
+        manual = get_manual_line(character_name)
+        if manual != CombatLine.AUTO:
+            resolved = ResolvedLine(manual, LineSource.MANUAL)
+        else:
+            declared = self.build_lines_by_character.get(key, CombatLine.AUTO)
+            if declared != CombatLine.AUTO:
+                resolved = ResolvedLine(declared, LineSource.BUILD)
+            else:
+                resolved = ResolvedLine(infer_line_from_profession(primary_profession), LineSource.INFERRED)
+        # Cached so the UI reports the same answer the assigner used. Recomputing
+        # it there would miss build declarations, which only live in this cache.
+        self.resolved_by_character[key] = resolved
+        return resolved
+
+    def collect_enemy_ids(self, leader_xy: tuple[float, float]) -> list[int]:
+        try:
+            ids = AgentArray.GetEnemyArray()
+        except Exception:
+            return []
+        ids = AgentArray.Filter.ByCondition(
+            ids,
+            lambda aid: Agent.IsValid(int(aid)) and not Agent.IsDead(int(aid)),
+        )
+        ids = AgentArray.Filter.ByDistance(ids, leader_xy, float(ZONE_CFG.engagement_scan_radius))
+        return [int(agent_id) for agent_id in ids]
+
+    def collect_enemy_positions(self, enemy_ids: list[int]) -> list[tuple[float, float]]:
+        positions: list[tuple[float, float]] = []
+        for agent_id in enemy_ids:
+            try:
+                x, y = Agent.GetXY(int(agent_id))
+            except Exception:
+                continue
+            if abs(float(x)) < 0.001 and abs(float(y)) < 0.001:
+                continue
+            positions.append((float(x), float(y)))
+        return positions
+
+    def members_in_position(self, members: list[tuple[int, tuple[float, float]]]) -> bool:
+        if not self.plan.slots:
+            return False
+        for party_position, member_xy in members:
+            slot = self.plan.slots.get(int(party_position))
+            if slot is None:
+                continue
+            if math.hypot(member_xy[0] - slot.world_x, member_xy[1] - slot.world_y) > slot.tolerance:
+                return False
+        return True
+
+    def tick(
+        self,
+        leader_xy: tuple[float, float],
+        member_lines: list[MemberLine],
+        member_positions: list[tuple[int, tuple[float, float]]],
+        party_in_aggro: bool,
+        leader_local_aggro: bool,
+        loot_pending: bool,
+        now_ms: int,
+        party_health: dict[int, float] | None = None,
+        party_target_ids: dict[int, int] | None = None,
+    ) -> FightPlan:
+        party_health = party_health or {}
+        party_target_ids = party_target_ids or {}
+        self.reload_runtime()
+
+        # Track the PARTY centroid, not the leader. A leader jinks back and
+        # forth while pulling and repositioning; the blob as a whole travels in
+        # one coherent direction, which is the axis the formation wants.
+        # Sampled unconditionally and kept running through the fight — the
+        # min_sample_distance means shuffling around an engagement adds almost
+        # nothing, so the lookback still reaches back to the travel approach.
+        party_centre = party_centroid(leader_xy, member_positions)
+        sample_trail(self.trail, TRAIL_CFG, party_centre, now_ms)
+
+        # Dry run: with the feature off but the overlay on, the zone is still
+        # computed and drawn, it just never becomes an active plan. That is the
+        # whole point of watching it before switching it on.
+        if not (self.runtime.enabled or self.runtime.show_overlay):
+            self.zone.state = ZoneState.TRAVELING
+            self.assignment.clear()
+            self.plan = FightPlan(zone=self.zone)
+            hero_globals.fight_zone_debug_snapshot = None
+            return self.plan
+
+        enemy_ids = self.collect_enemy_ids(leader_xy)
+        enemy_positions = self.collect_enemy_positions(enemy_ids)
+        self.last_approach_xy = approach_point(self.trail, TRAIL_CFG, now_ms)
+        was_active = self.zone.is_active()
+
+        # Proximity is not a fight, and it must not be able to end one either:
+        # AND-ing party_in_aggro here would let a momentary loss of scan range
+        # tear the zone down instantly, defeating the disengage hold. The
+        # detector applies its own, tighter distance gate.
+        engaged = update_engagement(
+            self.engagement,
+            ENGAGEMENT_CFG,
+            leader_xy,
+            enemy_ids,
+            party_health,
+            party_target_ids,
+            now_ms,
+        )
+
+        tick_zone(
+            self.zone,
+            ZONE_CFG,
+            ZoneInputs(
+                leader_xy=leader_xy,
+                enemy_positions=enemy_positions,
+                party_in_aggro=engaged,
+                leader_local_aggro=leader_local_aggro,
+                loot_pending=loot_pending,
+                members_in_position=self.members_in_position(member_positions),
+                now_ms=now_ms,
+                party_xy=party_centre,
+                approach_xy=self.last_approach_xy,
+            ),
+        )
+
+        if not self.zone.is_active():
+            if was_active:
+                self.assignment.clear()
+            self.plan = FightPlan(zone=self.zone)
+            hero_globals.fight_zone_debug_snapshot = None
+            return self.plan
+
+        formation = self.formation_loader.get()
+        assignment = self.assignment.get(formation, member_lines)
+
+        slots: dict[int, SlotPlan] = {}
+        for member in member_lines:
+            pin_index = assignment.pin_for(member.party_position)
+            if pin_index is None or pin_index >= len(formation.pins):
+                continue
+            pin = formation.pins[pin_index]
+            world_x, world_y = rotate_fight_local_to_world(pin.x, pin.y, self.zone.facing)
+            resolved = self.resolved_by_character.get(
+                str(member.character_name or "").strip(),
+                ResolvedLine(member.line, LineSource.INFERRED),
+            )
+            slots[int(member.party_position)] = SlotPlan(
+                party_position=int(member.party_position),
+                character_name=member.character_name,
+                line=pin.line,
+                requested_line=member.line,
+                source=resolved.source,
+                pin_index=pin_index,
+                world_x=self.zone.anchor_x + world_x,
+                world_y=self.zone.anchor_y + world_y,
+                tolerance=max(float(Range.Adjacent.value), formation.tolerances.get(pin.line)),
+            )
+
+        self.plan = FightPlan(
+            zone=self.zone,
+            slots=slots,
+            depth_clamped=self.formation_loader.depth_was_clamped,
+        )
+        self.publish_debug_snapshot(formation.depth(), formation.worst_case_separation())
+        if not self.runtime.enabled:
+            return FightPlan(zone=FightZone())
+        return self.plan
+
+    def publish_debug_snapshot(self, depth: float, worst_case: float = 0.0) -> None:
+        if not self.plan.is_active():
+            hero_globals.fight_zone_debug_snapshot = None
+            return
+        # The Fight Lines tab still wants the scalars with the overlay off, but
+        # only the 3D draw needs the trail and per-slot lists — and those are
+        # what cost, rebuilt on every publish.
+        drawing = self.runtime.show_overlay
+        hero_globals.fight_zone_debug_snapshot = {
+            "state": self.zone.state.name,
+            "enabled": self.runtime.enabled,
+            "driving": self.runtime.enabled and self.plan.is_active(),
+            "anchor": (self.zone.anchor_x, self.zone.anchor_y),
+            "facing": self.zone.facing,
+            "approach": self.last_approach_xy if drawing else None,
+            "trail": [(x, y) for x, y, _ in self.trail.points] if drawing else (),
+            "radius": self.zone.radius,
+            "depth": depth,
+            "worst_case": worst_case,
+            "cast_range": CAST_RANGE,
+            "depth_clamped": self.plan.depth_clamped,
+            "slots": [
+                {
+                    "name": slot.character_name,
+                    "line": slot.line.name,
+                    "requested_line": slot.requested_line.name,
+                    "spilled": slot.line != slot.requested_line,
+                    "pos": (slot.world_x, slot.world_y),
+                    "tolerance": slot.tolerance,
+                }
+                for slot in (self.plan.slots.values() if drawing else ())
+            ],
+            "slot_count": len(self.plan.slots),
+        }
