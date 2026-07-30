@@ -63,14 +63,59 @@ DEPOSIT_MOVED = "moved"
 DEPOSIT_FULL = "full"
 DEPOSIT_UNCONFIRMED = "unconfirmed"
 
+# The organize order, deliberately explicit. Anything not listed sorts after everything here, by its
+# raw ItemType value -- the enum's own order is arbitrary, which is why it is not relied on.
+#
+# The five meta types (Weapon, MartialWeapon, OffhandOrShield, EquippableItem, SpellcastingWeapon) are
+# filter groupings and never appear on a real item, so they are absent on purpose.
 SORT_TYPE_ORDER = [
+    # tools and keys first -- the things reached for most
     int(ItemType.Kit),
     int(ItemType.Key),
+    # consumables together
     int(ItemType.Usable),
+    int(ItemType.Scroll),
+    int(ItemType.Storybook),
+    # dyes together, ordered by colour further down the key
+    int(ItemType.Dye),
+    # weapons: martial, then spellcasting, then off-hand
+    int(ItemType.Axe),
+    int(ItemType.Sword),
+    int(ItemType.Hammer),
+    int(ItemType.Daggers),
+    int(ItemType.Scythe),
+    int(ItemType.Spear),
+    int(ItemType.Bow),
+    int(ItemType.Staff),
+    int(ItemType.Wand),
+    int(ItemType.Offhand),
+    int(ItemType.Shield),
+    # armour, head to foot
+    int(ItemType.Headpiece),
+    int(ItemType.Chestpiece),
+    int(ItemType.Gloves),
+    int(ItemType.Leggings),
+    int(ItemType.Boots),
+    int(ItemType.Salvage),
+    # upgrades
+    int(ItemType.Rune_Mod),
+    # story and collectables
     int(ItemType.Trophy),
     int(ItemType.Quest_Item),
+    int(ItemType.Minipet),
+    int(ItemType.Present),
+    int(ItemType.Costume),
+    int(ItemType.Costume_Headpiece),
+    # containers
+    int(ItemType.Bag),
+    int(ItemType.Bundle),
+    # bulk last
     int(ItemType.Materials_Zcoins),
+    int(ItemType.Gold_Coin),
+    int(ItemType.CC_Shards),
 ]
+TYPE_RANK = {type_value: index for index, type_value in enumerate(SORT_TYPE_ORDER)}
+DYE_ITEM_TYPE = int(ItemType.Dye)
 
 SETTINGS_SECTION = "InventoryLite"
 RULES_DOC = "Widgets/Items/InventoryLiteRules.json"
@@ -571,8 +616,10 @@ class Rule:
             prefix_max_only=bool(raw.get("prefix_max_only", False)),
             suffix_max_only=bool(raw.get("suffix_max_only", False)),
             inherent_max_only=bool(raw.get("inherent_max_only", False)),
-            # `perfect_only` was the earlier, blunter flag; it meant this.
-            all_mods_max=bool(raw.get("all_mods_max", raw.get("perfect_only", False))),
+            # Deliberately NOT migrated from the older `perfect_only`. That flag meant "the mod this
+            # rule names is max", which is the per-slot check above; mapping it here silently turned
+            # rules into "every mod on the item is max" and stopped them matching anything imperfect.
+            all_mods_max=bool(raw.get("all_mods_max", False)),
         )
 
     def criteria_count(self) -> int:
@@ -661,28 +708,50 @@ def save_rules(rules) -> None:
         ConsoleLog(MODULE_NAME, f"Could not save rules: {exc}", Console.MessageType.Error)
 
 
+def describe_verdict(rule, results) -> str:
+    return "%s: %s" % (
+        "ALL" if rule.match_all else "ANY",
+        ", ".join("%s=%s" % (label, "y" if ok else "n") for label, ok in results),
+    )
+
+
 def deposit_matches(rules, facts_by_id: dict) -> tuple[list[int], list[list[str]]]:
-    """Item ids a deposit rule claims and no keep rule vetoes, plus one table row per verdict."""
+    """Ids a deposit rule claims and no keep rule vetoes, plus one row for EVERY item.
+
+    Items that did NOT match are listed too, each with the breakdown of whichever deposit rule came
+    closest. An item you expected to be taken and was not is the case that needs explaining, and it
+    cannot explain itself if it has no row.
+    """
     keepers = [r for r in rules if r.enabled and r.keep]
     takers = [r for r in rules if r.enabled and not r.keep]
     matched: list[int] = []
     rows: list[list[str]] = []
+
     for item_id, facts in facts_by_id.items():
+        action = "-"
+        rule_name = ""
+        why = "no enabled deposit rule has criteria"
+
         kept = next((r for r in keepers if r.evaluate(facts)[0]), None)
         if kept is not None:
-            rows.append(["KEEP"] + facts_row(facts) + [display_safe(kept.name), ""])
-            continue
-        for rule in takers:
-            verdict, results = rule.evaluate(facts)
-            if not verdict:
-                continue
-            detail = "%s: %s" % (
-                "ALL" if rule.match_all else "ANY",
-                ", ".join("%s=%s" % (label, "y" if ok else "n") for label, ok in results),
-            )
-            rows.append(["TAKE"] + facts_row(facts) + [display_safe(rule.name), display_safe(detail)])
-            matched.append(item_id)
-            break
+            action, rule_name, why = "KEEP", kept.name, describe_verdict(kept, kept.evaluate(facts)[1])
+        else:
+            best_score = -1
+            for rule in takers:
+                verdict, results = rule.evaluate(facts)
+                if verdict:
+                    action, rule_name, why = "TAKE", rule.name, describe_verdict(rule, results)
+                    matched.append(item_id)
+                    break
+                score = sum(1 for _label, ok in results if ok)
+                if results and score > best_score:
+                    best_score = score
+                    rule_name, why = rule.name, describe_verdict(rule, results)
+
+        rows.append([action] + facts_row(facts) + [display_safe(rule_name), display_safe(why)])
+
+    order = {"TAKE": 0, "KEEP": 1, "-": 2}
+    rows.sort(key=lambda row: order.get(row[0], 3))
     return matched, rows
 
 
@@ -748,10 +817,19 @@ def slot_layout(bags) -> tuple[list[tuple[int, int]], list[int]]:
 
 
 def item_type_rank(item_id: int) -> int:
-    type_value = GLOBAL_CACHE.Item.GetItemType(item_id)[0]
-    if type_value in SORT_TYPE_ORDER:
-        return SORT_TYPE_ORDER.index(type_value)
-    return len(SORT_TYPE_ORDER) + type_value
+    type_value = int(GLOBAL_CACHE.Item.GetItemType(item_id)[0])
+    return TYPE_RANK.get(type_value, len(TYPE_RANK) + type_value)
+
+
+def sort_dye(item_id: int) -> int:
+    """Dye colour, but only for dyes.
+
+    `dye_color` returns the first non-zero modifier arg on ANY item, so using it as a sort key
+    everywhere would scatter weapons by an unrelated number.
+    """
+    if int(GLOBAL_CACHE.Item.GetItemType(item_id)[0]) != DYE_ITEM_TYPE:
+        return 0
+    return dye_color(item_id)
 
 
 def rarity_name(item_id: int) -> str:
@@ -840,23 +918,30 @@ def condense_stacks(layout):
                     break
 
 
+def sort_key(item_id: int) -> tuple:
+    """Type group, then rarity band inside it, then colour, model, size, worth.
+
+    Rarity sits ABOVE model id on purpose: within a weapon or armour group that bands greens, then
+    golds, purples and blues together, which is how you actually look for things.
+    """
+    if not item_id:
+        return (1,) + (0,) * 6
+    return (
+        0,
+        item_type_rank(item_id),
+        -int(GLOBAL_CACHE.Item.Rarity.GetRarity(item_id)[0] or 0),
+        sort_dye(item_id),
+        int(GLOBAL_CACHE.Item.GetModelID(item_id) or 0),
+        -int(GLOBAL_CACHE.Item.Properties.GetQuantity(item_id) or 0),
+        -int(GLOBAL_CACHE.Item.Properties.GetValue(item_id) or 0),
+    )
+
+
 def sort_slots(layout, bags):
-    """Reorder slots by type group, then model, quantity, rarity, value."""
+    """Reorder slots into the hardcoded organize order (see SORT_TYPE_ORDER and sort_key)."""
     positions, item_ids = layout
 
-    desired = sorted(
-        item_ids,
-        key=lambda item_id: (
-            item_id == 0,
-            item_type_rank(item_id) if item_id else 0,
-            GLOBAL_CACHE.Item.GetModelID(item_id) if item_id else 0,
-            -GLOBAL_CACHE.Item.Properties.GetQuantity(item_id) if item_id else 0,
-            -GLOBAL_CACHE.Item.Rarity.GetRarity(item_id)[0] if item_id else 0,
-            -GLOBAL_CACHE.Item.Properties.GetValue(item_id) if item_id else 0,
-            dye_color(item_id) if item_id else 0,
-            item_id,
-        ),
-    )
+    desired = sorted(item_ids, key=lambda item_id: sort_key(item_id) + (item_id,))
 
     for index, item_id in enumerate(desired):
         if item_id == 0 or item_ids[index] == item_id:
@@ -1343,6 +1428,14 @@ class InventoryLite:
                 if PyImGui.checkbox("max##%s" % key, on) != on:
                     setattr(rule, max_attribute, not on)
                     save_rules(self.rules)
+            # What the rule ACTUALLY holds, which is not the same as what is typed in the box: the
+            # value only reaches the rule when `set` is pressed, and an uncommitted edit is otherwise
+            # indistinguishable from a saved one.
+            stored = getattr(rule, attribute)
+            if stored:
+                PyImGui.text_colored("    saved: %s" % display_safe(", ".join(stored)), GRAY)
+            elif self.editing.get(key, "").strip():
+                PyImGui.text_colored("    not saved yet - press set", WARN)
 
         all_max = PyImGui.checkbox("Every mod on the item is max##allmax_%s" % tag, rule.all_mods_max)
         if all_max != rule.all_mods_max:
