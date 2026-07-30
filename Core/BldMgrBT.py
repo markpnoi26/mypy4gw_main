@@ -9,19 +9,19 @@ BuildCoroutine = Generator[Any, Any, Any]
 
 
 class BldMgrBT(CombatServices):
-    """Standalone base for BehaviorTree builds. Deliberately does not inherit
-    BuildMgr: the generator execution model is not the target architecture.
+    """The base for every build. Sits on CombatServices; the generator
+    execution model it replaced is gone.
 
     Provides build identity/matching (so BuildRegistry can discover and score
     BT builds), the fallback chain, and rotation-tree lifecycle. Subclasses
     override `build_rotation_tree()`; rotations that depend on live state also
     override `current_rotation_signature()` to trigger recompiles.
 
-    CombatServices is shared with BuildMgr, so the 69 modules under
-    Builds/Skills bind to a BT build through `self.build.<method>` unchanged.
+    CombatServices carries the shared cast/target surface, so the 69 modules
+    under Builds/Skills bind through `self.build.<method>` unchanged.
 
-    Fallback handlers are duck-typed, so a BT build may fall back to a legacy
-    BuildMgr build and vice versa.
+    Fallback handlers are duck-typed, so anything exposing the tick protocol
+    can serve as one.
     """
 
     is_build_type = True

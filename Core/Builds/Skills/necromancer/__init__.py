@@ -9,12 +9,12 @@ from .SoulReaping import SoulReaping as SoulReapingClass
 from .Curses import Curses as CursesClass
 
 if TYPE_CHECKING:
-    from Core.BuildMgr import BuildMgr
+    from Core.build_src.combat_services import CombatServices
 
 
 class NecromancerSkills:
-    def __init__(self, build: BuildMgr) -> None:
-        self.build: BuildMgr = build
+    def __init__(self, build: CombatServices) -> None:
+        self.build: CombatServices = build
         self.NoAttribute: NoAttributeClass = NoAttributeClass(build)
         self.BloodMagic: BloodMagicClass = BloodMagicClass(build)
         self.DeathMagic: DeathMagicClass = DeathMagicClass(build)

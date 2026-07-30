@@ -16,6 +16,7 @@ rule is reversed, its entry says so rather than being deleted.
 | [RS-004](#rs-004) | breakage outside a protected pack is a deprecation | active |
 | [RS-005](#rs-005) | packs cannot reach their own `lib/` | **OPEN — blocks 6 scripts** |
 | [RS-006](#rs-006) | the tier map is instruction, not reference | active |
+| [RS-007](#rs-007) | `BuildMgr` is retired; `BldMgrBT` is the only build base | active |
 
 ---
 
@@ -173,3 +174,61 @@ failures — the facade's eager 17-module `HeroAI` closure, and
 `Core/py4gwcorelib_src/AutoInventoryHandler.py` reaching into `dev/reference` —
 are Part 4's unfinished Move 2. Do not silence them; fix, or waive with a reason
 in `tier_map.toml`.
+
+## RS-007
+
+**`BuildMgr` is retired. `BldMgrBT` is the only build base class, and
+`Core/Builds/` keeps only the `Skills/` layer.**
+
+Upstream ships two execution models for the same rotations: `BuildMgr`, a
+generator ladder, and the behaviour-tree stack we built on top of
+`CombatServices`. Every rotation under `Core/Builds/<Profession>/` had a 1:1
+twin under `Core/BTBuilds/`, so the generator half was pure duplication — two
+files to keep in step for every skill-bar change, with only one of them ever
+ticked by HeroAI.
+
+*What went.* `Core/BuildMgr.py`, `Core/Builds/BuildTemplate.py`, and the
+profession subtrees `Any/ Assassin/ CombatAutomatorExcluded/ Dervish/
+Elementalist/ Mesmer/ Monk/ Necromancer/ Paragon/ Ranger/ Ritualist/ Warrior/`
+— 156 upstream files.
+
+*What survived, and where.*
+
+- `BuildRegistry`, `is_purpose_specific_build`, `FARM_BUILD_PACKAGE` →
+  `Core/build_src/build_registry.py`. Discovery keys on the `is_build_type`
+  class marker, never `issubclass`, so it never depended on `BuildMgr` in the
+  first place.
+- The `Callable` aliases `BuildCoroutine`, `BuildHandler`, `TargetPredicate`,
+  `CustomSkillMutator` → `Core/build_src/combat_services.py`, next to the
+  `CombatServices` base both engines already shared.
+- `LoadSkillBar` → `CombatServices`. It existed only on `BuildMgr` while four
+  protected-pack scripts called it through `bot.config.build_handler`.
+- `Core/Builds/Skills/**` — 69 modules, retargeted from `BuildMgr` hints to
+  `CombatServices`. `SkillsTemplate` subclassed `BuildMgr`; it now subclasses
+  `BldMgrBT` with `is_build_type = False`, so the registry stops instantiating
+  a container that was never a build.
+- `DervBoneFarmer` → `Core/BTBuilds/Dervish/D_A/` (already BT-native).
+  `DervDustFarmer` and `DervFeatherFarmer` → `dev/reference/buildmgr_builds/`,
+  kept as reading material for a rewrite rather than ported.
+
+*The fallback chain changed shape.* `Core/Builds/Any/HeroAI.py` held the tree's
+only `is_fallback_candidate=True` build, so `BuildRegistry.ResolveFallback` now
+always returns `None`. Nothing regressed: BT builds wire their fallback
+explicitly with `SetFallback("HeroAI", HeroAIBTEngine(...))`, and the seven that
+still named the generator build were switched over with the rest.
+
+*What knowingly broke.* Six deprecated-tier community-bots leaves —
+`OutpostRunnerV2`, the Barbarous Shore / Hells Precipice / Pongmei chestruns,
+and the legacy `YAVB` pair — were the sole consumers of
+`CombatAutomatorExcluded/`. Under [RS-004](#rs-004) they are deprecated rather
+than ported; the ledgers record them with origin `ours`.
+`Scripts/py4gw-marks-corner/DervDustFarm.py` and `DervFeatherFarm.py` carry
+dangling imports until their builds are rewritten — those are protected-pack
+files and therefore real bugs, deliberately accepted for the length of that
+rewrite.
+
+*Enforced by.* Five `dest = "drop"` rules in `tools/reforge/layout.toml`, each
+noting RS-007, plus the three Dervish `[[override]]` moves that outrank them.
+`Core/Builds/__init__.py` is emptied by overlay on `main` — the manifest cannot
+edit file contents, and the package must stay importable for
+`Core.Builds.Skills`.

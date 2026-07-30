@@ -2,21 +2,22 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from Core.BuildMgr import BuildCoroutine
+from Core.build_src.combat_services import BuildCoroutine
 from Core import Routines
 from Core.Agent import Agent
+from Core.Player import Player
 from Core.Skill import Skill
 
 if TYPE_CHECKING:
     from HeroAI.custom_skill_src.skill_types import CustomSkill
-    from Core.BuildMgr import BuildMgr
+    from Core.build_src.combat_services import CombatServices
 
 __all__ = ["ProtectionPrayers"]
 
 
 class ProtectionPrayers:
-    def __init__(self, build: BuildMgr) -> None:
-        self.build: BuildMgr = build
+    def __init__(self, build: CombatServices) -> None:
+        self.build: CombatServices = build
 
     def _resolve_precombat_melee_prebuff_target(self, skill_id: int, custom_skill: CustomSkill) -> int:
         """Pre-combat prebuff target for a self/ally enchantment.
@@ -114,20 +115,38 @@ class ProtectionPrayers:
     # endregion
 
     # region D
-    def Draw_Conditions(self) -> BuildCoroutine:
+    def Draw_Conditions(self, *, prioritize_blinded_martial: bool = False) -> BuildCoroutine:
         draw_conditions_id: int = Skill.GetID("Draw_Conditions")
         draw_conditions: CustomSkill = self.build.GetCustomSkill(draw_conditions_id)
+        blind_id: int = Skill.GetID("Blind")
+        player_id: int = Player.GetAgentID()
 
-        def _resolve_draw_conditions_target() -> int:
-            return self.build.ResolveAllyTarget(
+        def is_blinded_martial(agent_id: int) -> bool:
+            return Routines.Checks.Agents.IsMartial(agent_id) and Routines.Checks.Agents.HasEffect(agent_id, blind_id)
+
+        def resolve_draw_conditions_target() -> int:
+            if not prioritize_blinded_martial:
+                return self.build.ResolveAllyTarget(
+                    draw_conditions_id,
+                    draw_conditions,
+                )
+            return self.build.ResolveRankedPartyAllyTarget(
                 draw_conditions_id,
                 draw_conditions,
+                validator=lambda agent_id: (agent_id != player_id and Routines.Checks.Agents.IsConditioned(agent_id)),
+                rank_key=lambda agent_id: (
+                    0 if is_blinded_martial(agent_id) else 1,
+                    Agent.GetHealth(agent_id),
+                ),
             )
 
         if not self.build.IsSkillEquipped(draw_conditions_id):
             return False
 
-        target_agent_id = _resolve_draw_conditions_target()
+        target_agent_id = resolve_draw_conditions_target()
+        if not target_agent_id:
+            return False
+
         return (
             yield from self.build.CastSkillIDAndRestoreTarget(
                 draw_conditions_id,

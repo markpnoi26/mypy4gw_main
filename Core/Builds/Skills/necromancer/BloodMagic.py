@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from Core.BuildMgr import BuildCoroutine
+from Core.build_src.combat_services import BuildCoroutine
 from Core import Range, Routines, ThrottledTimer
 from Core.Agent import Agent
 from Core.GlobalCache.WhiteboardLocks import (
@@ -15,14 +15,14 @@ from Core.Skill import Skill
 
 if TYPE_CHECKING:
     from HeroAI.custom_skill_src.skill_types import CustomSkill
-    from Core.BuildMgr import BuildMgr
+    from Core.build_src.combat_services import CombatServices
 
 __all__ = ["BloodMagic"]
 
 
 class BloodMagic:
-    def __init__(self, build: BuildMgr) -> None:
-        self.build: BuildMgr = build
+    def __init__(self, build: CombatServices) -> None:
+        self.build: CombatServices = build
         self.bip_throttle: ThrottledTimer = ThrottledTimer(1500)
         self.bip_throttle.Stop()
         self.blood_ritual_throttle: ThrottledTimer = ThrottledTimer(1500)

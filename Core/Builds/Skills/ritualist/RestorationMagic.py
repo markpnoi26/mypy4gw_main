@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import TYPE_CHECKING
 
-from Core.BuildMgr import BuildCoroutine
+from Core.build_src.combat_services import BuildCoroutine
 from Core import Range, Routines
 from Core.Agent import Agent
 from Core.Player import Player
@@ -12,14 +12,14 @@ from HeroAI.types import Skilltarget
 
 if TYPE_CHECKING:
     from HeroAI.custom_skill_src.skill_types import CustomSkill
-    from Core.BuildMgr import BuildMgr
+    from Core.build_src.combat_services import CombatServices
 
 __all__ = ["RestorationMagic"]
 
 
 class RestorationMagic:
-    def __init__(self, build: BuildMgr) -> None:
-        self.build: BuildMgr = build
+    def __init__(self, build: CombatServices) -> None:
+        self.build: CombatServices = build
 
     def _has_spirit_in_earshot(self) -> bool:
         return bool(Routines.Agents.GetNearestSpirit(Range.Earshot.value))
@@ -274,7 +274,7 @@ class RestorationMagic:
         #                               burning / degen hex).
         #   `min_party_damaged_count` - N allies in Spirit range below 75% HP.
         # HP-aware recast (spirit at < 20% HP) is enforced by
-        # BuildMgr.SpiritBuffExists via the Recuperation custom-skill metadata
+        # CombatServices.SpiritBuffExists via the Recuperation custom-skill metadata
         # (Conditions.AllowRecastAtLife = 0.20).
         if min_degen_count > 0:
             if self._count_allies_suffering_degen() < min_degen_count:

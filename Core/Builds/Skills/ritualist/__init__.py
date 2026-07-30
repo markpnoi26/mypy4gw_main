@@ -9,12 +9,12 @@ from .ChannelingMagic import ChannelingMagic as ChannelingMagicClass
 from .SpawningPower import SpawningPower as SpawningPowerClass
 
 if TYPE_CHECKING:
-    from Core.BuildMgr import BuildMgr
+    from Core.build_src.combat_services import CombatServices
 
 
 class RitualistSkills:
-    def __init__(self, build: BuildMgr) -> None:
-        self.build: BuildMgr = build
+    def __init__(self, build: CombatServices) -> None:
+        self.build: CombatServices = build
         self.NoAttribute: NoAttributeClass = NoAttributeClass(build)
         self.Communing: CommuningClass = CommuningClass(build)
         self.RestorationMagic: RestorationMagicClass = RestorationMagicClass(build)

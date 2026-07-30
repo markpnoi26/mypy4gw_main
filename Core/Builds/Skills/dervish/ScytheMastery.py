@@ -4,17 +4,17 @@ from typing import TYPE_CHECKING
 
 from Core import GLOBAL_CACHE, Range, Routines, Utils
 from Core.Agent import Agent
-from Core.BuildMgr import BuildCoroutine
+from Core.build_src.combat_services import BuildCoroutine
 from Core.Player import Player
 from Core.Skill import Skill
 
 if TYPE_CHECKING:
-    from Core.BuildMgr import BuildMgr
+    from Core.build_src.combat_services import CombatServices
 
 
 class ScytheMastery:
-    def __init__(self, build: BuildMgr) -> None:
-        self.build: BuildMgr = build
+    def __init__(self, build: CombatServices) -> None:
+        self.build: CombatServices = build
 
     def Count_Active_Dervish_Enchantments(self, skill_ids: tuple[int, ...] | None = None) -> int:
         player_agent_id = Player.GetAgentID()

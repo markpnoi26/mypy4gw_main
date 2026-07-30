@@ -2,18 +2,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from Core.BuildMgr import BuildCoroutine
+from Core.build_src.combat_services import BuildCoroutine
 from Core.Skill import Skill
 
 if TYPE_CHECKING:
-    from Core.BuildMgr import BuildMgr
+    from Core.build_src.combat_services import CombatServices
 
 __all__ = ["AxeMastery"]
 
 
 class AxeMastery:
-    def __init__(self, build: BuildMgr) -> None:
-        self.build: BuildMgr = build
+    def __init__(self, build: CombatServices) -> None:
+        self.build: CombatServices = build
 
     def _resolve_axe_target(self, skill_id: int) -> int:
         if not self.build.CanCastSkillID(skill_id):

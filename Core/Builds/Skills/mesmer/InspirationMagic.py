@@ -2,18 +2,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from Core.BuildMgr import BuildCoroutine
+from Core.build_src.combat_services import BuildCoroutine
 from Core.Skill import Skill
 from Core.Builds.Skills._whiteboard import coordinates_whiteboard_skill_target
 
 if TYPE_CHECKING:
     from HeroAI.custom_skill_src.skill_types import CustomSkill
-    from Core.BuildMgr import BuildMgr
+    from Core.build_src.combat_services import CombatServices
 
 
 class InspirationMagic:
-    def __init__(self, build: BuildMgr) -> None:
-        self.build: BuildMgr = build
+    def __init__(self, build: CombatServices) -> None:
+        self.build: CombatServices = build
 
     def Hex_Eater_Signet(self) -> BuildCoroutine:
         hex_eater_signet_id: int = Skill.GetID("Hex_Eater_Signet")

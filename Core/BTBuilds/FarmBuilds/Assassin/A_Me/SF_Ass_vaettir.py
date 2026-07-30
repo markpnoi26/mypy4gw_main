@@ -15,13 +15,12 @@ four ways that together rule out a rung-by-rung Selector:
    SetRoutineFinished() and SetStuckSignal(). None of that state exists in a
    HeroAI party context, so contract matching must never select this build.
    Location under FarmBuilds enforces that structurally — see
-   BuildMgr.is_purpose_specific_build.
+   build_registry.is_purpose_specific_build.
 
-   NOTE: the legacy build carries NO is_combat_automator_compatible=False flag,
-   so today it IS contract-matchable. A HeroAI account holding a Shadow Form
-   bar can match it and start running a Vaettir routine mid-party. Moving it
-   here fixes that for the BT engine. The legacy file is untouched and still
-   carries the bug for the legacy engine.
+   NOTE: this build carries NO is_combat_automator_compatible=False flag, so
+   location is the only thing keeping it out of contract matching. A HeroAI
+   account holding a Shadow Form bar would otherwise match it and start
+   running a Vaettir routine mid-party.
 
 2. IT IS MAP-GATED AND RETURNS EARLY.
    Outside Jaga Moraine the routine runs a *different, shorter* body

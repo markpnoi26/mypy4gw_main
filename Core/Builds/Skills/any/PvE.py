@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from Core.BuildMgr import BuildCoroutine
+from Core.build_src.combat_services import BuildCoroutine
 from Core import Effects, GLOBAL_CACHE, ModelID, Player, Range, Routines
 from Core.Skill import Skill
 from Core.Builds.Skills._whiteboard import coordinates_whiteboard_skill_target
 
 if TYPE_CHECKING:
-    from Core.BuildMgr import BuildMgr
+    from Core.build_src.combat_services import CombatServices
 
 __all__ = ["PvE"]
 
@@ -36,8 +36,8 @@ ALCOHOL_MODEL_IDS = (
 
 
 class PvE:
-    def __init__(self, build: BuildMgr) -> None:
-        self.build: BuildMgr = build
+    def __init__(self, build: CombatServices) -> None:
+        self.build: CombatServices = build
 
     def _get_drunk_level(self) -> int:
         try:

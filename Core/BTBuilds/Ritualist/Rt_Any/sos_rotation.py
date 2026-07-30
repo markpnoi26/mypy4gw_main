@@ -10,10 +10,10 @@ from dataclasses import dataclass
 from Core import Agent
 from Core import Player
 from Core import Routines
-from Core.Builds.Any.HeroAI import HeroAI as HeroAIBuild
 from Core.Builds.Skills import SkillsTemplate
 from Core.py4gwcorelib_src.BehaviorTree import BehaviorTree
 from Core.Skill import Skill
+from HeroAI.bt.bt_engine import HeroAIBTEngine
 
 from ...nodes import cast
 from ...nodes import cond
@@ -63,7 +63,7 @@ class SoSSpiritSpammerBarSnapshot:
 
 class SoSRotationMixin:
     def configure_rotation(self) -> None:
-        self.SetFallback("HeroAI", HeroAIBuild(standalone_fallback=True))
+        self.SetFallback("HeroAI", HeroAIBTEngine(standalone_fallback=True))
         self.SetBlockedSkills(list(SOS_BLOCKED_SKILLS))
         self.skills: SkillsTemplate = SkillsTemplate(self)
 

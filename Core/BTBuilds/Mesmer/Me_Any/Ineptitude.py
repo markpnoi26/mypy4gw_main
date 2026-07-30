@@ -7,10 +7,10 @@ a duplicate Signet_of_Clumsiness) are not carried over.
 from dataclasses import dataclass
 
 from Core import BldMgrBT, Profession, Range, Routines
-from Core.Builds.Any.HeroAI import HeroAI as HeroAIBuild
 from Core.Builds.Skills import SkillsTemplate
 from Core.Skill import Skill
 from Core.py4gwcorelib_src.BehaviorTree import BehaviorTree
+from HeroAI.bt.bt_engine import HeroAIBTEngine
 
 from ...nodes import cast, cond, guarded_cast, rotation_tree, selector, sequence
 
@@ -57,7 +57,7 @@ class Ineptitude(BldMgrBT):
         if match_only:
             return
 
-        self.SetFallback("HeroAI", HeroAIBuild(standalone_fallback=True))
+        self.SetFallback("HeroAI", HeroAIBTEngine(standalone_fallback=True))
         self.skills: SkillsTemplate = SkillsTemplate(self)
 
     def get_bar_snapshot(self) -> IneptitudeBarSnapshot:

@@ -11,12 +11,12 @@ from dataclasses import dataclass
 
 from Core import Agent, BldMgrBT, Player, Profession, Range, Routines
 from Core.AgentArray import AgentArray
-from Core.Builds.Any.HeroAI import HeroAI as HeroAIBuild
 from Core.Builds.Skills import SkillsTemplate
 from Core.GlobalCache import GLOBAL_CACHE
 from Core.Py4GWcorelib import Utils
 from Core.Skill import Skill
 from Core.py4gwcorelib_src.BehaviorTree import BehaviorTree
+from HeroAI.bt.bt_engine import HeroAIBTEngine
 
 from ...nodes import cast, cond, guarded_cast, rotation_tree
 
@@ -134,7 +134,7 @@ class Psychic_Instability_Wastrels(BldMgrBT):
         self.wastrels_demise_last_cast: dict[int, float] = {}
         self.wastrels_worry_last_cast: dict[int, float] = {}
 
-        self.SetFallback("HeroAI", HeroAIBuild(standalone_fallback=True))
+        self.SetFallback("HeroAI", HeroAIBTEngine(standalone_fallback=True))
         self.SetBlockedSkills(
             [
                 Psychic_Instability_ID,

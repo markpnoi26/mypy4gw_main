@@ -6,7 +6,7 @@ Owns the per-frame cast sampler, the interrupt classifier (driven by
 
 Consumed by two evaluators:
 * ``HeroAI/combat.py`` ``AreCastConditionsMet`` — data-driven (unmatched bar).
-* ``Core/BuildMgr.py`` ``CastSkillID`` — matched-build choke point.
+* ``Core/build_src/combat_services.py`` ``CastSkillID`` — matched-build choke point.
 """
 
 from __future__ import annotations

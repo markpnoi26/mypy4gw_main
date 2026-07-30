@@ -9,12 +9,12 @@ from .WildernessSurvival import WildernessSurvival as WildernessSurvivalClass
 from .Marksmanship import Marksmanship as MarksmanshipClass
 
 if TYPE_CHECKING:
-    from Core.BuildMgr import BuildMgr
+    from Core.build_src.combat_services import CombatServices
 
 
 class RangerSkills:
-    def __init__(self, build: BuildMgr) -> None:
-        self.build: BuildMgr = build
+    def __init__(self, build: CombatServices) -> None:
+        self.build: CombatServices = build
         self.NoAttribute: NoAttributeClass = NoAttributeClass(build)
         self.BeastMastery: BeastMasteryClass = BeastMasteryClass(build)
         self.Expertise: ExpertiseClass = ExpertiseClass(build)

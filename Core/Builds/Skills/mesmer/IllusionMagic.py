@@ -4,18 +4,18 @@ from typing import TYPE_CHECKING
 
 from HeroAI.targeting import TargetCasterClusterEnemy, TargetMeleeOrMartialClusterEnemy
 from Core import Routines
-from Core.BuildMgr import BuildCoroutine
+from Core.build_src.combat_services import BuildCoroutine
 from Core.Skill import Skill
 
 if TYPE_CHECKING:
-    from Core.BuildMgr import BuildMgr
+    from Core.build_src.combat_services import CombatServices
 
 __all__ = ["IllusionMagic"]
 
 
 class IllusionMagic:
-    def __init__(self, build: BuildMgr) -> None:
-        self.build: BuildMgr = build
+    def __init__(self, build: CombatServices) -> None:
+        self.build: CombatServices = build
 
     # region A
     def Arcane_Conundrum(self) -> BuildCoroutine:

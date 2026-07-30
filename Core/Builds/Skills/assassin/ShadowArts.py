@@ -2,21 +2,21 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from Core.BuildMgr import BuildCoroutine
+from Core.build_src.combat_services import BuildCoroutine
 from Core import Range, Routines, Utils
 from Core.Agent import Agent
 from Core.Player import Player
 from Core.Skill import Skill
 
 if TYPE_CHECKING:
-    from Core.BuildMgr import BuildMgr
+    from Core.build_src.combat_services import CombatServices
 
 __all__ = ["ShadowArts"]
 
 
 class ShadowArts:
-    def __init__(self, build: BuildMgr) -> None:
-        self.build: BuildMgr = build
+    def __init__(self, build: CombatServices) -> None:
+        self.build: CombatServices = build
 
     # region D
     def Deaths_Charge(self, *, min_distance: float = 500.0) -> BuildCoroutine:

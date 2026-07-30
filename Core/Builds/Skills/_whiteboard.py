@@ -9,7 +9,7 @@ A skill participates in whiteboard coordination when any of:
 - its CustomSkill metadata has ``CoordinatesViaWhiteboard = True``, OR
 - it is registered here via :func:`register` or ``@coordinates_whiteboard_skill_target``.
 
-The combat loop (``BuildMgr._is_whiteboard_skill``) unions the two surfaces,
+The combat loop (``CombatServices._is_whiteboard_skill``) unions the two surfaces,
 so a skill module under ``Core/Builds/Skills/**`` can opt in
 without touching HeroAI's custom-skill table.
 """

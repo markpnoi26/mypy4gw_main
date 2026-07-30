@@ -9,12 +9,12 @@ from .ShadowArts import ShadowArts as ShadowArtsClass
 from .CriticalStrikes import CriticalStrikes as CriticalStrikesClass
 
 if TYPE_CHECKING:
-    from Core.BuildMgr import BuildMgr
+    from Core.build_src.combat_services import CombatServices
 
 
 class AssassinSkills:
-    def __init__(self, build: BuildMgr) -> None:
-        self.build: BuildMgr = build
+    def __init__(self, build: CombatServices) -> None:
+        self.build: CombatServices = build
         self.NoAttribute: NoAttributeClass = NoAttributeClass(build)
         self.DaggerMastery: DaggerMasteryClass = DaggerMasteryClass(build)
         self.DeadlyArts: DeadlyArtsClass = DeadlyArtsClass(build)

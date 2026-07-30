@@ -7,10 +7,10 @@ seed_blackboard, read by every conditional rung.
 from dataclasses import dataclass
 
 from Core import Agent, BldMgrBT, Player, Profession, Range, Routines
-from Core.Builds.Any.HeroAI import HeroAI as HeroAIBuild
 from Core.Builds.Skills import HexRemovalPriority, SkillsTemplate
 from Core.Skill import Skill
 from Core.py4gwcorelib_src.BehaviorTree import BehaviorTree
+from HeroAI.bt.bt_engine import HeroAIBTEngine
 
 from ...nodes import cast, cond, guarded_cast, rotation_tree, selector, sequence
 
@@ -70,7 +70,7 @@ class Panic(BldMgrBT):
         if match_only:
             return
 
-        self.SetFallback("HeroAI", HeroAIBuild(standalone_fallback=True))
+        self.SetFallback("HeroAI", HeroAIBTEngine(standalone_fallback=True))
         self.SetBlockedSkills(
             [
                 Air_of_Superiority_ID,

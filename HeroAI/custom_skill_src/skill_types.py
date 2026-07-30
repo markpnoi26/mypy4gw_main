@@ -72,7 +72,7 @@ class CastConditions:
         self.PartyWideArea = 0
         self.UniqueProperty = False
         self.IsOutOfCombat = False
-        # Spirit skills: when > 0, BuildMgr.SpiritBuffExists treats an existing
+        # Spirit skills: when > 0, CombatServices.SpiritBuffExists treats an existing
         # spirit of this skill as absent once its HP drops below this fraction,
         # allowing a preemptive recast before the spirit dies. 0.0 = disabled
         # (default), matches the pre-change binary alive/dead gate.

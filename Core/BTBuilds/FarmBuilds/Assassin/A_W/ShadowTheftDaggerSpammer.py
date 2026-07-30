@@ -50,8 +50,6 @@ deliberate behaviour change: legacy crashed on swap, this does not. If the farm
 script was silently relying on those crashes (unlikely, but it is your farm),
 that is the thing to check first when comparing runs.
 
-The legacy file is untouched and still carries the bug.
-
 -----------------------------------------------------------------------------
 `self.priority_target` NOTE
 -----------------------------------------------------------------------------

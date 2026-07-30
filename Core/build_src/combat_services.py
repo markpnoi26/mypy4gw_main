@@ -690,6 +690,23 @@ class CombatServices:
             return 0.0
         return float(self._party_health_monitor.get(agent_id, {}).get("drop", 0.0))
 
+    def GetPartyHealthDeltaAverage(self) -> float:
+        """Mean health drop across tracked living allies — the party's overall damage intake.
+
+        Untouched allies count as 0.0, so this is the baseline a focused target is
+        measured against, not the average among those already taking damage.
+        """
+        from Core import Routines
+
+        drops = [
+            float(state.get("drop", 0.0))
+            for agent_id, state in self._party_health_monitor.items()
+            if Routines.Checks.Agents.IsAlive(agent_id)
+        ]
+        if not drops:
+            return 0.0
+        return sum(drops) / float(len(drops))
+
     def GetPartySpikeCandidates(
         self,
         *,
@@ -1315,7 +1332,7 @@ class CombatServices:
         if skill_id <= 0:
             return False
         # Lazy import — avoid a circular load of the Builds package during
-        # BuildMgr's own module initialization.
+        # CombatServices' own module initialization.
         try:
             from Core.Builds.Skills._whiteboard import is_registered as _wb_is_registered
 
@@ -1529,7 +1546,7 @@ class CombatServices:
         # Interrupt feasibility gate — only for skills classified as
         # SkillNature.Interrupt in HeroAI/custom_skill_src/. Non-interrupts
         # short-circuit on the registry lookup with zero further work.
-        # Lazy import keeps BuildMgr independent at module load; HeroAI
+        # Lazy import keeps CombatServices independent at module load; HeroAI
         # pushes the gate down via the registry.
         try:
             from HeroAI.interrupt import (

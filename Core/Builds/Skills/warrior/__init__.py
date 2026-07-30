@@ -10,12 +10,12 @@ from .Swordsmanship import Swordsmanship as SwordsmanshipClass
 from .Tactics import Tactics as TacticsClass
 
 if TYPE_CHECKING:
-    from Core.BuildMgr import BuildMgr
+    from Core.build_src.combat_services import CombatServices
 
 
 class WarriorSkills:
-    def __init__(self, build: BuildMgr) -> None:
-        self.build: BuildMgr = build
+    def __init__(self, build: CombatServices) -> None:
+        self.build: CombatServices = build
         self.NoAttribute: NoAttributeClass = NoAttributeClass(build)
         self.Strength: StrengthClass = StrengthClass(build)
         self.AxeMastery: AxeMasteryClass = AxeMasteryClass(build)

@@ -1,21 +1,20 @@
-"""BT port of Builds/Any/Any_Dhuum.py.
+"""BT port of the Dhuum utility build.
 
-`_DhuumModeTracker` (~180 lines of Reaper detection and shared-mode debouncing)
-is imported from the legacy module rather than duplicated. It holds class-level
-shared state, so a second copy would split the mode between engines and could
-desync Dhuum's Rest / Ghostly Fury across a party running both.
+`_DhuumModeTracker` sits in its own module because it holds class-level shared
+state: a second copy would split the mode and desync Dhuum's Rest / Ghostly Fury
+across a party.
 
 The mode flags are read once per tick into the blackboard, matching the legacy
 ladder which computed them once per pass.
 """
 
 from Core import BldMgrBT, Profession, Routines, Skill
-from Core.Builds.Any.Any_Dhuum import _DhuumModeTracker
 from Core.Builds.Skills.any.PvE import PvE
 from Core.py4gwcorelib_src.BehaviorTree import BehaviorTree
 from HeroAI.bt.bt_engine import HeroAIBTEngine
 
 from ..nodes import cast, cond, guarded_cast, rotation_tree
+from .dhuum_mode import _DhuumModeTracker
 
 
 def resolve_skill_id(names: tuple[str, ...], fallback: int = 0) -> int:

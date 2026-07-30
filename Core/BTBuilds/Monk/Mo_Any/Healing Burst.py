@@ -1,8 +1,12 @@
 """BT port of Builds/Monk/Mo_Any/Healing Burst.py.
 
 Sibling of the Martyr port: same snapshot-driven shape, with Healing Burst in
-place of Martyr as the priority-1 heal and the aggro gate applying only to the
-trailing Vigorous Spirit rung.
+place of Martyr as the priority-1 heal. The aggro gate applies to both Draw
+Conditions rungs and to the trailing Vigorous Spirit rung.
+
+seed_blackboard samples the party health monitor every tick — Seed of Life reads
+incoming damage off it, and the accumulator is only meaningful if it is sampled
+whether or not the rung is reached.
 """
 
 from dataclasses import dataclass
@@ -28,6 +32,11 @@ Draw_Conditions_ID = Skill.GetID("Draw_Conditions")
 Vigorous_Spirit_ID = Skill.GetID("Vigorous_Spirit")
 Remove_Hex_ID = Skill.GetID("Remove_Hex")
 Cure_Hex_ID = Skill.GetID("Cure_Hex")
+Blind_ID = Skill.GetID("Blind")
+
+PARTY_HEALTH_SAMPLE_MS = 150
+PARTY_HEALTH_WINDOW_MS = 1000
+SEED_SPIKE_DROP_FLOOR = 0.08
 
 
 @dataclass(slots=True)
@@ -35,7 +44,9 @@ class RequiredSupportSnapshot:
     healing_burst_needed: bool = False
     dwaynas_kiss_needed: bool = False
     seed_of_life_needed: bool = False
+    seed_of_life_spike_needed: bool = False
     draw_conditions_needed: bool = False
+    draw_conditions_blinded_martial: bool = False
 
     @property
     def any_required_support_needed(self) -> bool:
@@ -43,7 +54,9 @@ class RequiredSupportSnapshot:
             self.healing_burst_needed
             or self.dwaynas_kiss_needed
             or self.seed_of_life_needed
+            or self.seed_of_life_spike_needed
             or self.draw_conditions_needed
+            or self.draw_conditions_blinded_martial
         )
 
 
@@ -72,6 +85,10 @@ class Healing_Burst(BldMgrBT):
         self.skills: SkillsTemplate = SkillsTemplate(self)
 
     def seed_blackboard(self, blackboard: dict) -> None:
+        self.UpdatePartyHealthMonitor(
+            sample_interval_ms=PARTY_HEALTH_SAMPLE_MS,
+            window_ms=PARTY_HEALTH_WINDOW_MS,
+        )
         blackboard["healing_burst_snapshot"] = self.get_required_support_snapshot()
         blackboard["healing_burst_energy_pct"] = float(Agent.GetEnergy(Player.GetAgentID()))
 
@@ -109,8 +126,19 @@ class Healing_Burst(BldMgrBT):
                 guarded_cast(
                     self,
                     "SeedOfLife",
-                    lambda node: self.snapshot(node).seed_of_life_needed,
-                    lambda: monk().NoAttribute.Seed_of_Life(),
+                    lambda node: (
+                        self.snapshot(node).seed_of_life_needed or self.snapshot(node).seed_of_life_spike_needed
+                    ),
+                    lambda: monk().NoAttribute.Seed_of_Life(
+                        rank_by_relative_spike=True,
+                        drop_threshold=SEED_SPIKE_DROP_FLOOR,
+                    ),
+                ),
+                guarded_cast(
+                    self,
+                    "DrawConditionsBlind",
+                    lambda node: self.IsInAggro() and self.snapshot(node).draw_conditions_blinded_martial,
+                    lambda: monk().ProtectionPrayers.Draw_Conditions(prioritize_blinded_martial=True),
                 ),
                 guarded_cast(
                     self,
@@ -127,7 +155,7 @@ class Healing_Burst(BldMgrBT):
                 guarded_cast(
                     self,
                     "DrawConditions",
-                    lambda node: self.snapshot(node).draw_conditions_needed,
+                    lambda node: self.IsInAggro() and self.snapshot(node).draw_conditions_needed,
                     lambda: monk().ProtectionPrayers.Draw_Conditions(),
                 ),
                 guarded_cast(
@@ -215,6 +243,14 @@ class Healing_Burst(BldMgrBT):
                 if health <= max_any_ally_heal_threshold:
                     snapshot.healing_burst_needed = True
 
+            if (
+                is_other_ally
+                and not snapshot.seed_of_life_spike_needed
+                and seed_of_life is not None
+                and self.GetPartyHealthDelta(agent_id) >= SEED_SPIKE_DROP_FLOOR
+            ):
+                snapshot.seed_of_life_spike_needed = True
+
             if is_other_ally and max_other_ally_heal_threshold > 0 and health <= max_other_ally_heal_threshold:
                 if not snapshot.dwaynas_kiss_needed and dwaynas_kiss_threshold > 0 and health <= dwaynas_kiss_threshold:
                     snapshot.dwaynas_kiss_needed = True
@@ -222,19 +258,23 @@ class Healing_Burst(BldMgrBT):
                 if not snapshot.seed_of_life_needed and seed_of_life_threshold > 0 and health <= seed_of_life_threshold:
                     snapshot.seed_of_life_needed = True
 
-            if (
-                is_other_ally
-                and not snapshot.draw_conditions_needed
-                and draw_conditions is not None
-                and draw_conditions.Conditions.HasCondition
-            ):
-                if Routines.Checks.Agents.IsConditioned(agent_id):
+            if is_other_ally and draw_conditions is not None and Routines.Checks.Agents.IsConditioned(agent_id):
+                if not snapshot.draw_conditions_needed and draw_conditions.Conditions.HasCondition:
                     snapshot.draw_conditions_needed = True
+
+                if (
+                    not snapshot.draw_conditions_blinded_martial
+                    and Routines.Checks.Agents.IsMartial(agent_id)
+                    and Routines.Checks.Agents.HasEffect(agent_id, Blind_ID)
+                ):
+                    snapshot.draw_conditions_blinded_martial = True
 
             if (
                 snapshot.healing_burst_needed
                 and snapshot.dwaynas_kiss_needed
+                and snapshot.seed_of_life_spike_needed
                 and snapshot.draw_conditions_needed
+                and snapshot.draw_conditions_blinded_martial
                 and (not needs_seed_party_average or snapshot.seed_of_life_needed is False)
             ):
                 if not needs_seed_party_average:

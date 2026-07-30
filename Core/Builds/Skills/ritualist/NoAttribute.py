@@ -2,20 +2,20 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from Core.BuildMgr import BuildCoroutine
+from Core.build_src.combat_services import BuildCoroutine
 from Core import Range, Routines
 from Core.Agent import Agent
 from Core.Player import Player
 
 if TYPE_CHECKING:
-    from Core.BuildMgr import BuildMgr
+    from Core.build_src.combat_services import CombatServices
 
 __all__ = ["NoAttribute"]
 
 
 class NoAttribute:
-    def __init__(self, build: BuildMgr) -> None:
-        self.build: BuildMgr = build
+    def __init__(self, build: CombatServices) -> None:
+        self.build: CombatServices = build
 
     # region D
     def Drop_Held_Bundle(
@@ -67,7 +67,7 @@ class NoAttribute:
             return False
 
         drop_buttons[0].click()
-        # FrameClick isn't a CastSkillID-style cast, so BuildMgr's per-tick
+        # FrameClick isn't a CastSkillID-style cast, so CombatServices' per-tick
         # aftercast timer isn't stamped automatically. Mark it manually so the
         # next tick doesn't fire another action while the engine is still
         # processing the drop. Stamp BEFORE yielding so the outer loop sees

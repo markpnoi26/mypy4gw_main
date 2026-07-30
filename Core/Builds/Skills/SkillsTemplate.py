@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from Core import BuildMgr, Profession
+from Core import Profession
+from Core.BldMgrBT import BldMgrBT
+from Core.build_src.combat_services import CombatServices
 
 from .any import AnySkills
 from .warrior import WarriorSkills
@@ -15,7 +17,7 @@ from .paragon import ParagonSkills
 from .dervish import DervishSkills
 
 
-class SkillsTemplate(BuildMgr):
+class SkillsTemplate(BldMgrBT):
     """
     Root scaffold for shared build-skill modules.
 
@@ -23,7 +25,9 @@ class SkillsTemplate(BuildMgr):
     a NoAttribute bucket for profession-specific untyped skills.
     """
 
-    def __init__(self, owner: BuildMgr | None = None, match_only: bool = False):
+    is_build_type = False
+
+    def __init__(self, owner: CombatServices | None = None, match_only: bool = False):
         super().__init__(
             name="Skills",
             required_primary=Profession._None,
@@ -36,7 +40,7 @@ class SkillsTemplate(BuildMgr):
         if match_only:
             return
 
-        self.owner: BuildMgr = owner if owner is not None else self
+        self.owner: CombatServices = owner if owner is not None else self
         self.Any: AnySkills = AnySkills(self.owner)
         self.Warrior: WarriorSkills = WarriorSkills(self.owner)
         self.Ranger: RangerSkills = RangerSkills(self.owner)

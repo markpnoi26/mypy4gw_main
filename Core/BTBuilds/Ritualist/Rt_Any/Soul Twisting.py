@@ -11,11 +11,11 @@ from Core import BldMgrBT
 from Core import Player
 from Core import Profession
 from Core import Routines
-from Core.Builds.Any.HeroAI import HeroAI as HeroAIBuild
 from Core.Builds.Skills import HexRemovalPriority
 from Core.Builds.Skills import SkillsTemplate
 from Core.py4gwcorelib_src.BehaviorTree import BehaviorTree
 from Core.Skill import Skill
+from HeroAI.bt.bt_engine import HeroAIBTEngine
 
 from ...nodes import cast
 from ...nodes import cond
@@ -79,7 +79,7 @@ class Soul_Twisting(BldMgrBT):
         if match_only:
             return
 
-        self.SetFallback("HeroAI", HeroAIBuild(standalone_fallback=True))
+        self.SetFallback("HeroAI", HeroAIBTEngine(standalone_fallback=True))
         self.SetBlockedSkills(
             [
                 Soul_Twisting_ID,

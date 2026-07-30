@@ -2,19 +2,19 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from Core.BuildMgr import BuildCoroutine
+from Core.build_src.combat_services import BuildCoroutine
 from Core import GLOBAL_CACHE, Player, Routines
 from Core.Skill import Skill
 
 if TYPE_CHECKING:
-    from Core.BuildMgr import BuildMgr
+    from Core.build_src.combat_services import CombatServices
 
 __all__ = ["SpawningPower"]
 
 
 class SpawningPower:
-    def __init__(self, build: BuildMgr) -> None:
-        self.build: BuildMgr = build
+    def __init__(self, build: CombatServices) -> None:
+        self.build: CombatServices = build
 
     def _maintain_self_effect(self, skill_id: int, renew_before_ms: int = 200) -> BuildCoroutine:
         player_agent_id = Player.GetAgentID()
