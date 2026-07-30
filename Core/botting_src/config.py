@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 from ..SkillManager import SkillManager
 from ..Py4GWcorelib import FSM
-from ..BuildMgr import BuildMgr
+from ..build_src.combat_services import CombatServices
 from .property import StepNameCounters, UpkeepData, ConfigProperties
 from .event import Events
 
@@ -99,7 +99,7 @@ class BotConfig:
         identify_kits_restock: int = 2,
         salvage_kits_active: bool = False,
         salvage_kits_restock: int = 4,
-        custom_build: Optional[BuildMgr] = None,
+        custom_build: Optional[CombatServices] = None,
     ):
         self.parent: "BottingClass" = parent
         self.bot_name: str = bot_name
@@ -110,12 +110,9 @@ class BotConfig:
         self.fsm_running: bool = False
         self.state_description: str = "Idle"
         self.state_percentage: float = 0.0
-        if custom_build is not None:
-            self.build_handler: BuildMgr = custom_build
-        else:
-            self.build_handler: BuildMgr = BuildMgr()
+        self.build_handler: Optional[CombatServices] = custom_build
 
-        if not self.build_handler.is_combat_automator_compatible:
+        if self.build_handler is not None and not self.build_handler.is_combat_automator_compatible:
             build_ticker_active = True
             hero_ai_active = False
 

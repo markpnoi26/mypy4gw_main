@@ -865,7 +865,7 @@ class HeroAI_BaseUI:
     @staticmethod
     def _get_build_registry():
         if HeroAI_BaseUI._build_registry is None:
-            from Core.BuildMgr import BuildRegistry
+            from Core.build_src.build_registry import BuildRegistry
 
             HeroAI_BaseUI._build_registry = BuildRegistry(default_fallback_name="HeroAI")
         return HeroAI_BaseUI._build_registry
@@ -1738,7 +1738,13 @@ class HeroAI_BaseUI:
         PyImGui.text_disabled("Overlay works with the zone disabled — watch where lines form before switching it on.")
 
         snapshot = hero_globals.fight_zone_debug_snapshot
-        if snapshot is not None:
+        if snapshot is not None and bool(snapshot.get("released", False)):
+            remaining = int(snapshot.get("remaining", 0))
+            PyImGui.text_colored(
+                f"Zone: MOP-UP — pin released with {remaining} left, party is following the leader",
+                ColorPalette.GetColor("gw_gold").to_tuple_normalized(),
+            )
+        elif snapshot is not None:
             depth = float(snapshot.get("depth", 0.0))
             worst_case = float(snapshot.get("worst_case", 0.0))
             cast_range = float(snapshot.get("cast_range", Range.Spellcast.value))
@@ -2329,6 +2335,10 @@ class HeroAI_BaseUI:
             return
         snapshot = hero_globals.fight_zone_debug_snapshot
         if snapshot is None:
+            return
+        # Mop-up publishes a status-only snapshot: there is no pin left to draw,
+        # and the defaults would put one at the world origin.
+        if bool(snapshot.get("released", False)):
             return
 
         line_colors = {

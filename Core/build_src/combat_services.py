@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from Core import Profession
 
 BuildCoroutine = Generator[None, None, Any]
+BuildHandler = Callable[[], Any]
 TargetPredicate = Callable[[int], bool]
 CustomSkillMutator = Callable[["CustomSkill"], None]
 
@@ -69,6 +70,11 @@ class CombatServices:
 
     def IsSkillEquipped(self, skill_id: int) -> bool:
         return 1 <= self.GetEquippedSkillSlot(skill_id) <= 8
+
+    def LoadSkillBar(self) -> Generator[Any, Any, None]:
+        from Core import Routines
+
+        yield from Routines.Yield.Skills.LoadSkillbar(self.template_code, log=False)
 
     def GetEquippedCustomSkill(self, skill_id: int) -> CustomSkill | None:
         if not self.IsSkillEquipped(skill_id):

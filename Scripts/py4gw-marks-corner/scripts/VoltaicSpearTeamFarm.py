@@ -18,8 +18,8 @@ from Core import Range
 from Core import Routines
 from Core import SharedCommandType
 from Core import ThrottledTimer
-from Core.Builds.Assassin.A_W.ShadowTheftDaggerSpammer import AssassinShadowTheftDaggerSpammer
-from Core.Builds.Assassin.A_W.ShadowTheftDaggerSpammer import BuildStatus
+from Core.BTBuilds.FarmBuilds.Assassin.A_W.ShadowTheftDaggerSpammer import AssassinShadowTheftDaggerSpammer
+from Core.BTBuilds.FarmBuilds.Assassin.A_W.ShadowTheftDaggerSpammer import BuildStatus
 from HeroAI.cache_data import CacheData
 from Py4GW_widget_manager import get_widget_handler
 from Widgets.Multibox.CombatPrep import CombatPrep

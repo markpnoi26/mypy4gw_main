@@ -3,7 +3,7 @@ from typing import Any, Callable, Optional
 from .botting_src.helpers import BottingHelpers
 from .botting_src.config import BotConfig
 from .botting_src.step_logger import StepLogger
-from .BuildMgr import BuildMgr
+from .build_src.combat_services import CombatServices
 
 from .botting_src.subclases_src.STATES_src import _STATES
 from .botting_src.subclases_src.DIALOGS_src import _DIALOGS
@@ -42,7 +42,7 @@ class BottingClass:
         config_snap_to_ground_segments: int = 8,
         config_floor_offset: int = 20,
         config_follow_path_color: Any = None,
-        custom_build: Optional[BuildMgr] = None,
+        custom_build: Optional[CombatServices] = None,
         # UPKEEP
         # A
         upkeep_alcohol_active: bool = False,
@@ -358,7 +358,7 @@ class BottingClass:
             self._start_coroutines()
             self.config.FSM.update()
 
-    def OverrideBuild(self, build: BuildMgr) -> None:
+    def OverrideBuild(self, build: CombatServices) -> None:
         self.config.build_handler = build
         if not build.is_combat_automator_compatible:
             self.config.upkeep.hero_ai.set_now("active", False)

@@ -242,7 +242,7 @@ class OnStuck(Event):
     ):
         super().__init__(parent, name, interval_ms=interval_ms, callback=callback)
 
-        from Core import ThrottledTimer, BuildMgr  # local import to avoid cycles
+        from Core import ThrottledTimer  # local import to avoid cycles
 
         self.movement_check_timer = ThrottledTimer(3000)
         self.movement_check_timer.Start()

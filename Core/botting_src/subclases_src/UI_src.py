@@ -654,6 +654,9 @@ class _UI:
 
             def render_build_data(parent):
                 build_handler = parent.config.build_handler
+                if build_handler is None:
+                    PyImGui.text("No build handler")
+                    return
 
                 def debug_text(prop_name: str, value: object):
                     from ...Py4GWcorelib import Utils

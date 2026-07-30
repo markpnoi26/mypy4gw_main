@@ -20,9 +20,9 @@ from Core import Player
 from Core import Routines
 from Core import ThrottledTimer
 from Core import Utils
-from Core.BuildMgr import BuildMgr
-from Core.Builds.Assassin.A_Me.SF_Ass_vaettir import SF_Ass_vaettir
-from Core.Builds.Mesmer.Me_A.SF_Mes_vaettir import SF_Mes_vaettir
+from Core.build_src.combat_services import CombatServices
+from Core.BTBuilds.FarmBuilds.Assassin.A_Me.SF_Ass_vaettir import SF_Ass_vaettir
+from Core.BTBuilds.FarmBuilds.Mesmer.Me_A.SF_Mes_vaettir import SF_Mes_vaettir
 from Core.enums import ModelID
 from Core.enums import Range
 from Core.enums import TitleID
@@ -557,7 +557,7 @@ def handle_stuck_jaga_moraine(bot: Botting):
             yield from Routines.Yield.wait(1000)
             continue
 
-        build: BuildMgr = bot.config.build_handler
+        build: CombatServices = bot.config.build_handler
 
         instance_time = Map.GetInstanceUptime() / 1000  # Convert ms to seconds
         if instance_time > 7 * 60:  # 7 minutes in seconds

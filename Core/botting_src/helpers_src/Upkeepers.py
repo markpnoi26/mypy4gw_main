@@ -109,7 +109,6 @@ class _Upkeepers:
             yield from Routines.Yield.wait(500)
 
     def upkeep_build_ticker(self):
-        from ...BuildMgr import BuildMgr
         from ...Routines import Routines
 
         while True:
@@ -118,7 +117,7 @@ class _Upkeepers:
                 continue
 
             build = self._config.build_handler
-            if build is None or type(build) is BuildMgr:
+            if build is None:
                 yield from Routines.Yield.wait(250)
                 continue
 

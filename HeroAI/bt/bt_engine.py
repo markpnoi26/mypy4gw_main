@@ -127,7 +127,8 @@ class HeroAIBTEngine(BldMgrBT):
 
         BTBuilds/FarmBuilds is excluded by _iter_matchable_builds; re-checked
         here so the rule survives a change to the registry's filters."""
-        from Core.BuildMgr import BuildRegistry, is_purpose_specific_build
+        from Core.build_src.build_registry import BuildRegistry
+        from Core.build_src.build_registry import is_purpose_specific_build
 
         if self.build_registry is None:
             self.build_registry = BuildRegistry(default_fallback_name=self.build_name)
