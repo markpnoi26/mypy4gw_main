@@ -92,23 +92,34 @@ match = "Py4GWCoreLib/tests/**"
 dest = "dev/tests/corelib/{rel:Py4GWCoreLib/tests}"
 tier = "dev"
 
-# Wave 3 — blocked on making the BuildMgr.py:2037 registry multi-root.
-# [[rule]]
-# match = "Core/Builds/**"
-# dest  = "Scripts/py4gw-builds/builds/{rel:Core/Builds}"
-# tier  = "script"
+# Wave 3 — retired by RS-007. Core/Builds/ now holds only the Skills layer,
+# which is a shared library rather than a build pack, so there is nothing left
+# to move out to Scripts/py4gw-builds.
 
-[[override]]
-match = "Py4GWCoreLib/Builds/Dervish/D_A/DervBoneFarmer.py"
-dest = "Core/BTBuilds/Dervish/D_A/DervBoneFarmer.py"
-tier = "core"
-note = "RS-007. Already a BTBuildMgr build, so it belongs with the other BT builds and must survive the Builds/ teardown. Joins its sibling VoS_Grenths_Aura_Farmer. Not FarmBuilds: is_combat_automator_compatible=False already excludes it from auto-select, and FarmBuilds would change is_purpose_specific_build for no gain. Scripts/py4gw-marks-corner/scripts/DervCOFFarmBT.py imports five symbols from it."
+[[rule]]
+match = "Py4GWCoreLib/BuildMgr.py"
+dest = "drop"
+note = "RS-007. The generator build base class. BldMgrBT is the only execution model now; the parts that outlived it moved to Core/build_src/ (BuildRegistry, is_purpose_specific_build, FARM_BUILD_PACKAGE -> build_registry.py; the Callable aliases -> combat_services.py)."
 
-[[override]]
-match = "Py4GWCoreLib/Builds/Dervish/D_A/{DervDustFarmer,DervFeatherFarmer}.py"
-dest = "dev/reference/buildmgr_builds/{name}"
-tier = "reference"
-note = "RS-007. Generator BuildMgr builds kept as read-only reference for a rewrite, not ported. Demoted rather than dropped because Mark is rewriting both against BldMgrBT and wants the originals to read from. Leaves Scripts/py4gw-marks-corner/scripts/DervDustFarm.py and DervFeatherFarm.py with dangling imports until that rewrite lands."
+[[rule]]
+match = "Py4GWCoreLib/Builds/BuildTemplate.py"
+dest = "drop"
+note = "RS-007. Scaffold for writing BuildMgr subclasses. No importers anywhere in the tree."
+
+[[rule]]
+match = "Py4GWCoreLib/Builds/{Any,Assassin,Elementalist,Mesmer,Monk,Necromancer,Paragon,Ranger,Ritualist,Warrior}/**"
+dest = "drop"
+note = "RS-007. Generator rotations, each with a 1:1 BT twin under Core/BTBuilds/. Builds/Any/HeroAI.py goes with them — it was the tree's only is_fallback_candidate build, and HeroAIBTEngine is its BT equivalent, so BuildRegistry.ResolveFallback now always returns None and explicit SetFallback handlers are the whole mechanism."
+
+[[rule]]
+match = "Py4GWCoreLib/Builds/Dervish/**"
+dest = "drop"
+note = "RS-007. As the sibling profession drops. VoS_Grenths_Aura_Farmer, the last file left here, has a BT twin. The DervBoneFarmer / DervDustFarmer / DervFeatherFarmer entries are overrides, and resolve() ranks is_override ahead of glob score, so their moves beat this rule rather than tying with it — no AMBIGUOUS."
+
+[[rule]]
+match = "Py4GWCoreLib/Builds/CombatAutomatorExcluded/**"
+dest = "drop"
+note = "RS-007. Seven FSM-driven generator builds plus BuildHelpers, consumed only by deprecated-tier community-bots leaves (OutpostRunnerV2, three chestruns, legacy YAVB). Mark chose the RS-004 route over porting them: those leaves break and the ledgers record it, origin ours."
 
 
 # ============================================================================
