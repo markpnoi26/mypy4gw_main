@@ -47,6 +47,7 @@ RUNTIME_INI_NAME = "FightRuntime.ini"
 RUNTIME_SECTION = "FightRuntime"
 ENABLED_KEY = "fight_zone_enabled"
 OVERLAY_KEY = "show_fight_zone_overlay"
+CIRCLES_ONLY_KEY = "fight_zone_overlay_circles_only"
 RUNTIME_RELOAD_MS = 1000
 
 
@@ -56,6 +57,9 @@ class FightRuntimeConfig:
     # until it has been watched through the overlay.
     enabled: bool = False
     show_overlay: bool = False
+    # Ground circles only — no trail, spokes, arrow or labels. The trail is the
+    # expensive half of the snapshot, so this drops building it too.
+    circles_only: bool = False
 
 
 def party_centroid(
@@ -125,7 +129,9 @@ class FightZonePublisher:
                 pass
             self.runtime.enabled = bool(cfg.get_bool(RUNTIME_SECTION, ENABLED_KEY, False))
             self.runtime.show_overlay = bool(cfg.get_bool(RUNTIME_SECTION, OVERLAY_KEY, False))
+            self.runtime.circles_only = bool(cfg.get_bool(RUNTIME_SECTION, CIRCLES_ONLY_KEY, False))
             hero_globals.show_fight_zone_overlay = self.runtime.show_overlay
+            hero_globals.fight_zone_overlay_circles_only = self.runtime.circles_only
         except Exception:
             pass
 
@@ -308,15 +314,20 @@ class FightZonePublisher:
         # only the 3D draw needs the trail and per-slot lists — and those are
         # what cost, rebuilt on every publish.
         drawing = self.runtime.show_overlay
+        tracing = drawing and not self.runtime.circles_only
         hero_globals.fight_zone_debug_snapshot = {
             "state": self.zone.state.name,
             "enabled": self.runtime.enabled,
             "driving": self.runtime.enabled and self.plan.is_active(),
             "anchor": (self.zone.anchor_x, self.zone.anchor_y),
             "facing": self.zone.facing,
-            "approach": self.last_approach_xy if drawing else None,
-            "trail": [(x, y) for x, y, _ in self.trail.points] if drawing else (),
+            "approach": self.last_approach_xy if tracing else None,
+            "trail": [(x, y) for x, y, _ in self.trail.points] if tracing else (),
+            "circles_only": self.runtime.circles_only,
             "radius": self.zone.radius,
+            "reaim_blob_size": self.zone.reaim_blob_size,
+            "reaim_commit_ms": self.zone.reaim_commit_window_ms,
+            "reaim_floor_ms": self.zone.reaim_floor_ms,
             "depth": depth,
             "worst_case": worst_case,
             "cast_range": CAST_RANGE,

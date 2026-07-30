@@ -1735,6 +1735,12 @@ class HeroAI_BaseUI:
         if new_overlay != overlay:
             cfg.set_bool("FightRuntime", "show_fight_zone_overlay", new_overlay)
             cfg.save()
+        if new_overlay:
+            circles_only = bool(cfg.get_bool("FightRuntime", "fight_zone_overlay_circles_only", False))
+            new_circles_only = PyImGui.checkbox("Circles only (no trail, spokes or labels)", circles_only)
+            if new_circles_only != circles_only:
+                cfg.set_bool("FightRuntime", "fight_zone_overlay_circles_only", new_circles_only)
+                cfg.save()
         PyImGui.text_disabled("Overlay works with the zone disabled — watch where lines form before switching it on.")
 
         snapshot = hero_globals.fight_zone_debug_snapshot
@@ -1755,6 +1761,14 @@ class HeroAI_BaseUI:
                 )
             else:
                 PyImGui.text(f"Zone: {snapshot.get('state', '?')}    depth {depth:.0f}")
+            blob_size = int(snapshot.get("reaim_blob_size", 0))
+            PyImGui.text_disabled(
+                "Re-aim: no approaching enemies — holding"
+                if blob_size <= 0
+                else f"Re-aim: blob {blob_size} approaching"
+                f" — confirm {float(snapshot.get('reaim_commit_ms', 0.0)) / 1000.0:.1f}s,"
+                f" then at most one per {float(snapshot.get('reaim_floor_ms', 0.0)) / 1000.0:.0f}s"
+            )
             # Worst case is what decides whether a heal lands during a spike:
             # front and back drifting to opposite edges of their tolerances.
             PyImGui.text_disabled(
@@ -2347,6 +2361,12 @@ class HeroAI_BaseUI:
             "BACK": Utils.RGBToColor(80, 190, 255, 230),
         }
 
+        # Read from the snapshot rather than hero_globals so the flag the
+        # publisher actually drew this frame is the one honoured — the trail and
+        # approach are omitted from the snapshot in this mode, and reading a
+        # different source could ask for points that were never published.
+        circles_only = bool(snapshot.get("circles_only", False))
+
         try:
             Overlay().BeginDraw()
             anchor = snapshot.get("anchor") or (0.0, 0.0)
@@ -2368,19 +2388,20 @@ class HeroAI_BaseUI:
 
             # Arrow from the pin toward the enemies, so "the fight is in front of
             # everyone" is verifiable at a glance rather than inferred.
-            facing = float(snapshot.get("facing", 0.0))
-            tip_x = ax + (math.cos(facing) * 260.0)
-            tip_y = ay + (math.sin(facing) * 260.0)
-            Overlay().DrawLine3D(
-                ax,
-                ay,
-                az,
-                tip_x,
-                tip_y,
-                Overlay().FindZ(tip_x, tip_y, 0),
-                Utils.RGBToColor(255, 255, 255, 200),
-                2.5,
-            )
+            if not circles_only:
+                facing = float(snapshot.get("facing", 0.0))
+                tip_x = ax + (math.cos(facing) * 260.0)
+                tip_y = ay + (math.sin(facing) * 260.0)
+                Overlay().DrawLine3D(
+                    ax,
+                    ay,
+                    az,
+                    tip_x,
+                    tip_y,
+                    Overlay().FindZ(tip_x, tip_y, 0),
+                    Utils.RGBToColor(255, 255, 255, 200),
+                    2.5,
+                )
 
             # The walked-in path and the point the advance axis is measured from.
             # Without these a wrong formation angle is impossible to diagnose:
@@ -2411,18 +2432,21 @@ class HeroAI_BaseUI:
                 Overlay().DrawLine3D(apx, apy, apz, ax, ay, az, approach_color, 2.0)
                 Overlay().DrawText3D(apx, apy, apz, "came from", approach_color)
 
-            depth = float(snapshot.get("depth", 0.0))
             clamped = bool(snapshot.get("depth_clamped", False))
-            header = f"{snapshot.get('state', '?')}  depth {depth:.0f}"
-            if clamped:
-                header += " (CLAMPED)"
-            Overlay().DrawText3D(
-                ax,
-                ay,
-                az,
-                header,
-                Utils.RGBToColor(255, 120, 120, 255) if clamped else Utils.RGBToColor(255, 255, 255, 255),
-            )
+            # A clamped depth still gets its label in circles-only mode: it is a
+            # warning, not decoration, and nothing else on the ground says it.
+            if not circles_only or clamped:
+                depth = float(snapshot.get("depth", 0.0))
+                header = f"{snapshot.get('state', '?')}  depth {depth:.0f}"
+                if clamped:
+                    header += " (CLAMPED)"
+                Overlay().DrawText3D(
+                    ax,
+                    ay,
+                    az,
+                    header,
+                    Utils.RGBToColor(255, 120, 120, 255) if clamped else Utils.RGBToColor(255, 255, 255, 255),
+                )
 
             for slot in snapshot.get("slots") or ():
                 pos = slot.get("pos") or (0.0, 0.0)
@@ -2439,8 +2463,9 @@ class HeroAI_BaseUI:
                     numsegments=16,
                     thickness=1.0,
                 )
-                Overlay().DrawLine3D(ax, ay, az, sx, sy, sz, color, 1.0)
-                Overlay().DrawText3D(sx, sy, sz, str(slot.get("name", "")), color)
+                if not circles_only:
+                    Overlay().DrawLine3D(ax, ay, az, sx, sy, sz, color, 1.0)
+                    Overlay().DrawText3D(sx, sy, sz, str(slot.get("name", "")), color)
 
             Overlay().EndDraw()
         except Exception:

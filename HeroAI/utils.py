@@ -219,17 +219,37 @@ MANUAL_FLAG_COLOR = (0, 255, 0, 255)
 def is_fight_zone_flag(leader_options, own_options) -> bool:
     """Tell an auto-dropped fight pin from a hand-placed party flag.
 
-    Inferred rather than published: HeroAIOptionStruct cannot grow a field
-    without a matching change to the C++-owned shared memory region. The
-    invariant it leans on is that a manual all-flag publishes
-    flagged_follow_threshold (0.0 by default) while a fight slot publishes its
-    line tolerance, which is floored at Adjacent. Raising
-    follow_move_threshold_flagged above Adjacent in FollowRuntime.ini would
-    colour a manual flag as a fight pin — cosmetic only.
+    On the client running the fight publisher this is a fact, not a guess: the
+    zone's own anchor is in the debug snapshot, so a flag standing on it is ours.
+
+    Everywhere else it stays an inference, because HeroAIOptionStruct cannot grow
+    a field without a matching change to the C++-owned shared memory region. The
+    inference leans on a manual all-flag publishing flagged_follow_threshold (0.0
+    by default) while a fight slot publishes its line tolerance, floored at
+    Adjacent. That is weaker than it looks and the fact is always preferred:
+    _resolve_anchor hands out flagged_follow_threshold to every member the zone
+    did NOT give a slot to, so those viewers read their own fight pin as manual
+    and drew it green.
     """
-    if leader_options is None or own_options is None:
+    if leader_options is None:
         return False
     if not bool(getattr(leader_options, "IsFlagged", False)):
+        return False
+
+    import HeroAI.globals as hero_globals
+
+    snapshot = hero_globals.fight_zone_debug_snapshot
+    anchor = snapshot.get("anchor") if snapshot is not None else None
+    if anchor is not None:
+        all_flag = getattr(leader_options, "AllFlag", None)
+        if all_flag is not None:
+            on_anchor = abs(float(anchor[0]) - float(getattr(all_flag, "x", 0.0))) <= 1.0 and abs(
+                float(anchor[1]) - float(getattr(all_flag, "y", 0.0))
+            ) <= 1.0
+            if on_anchor:
+                return True
+
+    if own_options is None:
         return False
     return float(getattr(own_options, "FollowMoveThresholdCombat", -1.0)) >= float(Range.Adjacent.value)
 

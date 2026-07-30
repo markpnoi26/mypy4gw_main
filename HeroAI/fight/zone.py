@@ -61,21 +61,43 @@ class ZoneConfig:
     # on the front line is not the fight moving somewhere else — it is the fight
     # working exactly as expected — so it must not drag the formation around.
     #
-    # OPEN — measured from the contact point, which is at the FRONT. An enemy
-    # that walked around onto the backline reads as a new threat elsewhere and
-    # drives a full re-aim; the melee then follow, and the loop repeats without
-    # converging. Costly because movement interrupts casting, so the backline
-    # stops healing exactly when it is being focused. Candidate fix: measure
-    # from the party centroid instead. Under observation.
+    # Measured from the contact point, which is at the FRONT. The known cost is
+    # that an enemy which walked around onto the backline reads as a new threat
+    # elsewhere and drives a full re-aim, interrupting casts.
+    #
+    # The standing candidate fix — measure from the party centroid instead — is
+    # REJECTED. Measuring from the front is what gives the formation its fallback
+    # under a rush: enemies that close onto the party stay outside this radius,
+    # so they still count as approaching, the engagement point follows them onto
+    # the party, and engagement_standoff then plants the pin behind it. The party
+    # gives ground and the backline gets its range back. Measuring from the party
+    # centroid filters exactly those enemies out and the fallback collapses (413u
+    # of ground given vs 173u, ending in front of the party rather than behind
+    # it). Bounded by construction at max_anchor_offset_from_leader +
+    # engagement_standoff from the leader, so it cannot rout.
     contact_radius: float = float(Range.Area.value)
 
     # Small blobs are unstable by construction: removing one of N shifts the
     # centroid by (centroid - dead) / (N - 1), so at N=3 a mob 300u out from the
     # centre moves it 150u on death, against 43u at N=8. Movement scales the same
-    # way. The tail of every fight is therefore its twitchiest phase, and
-    # re-aiming there buys nothing — the fight is already won. Fewer than this
-    # many still-approaching enemies and the formation just holds what it has.
-    reaim_min_blob_size: int = 3
+    # way, so the tail of every fight is its twitchiest phase.
+    #
+    # Refusing to re-aim below a size threshold traded that twitch for a worse
+    # failure: the last one or two enemies pull away, the pin is frozen where the
+    # pack died, and the party fights the rest of it out of formation. Instead
+    # the timing gates stretch as the blob shrinks — the formation keeps
+    # re-forming all the way to the last kill, just progressively more slowly.
+    #
+    # The two gates are tiered separately because they charge for jitter in
+    # different currencies. The floor is nearly free: it costs nothing on the
+    # first move after a quiet spell and only caps how often a twitchy tail can
+    # drag the formation, so it carries most of the slowdown. The commit window
+    # delays every genuine relocation by its full length, so it stays close to
+    # flat — a lone enemy that really walked off is answered in a few seconds,
+    # not ten. Index 0 is a lone enemy; the last entry covers every size at or
+    # above its own.
+    reaim_commit_slowdown_tiers: tuple[float, ...] = (3.0, 2.5, 2.0, 1.0)
+    reaim_floor_slowdown_tiers: tuple[float, ...] = (6.0, 4.0, 2.5, 1.0)
     # Distance still catches the one case angle cannot see — a mob retreating
     # straight down the axis, where the bearing never changes but the fight has
     # walked away. Deliberately large: this is for relocation, not jitter.
@@ -105,6 +127,12 @@ class FightZone:
     engagement_y: float = 0.0
     # When the re-aim deviation first went over threshold. 0 = not pending.
     reaim_pending_since_ms: int = 0
+    # Size of the blob the last re-aim test ran against, and the two windows that
+    # size bought it. Reported, not used — the overlay has no other way to say
+    # why a stale-looking pin is behaving correctly.
+    reaim_blob_size: int = 0
+    reaim_commit_window_ms: float = 0.0
+    reaim_floor_ms: float = 0.0
 
     def is_active(self) -> bool:
         return self.state != ZoneState.TRAVELING
@@ -326,6 +354,20 @@ def compute_zone_facing(
     return zone.facing
 
 
+def tier_for(tiers: tuple[float, ...], blob_size: int) -> float:
+    if not tiers:
+        return 1.0
+    return tiers[min(max(blob_size, 1), len(tiers)) - 1]
+
+
+def reaim_windows(cfg: ZoneConfig, blob_size: int) -> tuple[float, float]:
+    """Commit window and recompute floor, in ms, for a blob of this size."""
+    return (
+        cfg.reaim_commit_ms * tier_for(cfg.reaim_commit_slowdown_tiers, blob_size),
+        cfg.min_facing_recompute_ms * tier_for(cfg.reaim_floor_slowdown_tiers, blob_size),
+    )
+
+
 def should_reaim(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> bool:
     """Has the fight moved enough, for long enough, to be worth re-forming?
 
@@ -350,15 +392,17 @@ def should_reaim(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> bool
     ]
     if not approaching:
         zone.reaim_pending_since_ms = 0
+        zone.reaim_blob_size = 0
         return False
 
     # Counted on the still-approaching set rather than every enemy alive: that
     # set is what the re-aim maths is measured against, so it is the one whose
     # instability matters.
     blob = resolve_engagement_blob(cfg, inputs.party_xy, approaching)
-    if len(blob) < cfg.reaim_min_blob_size:
-        zone.reaim_pending_since_ms = 0
-        return False
+    zone.reaim_blob_size = len(blob)
+    commit_window, recompute_floor = reaim_windows(cfg, len(blob))
+    zone.reaim_commit_window_ms = commit_window
+    zone.reaim_floor_ms = recompute_floor
 
     blob_centre = centroid(blob)
     if blob_centre is None:
@@ -385,9 +429,12 @@ def should_reaim(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> bool
     if zone.reaim_pending_since_ms == 0:
         zone.reaim_pending_since_ms = now_ms
         return False
-    if (now_ms - zone.reaim_pending_since_ms) < cfg.reaim_commit_ms:
+    if (now_ms - zone.reaim_pending_since_ms) < commit_window:
         return False
-    if (now_ms - zone.last_facing_ms) < cfg.min_facing_recompute_ms:
+    # A floor, not a rejection: pending is deliberately left standing so the
+    # re-aim fires the moment the floor expires rather than restarting the
+    # confirmation from scratch.
+    if (now_ms - zone.last_facing_ms) < recompute_floor:
         return False
 
     zone.reaim_pending_since_ms = 0
