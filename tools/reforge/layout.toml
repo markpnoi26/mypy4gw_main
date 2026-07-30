@@ -98,6 +98,18 @@ tier = "dev"
 # dest  = "Scripts/py4gw-builds/builds/{rel:Core/Builds}"
 # tier  = "script"
 
+[[override]]
+match = "Py4GWCoreLib/Builds/Dervish/D_A/DervBoneFarmer.py"
+dest = "Core/BTBuilds/Dervish/D_A/DervBoneFarmer.py"
+tier = "core"
+note = "RS-007. Already a BTBuildMgr build, so it belongs with the other BT builds and must survive the Builds/ teardown. Joins its sibling VoS_Grenths_Aura_Farmer. Not FarmBuilds: is_combat_automator_compatible=False already excludes it from auto-select, and FarmBuilds would change is_purpose_specific_build for no gain. Scripts/py4gw-marks-corner/scripts/DervCOFFarmBT.py imports five symbols from it."
+
+[[override]]
+match = "Py4GWCoreLib/Builds/Dervish/D_A/{DervDustFarmer,DervFeatherFarmer}.py"
+dest = "dev/reference/buildmgr_builds/{name}"
+tier = "reference"
+note = "RS-007. Generator BuildMgr builds kept as read-only reference for a rewrite, not ported. Demoted rather than dropped because Mark is rewriting both against BldMgrBT and wants the originals to read from. Leaves Scripts/py4gw-marks-corner/scripts/DervDustFarm.py and DervFeatherFarm.py with dangling imports until that rewrite lands."
+
 
 # ============================================================================
 # PINNED AT ROOT — do not move. Each has an external referent.
