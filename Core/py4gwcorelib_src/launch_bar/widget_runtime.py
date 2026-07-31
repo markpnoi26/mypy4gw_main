@@ -246,13 +246,28 @@ class WidgetRuntime:
             pass
 
     def reload_all(self) -> None:
-        """Re-discover and reload all widgets (the old WM 'Reload' button)."""
+        """Reload the whole library on this client (the old WM 'Reload' button).
+
+        Requests rather than performs: this runs inside a Draw callback, and the reload drops
+        and re-executes the modules that callback lives in. The widget host serves it.
+        """
 
         h = _handler()
         if h is None:
             return
         try:
-            h.reload_widgets()
+            h.request_reload()
+        except Exception:
+            pass
+
+    def reload_all_accounts(self) -> None:
+        """Reload the library on this client and every other account (multibox)."""
+
+        h = _handler()
+        if h is None:
+            return
+        try:
+            h.broadcast_reload()
         except Exception:
             pass
 

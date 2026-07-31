@@ -3537,6 +3537,12 @@ def ProcessMessages():
             # below consumes anything it does not recognise, which would drop it before that widget
             # ever polls. Once Lite marks it running, GetNextMessage stops returning it.
             pass
+        case SharedCommandType.Reload:
+            # Finish before requesting, not via a coroutine: the reload drops this module, so a
+            # generator still holding the message would never run its MarkMessageAsFinished and
+            # would leak the inbox slot.
+            GLOBAL_CACHE.ShMem.MarkMessageAsFinished(account_email, index)
+            get_widget_handler().request_reload()
         case SharedCommandType.ReservedLegacyCommand:
             GLOBAL_CACHE.ShMem.MarkMessageAsFinished(account_email, index)
             pass

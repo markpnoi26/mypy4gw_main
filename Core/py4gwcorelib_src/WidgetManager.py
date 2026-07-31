@@ -516,6 +516,23 @@ class Widget:
         self.__paused = False
         self.ResumeCallbacks()
 
+    def RemoveCallbacks(self):
+        """Unregister callbacks and forget their ids.
+
+        Pausing alone leaves the native scheduler holding this module's closures, so every
+        reload strands another set. Zeroing the ids lets RegisterCallbacks run again on the
+        replacement Widget, whose ids start at 0.
+        """
+        for callback_id in (self.update_callback_id, self.draw_callback_id, self.main_callback_id):
+            if callback_id:
+                try:
+                    PyCallback.PyCallback.RemoveById(callback_id)
+                except Exception:
+                    pass
+        self.update_callback_id = 0
+        self.draw_callback_id = 0
+        self.main_callback_id = 0
+
     def PauseCallbacks(self):
         """Pause callbacks by id if they exist"""
         if self.update_callback_id:
@@ -768,6 +785,7 @@ class WidgetHandler:
         self._initialized = True
         self.config_vars: list[WidgetConfigVars] = []
         self._pending_disable_widget: Widget | None = None
+        self.reload_requested = False
 
     # Properties
     @property
@@ -925,9 +943,13 @@ class WidgetHandler:
         for widget in self.widgets.values():
             if widget.enabled:
                 widget.disable()
+            widget.RemoveCallbacks()
 
         """Phase 1: Discover widgets without INI configuration"""
         self.widgets.clear()
+        # Rebuilt per widget in _load_widget_module; without this the list _get_config_var
+        # linear-scans doubles on every reload.
+        self.config_vars.clear()
 
         try:
             self._scan_widget_folders()
@@ -1248,6 +1270,29 @@ class WidgetHandler:
         self.prepare_discover()
         self.discover()
         self.widget_initialized = True
+
+    def request_reload(self):
+        """Ask the widget host to rebuild the whole project module tree next frame.
+
+        Never reload from here: the caller is usually a widget, and reload_widgets() re-executes
+        widget files -- including the caller's own. Py4GW_widget_manager serves the request from
+        outside every widget callback.
+        """
+        self.reload_requested = True
+
+    def broadcast_reload(self, include_self: bool = True):
+        """Request a library reload on every other account, and optionally this one."""
+        if include_self:
+            self.request_reload()
+
+        own_email = Player.GetAccountEmail()
+        sent = 0
+        for acc in GLOBAL_CACHE.ShMem.GetAllAccountData():
+            if acc.AccountEmail == own_email:
+                continue
+            if GLOBAL_CACHE.ShMem.SendMessage(own_email, acc.AccountEmail, SharedCommandType.Reload) >= 0:
+                sent += 1
+        return sent
 
     def set_optional_widgets_paused(self, paused: bool, sync_shared: bool = True):
         if paused:

@@ -202,11 +202,14 @@ class WidgetBrowser:
         """The old WM toolbar's global actions: reload all, pause/resume all, multibox pause."""
 
         rt = manager.runtime
-        # reload all widgets
+        # reload the library — ctrl+click fans it out to every account
         if PyImGui.small_button(_IC.ICON_SYNC + "##br_reload"):
-            rt.reload_all()
+            if PyImGui.get_io().key_ctrl:
+                rt.reload_all_accounts()
+            else:
+                rt.reload_all()
         if PyImGui.is_item_hovered():
-            PyImGui.set_tooltip("Reload all widgets")
+            PyImGui.set_tooltip("Reload the library on this client\nCtrl+click: reload on every account")
         # pause / resume every widget on this client
         PyImGui.same_line(0.0, 4.0)
         all_paused = rt.is_all_paused()
