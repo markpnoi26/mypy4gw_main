@@ -1741,6 +1741,16 @@ class HeroAI_BaseUI:
             if new_circles_only != circles_only:
                 cfg.set_bool("FightRuntime", "fight_zone_overlay_circles_only", new_circles_only)
                 cfg.save()
+        engage_default = float(Range.Earshot.value) * 0.70
+        engage_setting = float(cfg.get_float("FightRuntime", "engage_depth_u", engage_default))
+        new_engage = PyImGui.slider_float("Engage line##fight_engage_depth", engage_setting, 250.0, 900.0)
+        if abs(new_engage - engage_setting) > 0.5:
+            cfg.set_float("FightRuntime", "engage_depth_u", float(new_engage))
+            cfg.save()
+        PyImGui.text_disabled(
+            f"Close on the blob when its centre is further out than this. Mid rank would cast from"
+            f" ~{new_engage + 320.0:.0f}u (spellcast {float(Range.Spellcast.value):.0f}u)."
+        )
         PyImGui.text_disabled("Overlay works with the zone disabled — watch where lines form before switching it on.")
 
         snapshot = hero_globals.fight_zone_debug_snapshot
@@ -1772,14 +1782,47 @@ class HeroAI_BaseUI:
                 + (f"   (forced {forced}x)" if forced else "")
             )
             health = float(snapshot.get("party_health", 1.0))
-            standoff = float(snapshot.get("standoff", 0.0))
+            given = float(snapshot.get("given_ground", 0.0))
+            advance = float(snapshot.get("advance", 0.0))
             if bool(snapshot.get("giving_ground", False)):
                 PyImGui.text_colored(
-                    f"GIVING GROUND — party at {health * 100.0:.0f}%, standing off {standoff:.0f}u",
+                    f"BACKING OFF — party at {health * 100.0:.0f}%, withdrawn {given:.0f}u along the route",
                     ColorPalette.GetColor("gw_gold").to_tuple_normalized(),
                 )
+            elif bool(snapshot.get("closing", False)):
+                # A re-aim banks its backwards component as advance rather than
+                # walking it, so advance with the blob inside the band means
+                # the pin is holding won ground, not still closing.
+                if bool(snapshot.get("blob_too_far", False)):
+                    PyImGui.text_colored(
+                        f"CLOSING — blob centre beyond the engage band, pushed {advance:.0f}u forward",
+                        ColorPalette.GetColor("dodger_blue").to_tuple_normalized(),
+                    )
+                else:
+                    PyImGui.text_colored(
+                        f"HOLDING WON GROUND — {advance:.0f}u ahead of the authored line, party {health * 100.0:.0f}%",
+                        ColorPalette.GetColor("dodger_blue").to_tuple_normalized(),
+                    )
             else:
-                PyImGui.text_disabled(f"Party {health * 100.0:.0f}%    standoff {standoff:.0f}u")
+                PyImGui.text_disabled(f"Holding position    party {health * 100.0:.0f}%")
+
+            blob_front = snapshot.get("blob_depth")
+            midline = float(snapshot.get("midline_depth", 0.0))
+            engage = float(snapshot.get("engage_depth", 0.0))
+            if blob_front is not None:
+                if bool(snapshot.get("overrun", False)):
+                    PyImGui.text_colored(
+                        f"Blob centre {float(blob_front):+.0f}u — PAST the no-cross line (-{midline:.0f}u), backing armed",
+                        ColorPalette.GetColor("gw_gold").to_tuple_normalized(),
+                    )
+                elif bool(snapshot.get("blob_too_far", False)):
+                    PyImGui.text_disabled(
+                        f"Blob centre {float(blob_front):+.0f}u — beyond the engage line (+{engage:.0f}u), closing armed"
+                    )
+                else:
+                    PyImGui.text_disabled(
+                        f"Blob centre {float(blob_front):+.0f}u — in the band (-{midline:.0f}u .. +{engage:.0f}u)"
+                    )
 
             escape = snapshot.get("escape")
             if escape is None:
@@ -1793,7 +1836,10 @@ class HeroAI_BaseUI:
                     escape_status = "Escape: not plotted yet"
                 PyImGui.text_colored(escape_status, ColorPalette.GetColor("gw_gold").to_tuple_normalized())
             else:
-                PyImGui.text_disabled(f"Escape: {float(escape.get('distance', 0.0)):.0f}u")
+                PyImGui.text_disabled(
+                    f"Escape: {float(escape.get('distance', 0.0)):.0f}u"
+                    f" via {str(escape.get('source', '?')).lower()}"
+                )
             # Worst case is what decides whether a heal lands during a spike:
             # front and back drifting to opposite edges of their tolerances.
             PyImGui.text_disabled(
@@ -2424,6 +2470,71 @@ class HeroAI_BaseUI:
                     2.5,
                 )
 
+            # What the ground controller acts on, made visible: where the code
+            # believes the blob's centre is, and the two lines bounding the
+            # hold band. When the formation moves for no visible reason, these
+            # are what to check against the eye.
+            past_midline = bool(snapshot.get("overrun", False))
+            blob = snapshot.get("blob")
+            if blob is not None:
+                bx, by = float(blob[0]), float(blob[1])
+                bz = Overlay().FindZ(bx, by, 0)
+                blob_color = Utils.RGBToColor(255, 60, 60, 240)
+                Overlay().DrawPoly3D(bx, by, bz, radius=50.0, color=blob_color, numsegments=12, thickness=3.0)
+                blob_front = snapshot.get("blob_depth")
+                if not circles_only and blob_front is not None:
+                    Overlay().DrawText3D(bx, by, bz, f"blob {float(blob_front):+.0f}u", blob_color)
+
+            # The bar survives circles-only while breached: a formation backing
+            # up for no visible reason is exactly when it must say why.
+            midline = float(snapshot.get("midline_depth", 0.0))
+            if midline > 0.0 and (not circles_only or past_midline):
+                mid_facing = float(snapshot.get("facing", 0.0))
+                mx = ax - (math.cos(mid_facing) * midline)
+                my = ay - (math.sin(mid_facing) * midline)
+                half_x = -math.sin(mid_facing) * 350.0
+                half_y = math.cos(mid_facing) * 350.0
+                midline_color = (
+                    Utils.RGBToColor(255, 60, 60, 230) if past_midline else Utils.RGBToColor(255, 255, 255, 110)
+                )
+                Overlay().DrawLine3D(
+                    mx - half_x,
+                    my - half_y,
+                    Overlay().FindZ(mx - half_x, my - half_y, 0),
+                    mx + half_x,
+                    my + half_y,
+                    Overlay().FindZ(mx + half_x, my + half_y, 0),
+                    midline_color,
+                    3.0 if past_midline else 1.5,
+                )
+                if not circles_only:
+                    Overlay().DrawText3D(mx, my, Overlay().FindZ(mx, my, 0), "no-cross", midline_color)
+
+            # The engage line, ahead of the pin: the blob's centre beyond it
+            # arms the close. Bright while it is armed, for the same reason the
+            # no-cross bar is: a formation walking forward should say why.
+            engage = float(snapshot.get("engage_depth", 0.0))
+            blob_far = bool(snapshot.get("blob_too_far", False))
+            if engage > 0.0 and (not circles_only or blob_far):
+                eng_facing = float(snapshot.get("facing", 0.0))
+                ex = ax + (math.cos(eng_facing) * engage)
+                ey = ay + (math.sin(eng_facing) * engage)
+                eng_half_x = -math.sin(eng_facing) * 350.0
+                eng_half_y = math.cos(eng_facing) * 350.0
+                engage_color = Utils.RGBToColor(60, 150, 255, 230) if blob_far else Utils.RGBToColor(255, 255, 255, 110)
+                Overlay().DrawLine3D(
+                    ex - eng_half_x,
+                    ey - eng_half_y,
+                    Overlay().FindZ(ex - eng_half_x, ey - eng_half_y, 0),
+                    ex + eng_half_x,
+                    ey + eng_half_y,
+                    Overlay().FindZ(ex + eng_half_x, ey + eng_half_y, 0),
+                    engage_color,
+                    3.0 if blob_far else 1.5,
+                )
+                if not circles_only:
+                    Overlay().DrawText3D(ex, ey, Overlay().FindZ(ex, ey, 0), "engage", engage_color)
+
             # The last spot the party was safe, and the point the advance axis is
             # measured from — one and the same now. Without it a wrong formation
             # angle is impossible to diagnose: you cannot tell a bad axis from a
@@ -2437,20 +2548,31 @@ class HeroAI_BaseUI:
                 Overlay().DrawLine3D(apx, apy, apz, ax, ay, az, approach_color, 2.0)
                 Overlay().DrawText3D(apx, apy, apz, "came from", approach_color)
 
-            # The escape route drives nothing — it is drawn so a bad one is
-            # visible before it ever gets the chance to. Two FindZ calls: the
-            # route is a probed straight ray, so its ends are the whole shape.
+            # The escape route now moves the formation, so it is drawn as the
+            # polyline the retreat actually walks — a backtrack round a corner
+            # would be a lie as a straight line. The waypoint survives
+            # circles-only because "there is no way out" is a warning; the
+            # dogleg to it is diagnosis.
             escape = snapshot.get("escape")
             if escape is not None:
                 escape_color = Utils.RGBToColor(210, 120, 255, 220)
                 waypoint = escape.get("waypoint") or (0.0, 0.0)
-                start = escape.get("from") or (ax, ay)
                 wx, wy = float(waypoint[0]), float(waypoint[1])
-                sx, sy = float(start[0]), float(start[1])
                 wz = Overlay().FindZ(wx, wy, 0)
                 Overlay().DrawPoly3D(wx, wy, wz, radius=70.0, color=escape_color, numsegments=12, thickness=2.0)
-                Overlay().DrawText3D(wx, wy, wz, f"escape {float(escape.get('distance', 0.0)):.0f}u", escape_color)
-                Overlay().DrawLine3D(sx, sy, Overlay().FindZ(sx, sy, 0), wx, wy, wz, escape_color, 2.5)
+                Overlay().DrawText3D(
+                    wx,
+                    wy,
+                    wz,
+                    f"escape {float(escape.get('distance', 0.0)):.0f}u ({str(escape.get('source', '?')).lower()})",
+                    escape_color,
+                )
+                route = escape.get("path") or ()
+                resolved_route = [(float(px), float(py), Overlay().FindZ(float(px), float(py), 0)) for px, py in route]
+                for i in range(1, len(resolved_route)):
+                    x1, y1, z1 = resolved_route[i - 1]
+                    x2, y2, z2 = resolved_route[i]
+                    Overlay().DrawLine3D(x1, y1, z1, x2, y2, z2, escape_color, 2.5)
 
             clamped = bool(snapshot.get("depth_clamped", False))
             # A clamped depth still gets its label in circles-only mode: it is a

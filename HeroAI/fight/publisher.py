@@ -21,6 +21,9 @@ from Core.py4gwcorelib_src.Settings import Settings
 
 from .assignment import AssignmentLatch
 from .assignment import MemberLine
+from .breadcrumbs import BREADCRUMB_CFG
+from .breadcrumbs import Breadcrumbs
+from .breadcrumbs import sample as sample_breadcrumbs
 from .engagement import ENGAGEMENT_CFG
 from .engagement import EngagementState
 from .engagement import update_engagement
@@ -44,6 +47,13 @@ from .zone import FightZone
 from .zone import ZONE_CFG
 from .zone import ZoneInputs
 from .zone import ZoneState
+from .zone import blob_depth
+from .zone import blob_too_far
+from .zone import centroid
+from .zone import given_ground
+from .zone import overrun
+from .zone import overrun_depth
+from .zone import resolve_engagement_blob
 from .zone import tick_zone
 
 RUNTIME_INI_PATH = "HeroAI"
@@ -52,6 +62,12 @@ RUNTIME_SECTION = "FightRuntime"
 ENABLED_KEY = "fight_zone_enabled"
 OVERLAY_KEY = "show_fight_zone_overlay"
 CIRCLES_ONLY_KEY = "fight_zone_overlay_circles_only"
+ENGAGE_DEPTH_KEY = "engage_depth_u"
+# Floor keeps the band wider than a step, so the two triggers cannot hand the
+# pin back and forth; ceiling keeps the mid rank inside spellcast of a blob
+# sitting on the line (900 + 320 < 1248). Matches the tab's slider range.
+ENGAGE_DEPTH_MIN = 250.0
+ENGAGE_DEPTH_MAX = 900.0
 RUNTIME_RELOAD_MS = 1000
 
 
@@ -115,6 +131,7 @@ class FightZonePublisher:
     def __init__(self) -> None:
         self.zone = FightZone()
         self.safe_spot = SafeSpot()
+        self.breadcrumbs = Breadcrumbs()
         self.engagement = EngagementState()
         self.escape = EscapeState()
         self.last_approach_xy: tuple[float, float] | None = None
@@ -126,6 +143,7 @@ class FightZonePublisher:
         self.build_lines_by_character: dict[str, CombatLine] = {}
         self.resolved_by_character: dict[str, ResolvedLine] = {}
         self.last_party_health: dict[int, float] = {}
+        self.last_zone_inputs: ZoneInputs | None = None
 
     def runtime_cfg(self) -> Settings:
         return Settings(f"{RUNTIME_INI_PATH}/{RUNTIME_INI_NAME}", "global")
@@ -143,6 +161,10 @@ class FightZonePublisher:
             self.runtime.enabled = bool(cfg.get_bool(RUNTIME_SECTION, ENABLED_KEY, False))
             self.runtime.show_overlay = bool(cfg.get_bool(RUNTIME_SECTION, OVERLAY_KEY, False))
             self.runtime.circles_only = bool(cfg.get_bool(RUNTIME_SECTION, CIRCLES_ONLY_KEY, False))
+            # Applied onto the shared config so the whole controller — triggers,
+            # snapshot, drawn bar — reads the tuned value with no plumbing.
+            depth = float(cfg.get_float(RUNTIME_SECTION, ENGAGE_DEPTH_KEY, float(ZONE_CFG.engage_depth)))
+            ZONE_CFG.engage_depth = min(ENGAGE_DEPTH_MAX, max(ENGAGE_DEPTH_MIN, depth))
             hero_globals.show_fight_zone_overlay = self.runtime.show_overlay
             hero_globals.fight_zone_overlay_circles_only = self.runtime.circles_only
         except Exception:
@@ -232,6 +254,12 @@ class FightZonePublisher:
         # while the feature is off. Otherwise the first fight after switching it
         # on would remember wherever the party happened to be at that moment.
         update_safe_spot(self.safe_spot, SAFE_CFG, party_centre, party_in_aggro)
+        # NOT recorded during a fight. Crumbs dropped while withdrawing sit
+        # between the party and the enemies, and a route walked back through
+        # them leads into the mob before it leads out. Same gate as the safe
+        # spot, for the same reason: only quiet ground describes a way out.
+        if not party_in_aggro:
+            sample_breadcrumbs(self.breadcrumbs, BREADCRUMB_CFG, party_centre)
 
         # Dry run: with the feature off but the overlay on, the zone is still
         # computed and drawn, it just never becomes an active plan. That is the
@@ -276,27 +304,30 @@ class FightZonePublisher:
                 self.safe_spot.xy,
                 now_ms,
                 probe=terrain_probe,
+                trail=self.breadcrumbs,
             )
         else:
             self.escape.clear()
 
-        tick_zone(
-            self.zone,
-            ZONE_CFG,
-            ZoneInputs(
-                leader_xy=leader_xy,
-                enemy_positions=enemy_positions,
-                party_in_aggro=engaged,
-                leader_local_aggro=leader_local_aggro,
-                loot_pending=loot_pending,
-                members_in_position=self.members_in_position(member_positions),
-                now_ms=now_ms,
-                party_xy=party_centre,
-                approach_xy=self.last_approach_xy,
-                retreat_axis=self.escape.route.axis if self.escape.route is not None else None,
-                party_health_avg=mean_party_health(party_health),
-            ),
+        formation = self.formation_loader.get()
+
+        zone_inputs = ZoneInputs(
+            leader_xy=leader_xy,
+            enemy_positions=enemy_positions,
+            party_in_aggro=engaged,
+            leader_local_aggro=leader_local_aggro,
+            loot_pending=loot_pending,
+            members_in_position=self.members_in_position(member_positions),
+            now_ms=now_ms,
+            party_xy=party_centre,
+            approach_xy=self.last_approach_xy,
+            retreat_axis=self.escape.route.axis if self.escape.route is not None else None,
+            retreat_path=list(self.escape.route.path) if self.escape.route is not None else [],
+            retreat_distance=self.escape.route.distance if self.escape.route is not None else 0.0,
+            midline_depth=formation.midline_depth(),
         )
+        tick_zone(self.zone, ZONE_CFG, zone_inputs)
+        self.last_zone_inputs = zone_inputs
 
         if not self.zone.is_active():
             if was_active:
@@ -306,7 +337,6 @@ class FightZonePublisher:
             hero_globals.fight_zone_debug_snapshot = None
             return self.plan
 
-        formation = self.formation_loader.get()
         assignment = self.assignment.get(formation, member_lines)
 
         slots: dict[int, SlotPlan] = {}
@@ -351,6 +381,23 @@ class FightZonePublisher:
         drawing = self.runtime.show_overlay
         tracing = drawing and not self.runtime.circles_only
         route = self.escape.route
+        # The two readings the ground controller acts on, recomputed against the
+        # post-tick pin so the drawn blob and midline are the ones the NEXT
+        # decision will be judged by.
+        inputs = self.last_zone_inputs
+        blob_centre = None
+        blob_front_depth = None
+        past_midline = False
+        too_far = False
+        midline = 0.0
+        if inputs is not None:
+            blob_centre = centroid(resolve_engagement_blob(ZONE_CFG, inputs.party_xy, inputs.enemy_positions))
+            blob_front_depth = blob_depth(self.zone, ZONE_CFG, inputs)
+            past_midline = overrun(self.zone, ZONE_CFG, inputs)
+            too_far = blob_too_far(self.zone, ZONE_CFG, inputs)
+            # The line the trigger enforces, not the raw rank depth — the drawn
+            # bar must be the one the blob is judged against.
+            midline = float(overrun_depth(inputs))
         hero_globals.fight_zone_debug_snapshot = {
             "state": self.zone.state.name,
             "enabled": self.runtime.enabled,
@@ -365,8 +412,16 @@ class FightZonePublisher:
             "reaim_floor_ms": self.zone.reaim_floor_ms,
             "forced_reaims": self.zone.forced_reaim_count,
             "giving_ground": self.zone.giving_ground,
-            "standoff": self.zone.standoff,
+            "closing": self.zone.closing,
+            "given_ground": given_ground(self.zone),
+            "advance": self.zone.advance,
             "party_health": mean_party_health(self.last_party_health),
+            "blob": blob_centre,
+            "blob_depth": blob_front_depth,
+            "midline_depth": midline,
+            "engage_depth": float(ZONE_CFG.engage_depth),
+            "overrun": past_midline,
+            "blob_too_far": too_far,
             "escape": (
                 None
                 if route is None
@@ -374,6 +429,8 @@ class FightZonePublisher:
                     "from": route.origin,
                     "waypoint": route.waypoint,
                     "distance": route.distance,
+                    "source": route.source.name,
+                    "path": list(route.path) if tracing else (),
                 }
             ),
             "escape_boxed_in": self.escape.boxed_in,

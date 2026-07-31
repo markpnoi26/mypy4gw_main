@@ -75,6 +75,18 @@ class FightFormation:
     def pins_for_line(self, line: CombatLine) -> list[int]:
         return [index for index, pin in enumerate(self.pins) if pin.line == line]
 
+    def midline_depth(self) -> float:
+        """How far the middle rank sits behind the front line, positive.
+
+        What "the blob has overrun us" is measured against, so it comes from the
+        authored formation rather than a constant: a shallow formation is
+        overrun sooner than a deep one, and should say so.
+        """
+        ys = [pin.y for pin in self.pins if pin.line == CombatLine.MID]
+        if not ys:
+            return self.depth() / 2.0
+        return abs(sum(ys) / len(ys))
+
     def depth(self) -> float:
         if not self.pins:
             return 0.0

@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from dataclasses import field
 from enum import IntEnum
 
 from Core import Range
+
+from .breadcrumbs import sample_at
 
 
 class ZoneState(IntEnum):
@@ -24,8 +27,15 @@ class ZoneConfig:
     # FOLLOW_RECOVERY_DISTANCE so zone abandon and follow recovery agree.
     abandon_distance: float = float(Range.Spirit.value)
     # The pin is placed at the enemy centroid but never dragged further than
-    # this from the leader — a stray far-off enemy must not yank the party.
-    max_anchor_offset_from_leader: float = 600.0
+    # this from the PARTY's centre of mass — a stray far-off enemy must not yank
+    # the formation off the body of the team.
+    #
+    # Measured from the party, not the leader. Anchoring on the leader pinned
+    # the whole formation to one member: the front line could never be more than
+    # this minus the standoff ahead of them, so a party whose leader stood still
+    # could not close on anything, however much it wanted to. The party's own
+    # mass is what the formation is built around, and it moves with the fight.
+    max_anchor_offset_from_party: float = 600.0
     # How far BACK along the approach the pin sits from the engagement point.
     # Anchoring on the enemy centroid itself plants the front line inside the
     # mob and drags every line forward with it, so the backline ends up doing
@@ -86,7 +96,7 @@ class ZoneConfig:
     # gives ground and the backline gets its range back. Measuring from the party
     # centroid filters exactly those enemies out and the fallback collapses (413u
     # of ground given vs 173u, ending in front of the party rather than behind
-    # it). Bounded by construction at max_anchor_offset_from_leader +
+    # it). Bounded by construction at max_anchor_offset_from_party +
     # engagement_standoff from the leader, so it cannot rout.
     contact_radius: float = float(Range.Area.value)
 
@@ -132,23 +142,47 @@ class ZoneConfig:
     # this fires twice a fight, not every tick, and a fresh wave re-arms it.
     force_reaim_at_sizes: tuple[int, ...] = (3, 1)
 
-    # Average party health that says the fight is going badly enough to trade
-    # ground for it.
-    give_ground_health: float = 0.60
-    # ...and the mark it must recover to before the party stops giving more. A
-    # single threshold oscillates: a heal lands, the formation steps up, the
-    # same spike lands again. The gap is what makes it a decision rather than a
-    # tremor. Between the two marks the party keeps what it has already given
-    # and takes no more.
-    hold_ground_health: float = 0.80
     # One step per interval, so the party walks back and the mob follows in a
     # column. Giving the whole budget at once abandons a fight that was being
     # won and outruns the enemies instead of gathering them.
-    give_ground_step: float = 150.0
-    give_ground_interval_ms: int = 1500
-    # Ceiling on top of engagement_standoff. The pin is separately bounded at
-    # max_anchor_offset_from_leader from the leader, so this cannot rout.
-    max_extra_standoff: float = 500.0
+    # One backup is a single deliberate move, not a slide. 150u steps read as
+    # the formation continuously drifting away from a fight it is still in.
+    give_ground_step: float = 250.0
+    # ...and then it SITS. Giving ground only helps if the party is still long
+    # enough for heals to land and for the mob to re-form in front; stepping
+    # again on the next tick is how a withdrawal turns into a rout that never
+    # stops. Nothing moves, in either direction, until the dwell expires.
+    #
+    # Authored per blob size, same shape as the re-aim tiers: index 0 is a lone
+    # enemy, the last entry covers every size at or above its own. Small blobs
+    # are the twitchiest centroids, so the tail of a fight moves the ground the
+    # most rarely. Retreats dwell slightly longer than advances at the twitchy
+    # end — backing up is the move that must never become a slide.
+    recover_hold_tiers_ms: tuple[float, ...] = (18000.0, 12000.0, 7500.0, 5000.0)
+    advance_hold_tiers_ms: tuple[float, ...] = (15000.0, 10000.0, 7500.0, 5000.0)
+    # Hard ceiling on ground given, in route metres. The route's own length is
+    # the usual limit; this is the backstop. Sized against abandon_distance:
+    # the pin sits at most max_anchor_offset_from_party + engagement_standoff
+    # from the leader before any retreat, so 1400 keeps the worst case inside
+    # 2500 and the zone cannot tear itself down by retreating.
+    max_given_ground: float = 1400.0
+    # Never withdraw onto the far end of the route, where the next step would
+    # have nowhere to go and a re-plot could leave the pin off the path.
+    give_ground_margin: float = 200.0
+    # Far edge of the engage band: the blob's centre further than this in front
+    # of the front line is not meaningful engagement, and the formation closes
+    # on it. Derived from what each rank can actually do from its pin: melee
+    # frontliners rush forward anyway, and 70% of earshot leaves the mid rank —
+    # a midline depth behind the front — still inside spellcast of the blob's
+    # centre (320 + 708 = 1028 <= 1248), so nobody NEEDS the pin closer. With
+    # the no-cross line behind, the band is far wider than give_ground_step, so
+    # one step always lands inside it and the two triggers cannot hand the pin
+    # back and forth. No advance cap: the band is self-limiting, closing stops
+    # at its edge. A cap stranded the formation out of range of a camped mob —
+    # nothing moved, so no re-aim ever rebased, and the fight never started.
+    # Tunable live from the Fight Lines tab; the publisher clamps and applies
+    # engage_depth_u from FightRuntime.ini on its reload timer.
+    engage_depth: float = float(Range.Earshot.value) * 0.70
 
 
 ZONE_CFG = ZoneConfig()
@@ -180,11 +214,21 @@ class FightZone:
     # endgame and never let a cast finish.
     last_blob_size: int = 0
     forced_reaim_count: int = 0
-    # Current distance the pin sits behind the contact point. Starts at
-    # engagement_standoff and ratchets outward while the party is losing.
-    standoff: float = 0.0
-    last_give_ground_ms: int = 0
+    # How far along the escape route the formation has withdrawn. Ratchets up
+    # while the party is losing and resets when it recovers or the fight ends.
+    # Each withdrawal step as a LATCHED world vector. A list rather than a
+    # running total so coming back RETRACES the way out instead of cutting the
+    # corner off a dogleg. Deriving the displacement from the live route instead
+    # re-measured it against a freshly plotted path every second, and the
+    # formation chased the wobble.
+    retreat_steps: list[tuple[float, float]] = field(default_factory=list)
+    # Ground taken PAST the authored position, along facing. Only ever nonzero
+    # once every retreat step has been given back.
+    advance: float = 0.0
+    # Nothing moves in either direction until this expires.
+    hold_until_ms: int = 0
     giving_ground: bool = False
+    closing: bool = False
 
     def is_active(self) -> bool:
         return self.state != ZoneState.TRAVELING
@@ -214,19 +258,6 @@ def clamp_toward(
         return (float(point[0]), float(point[1]))
     scale = max_distance / distance
     return (origin[0] + (dx * scale), origin[1] + (dy * scale))
-
-
-def resolve_anchor(
-    cfg: ZoneConfig,
-    leader_xy: tuple[float, float],
-    enemy_positions: list[tuple[float, float]],
-) -> tuple[float, float]:
-    """Pin goes where the fight is, not where the leader is — but never so far
-    that one distant enemy drags the whole party off the leader."""
-    enemy_centroid = centroid(enemy_positions)
-    if enemy_centroid is None:
-        return (float(leader_xy[0]), float(leader_xy[1]))
-    return clamp_toward(enemy_centroid, leader_xy, cfg.max_anchor_offset_from_leader)
 
 
 def blend_angle(previous: float, target: float, alpha: float) -> float:
@@ -373,10 +404,29 @@ def anchor_and_facing(
     the enemies win outright: facing the wrong way is worse than an odd retreat
     direction.
     """
+    # Fresh placements (zone entry, abandon-redrop) clear this first, so it
+    # cleanly distinguishes an in-fight re-aim, where the current pin position
+    # is meaningful, from a drop where it is stale.
+    reaiming = zone.last_facing_target is not None
     blob_centre = centroid(resolve_engagement_blob(cfg, party_xy, enemy_positions))
 
+    # A blob sitting inside the formation gives no usable heading, and
+    # compute_axis holds the last one. Relocating the pin onto it ANYWAY, and
+    # then standing off 400u along that held heading, marches the formation away
+    # from the mob by the standoff on every re-aim — the pin runs backwards
+    # until the enemies are outside the zone and nothing can engage. When there
+    # is no direction to be had, the honest move is not to move.
+    if (
+        blob_centre is not None
+        and zone.last_facing_target is not None
+        and math.hypot(blob_centre[0] - party_xy[0], blob_centre[1] - party_xy[1]) < cfg.min_facing_baseline
+    ):
+        zone.reaim_pending_since_ms = 0
+        zone.last_facing_ms = now_ms
+        return (zone.anchor_x, zone.anchor_y)
+
     engagement = (
-        clamp_toward(blob_centre, leader_xy, cfg.max_anchor_offset_from_leader)
+        clamp_toward(blob_centre, party_xy, cfg.max_anchor_offset_from_party)
         if blob_centre is not None
         else (float(leader_xy[0]), float(leader_xy[1]))
     )
@@ -390,13 +440,45 @@ def anchor_and_facing(
 
     zone.reaim_pending_since_ms = 0
     zone.engagement_x, zone.engagement_y = engagement
-    # Ground already given is KEPT across a re-aim while the party is still
-    # hurt. Resetting to base here would march it back into the mob every time
-    # the fight re-forms — and the forced re-aims at three and one enemies land
-    # in exactly the stretch where it is most likely to still be losing.
-    if not zone.giving_ground:
-        zone.standoff = cfg.engagement_standoff
-    return apply_standoff(engagement, zone.facing, zone.standoff)
+    # A re-aim REBASES: the offset is cleared, not carried.
+    #
+    # The engagement point is clamped to the party's own centre of mass, so it
+    # already follows the party wherever a withdrawal has taken it. Carrying the
+    # offset on top of that counts the same retreat twice, and it compounds —
+    # back up, re-aim absorbs the move into the base, add the offset again, back
+    # up from there. Within a few re-aims the formation is so far behind the
+    # fight that the mob sits outside the zone entirely and nothing engages.
+    #
+    # This was correct while the clamp was on the LEADER, whose position does
+    # not move when the party gives ground. It stopped being correct the moment
+    # the reference became the party. Nothing lurches forward: the new base is
+    # computed from where the party actually is now.
+    zone.retreat_steps.clear()
+    zone.advance = 0.0
+    zone.giving_ground = False
+    zone.closing = False
+    pin = apply_standoff(engagement, zone.facing, cfg.engagement_standoff)
+    # ...and never BACKWARDS. Standing off from a blob that has ARRIVED at the
+    # front line puts the pin behind where the front line already stands, and
+    # the mob follows every step: chase moves the blob centre past the rehome
+    # threshold, that drift fires the next re-aim, and the standoff gives
+    # another 400u — a treadmill that only stops when the mob leashes, parked
+    # at the zone's edge with nothing engaging. Retreat is the ground
+    # controller's call alone (midline breach, or hurt and in contact), so the
+    # backwards component of a re-aim is banked as held ground instead of
+    # walked; the rotation and lateral parts, which are what a re-aim is for,
+    # still apply.
+    if reaiming:
+        forward_gap = ((zone.anchor_x - pin[0]) * math.cos(zone.facing)) + (
+            (zone.anchor_y - pin[1]) * math.sin(zone.facing)
+        )
+        if forward_gap > 0.0:
+            zone.advance = forward_gap
+            pin = (
+                pin[0] + (math.cos(zone.facing) * forward_gap),
+                pin[1] + (math.sin(zone.facing) * forward_gap),
+            )
+    return pin
 
 
 def compute_zone_facing(
@@ -511,7 +593,7 @@ def should_reaim(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> bool
         zone.forced_reaim_count += 1
         return True
 
-    engagement = clamp_toward(blob_centre, inputs.leader_xy, cfg.max_anchor_offset_from_leader)
+    engagement = clamp_toward(blob_centre, inputs.party_xy, cfg.max_anchor_offset_from_party)
     proposed = compute_axis(
         zone, cfg, inputs.party_xy, inputs.approach_xy, blob_centre, engagement, inputs.retreat_axis
     )
@@ -545,41 +627,171 @@ def should_reaim(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> bool
     return True
 
 
-def give_ground(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> None:
-    """Trade ground for survival, one step at a time, while the party is losing.
+def ground_ceiling(cfg: ZoneConfig, inputs: "ZoneInputs") -> float:
+    """How far back the party may be pulled, in route metres.
 
-    Straight back along -facing, and that is the whole point rather than an
-    approximation: retreating down the axis the party already faces drags the
-    mob into a column in front of it. Enemies working the flanks have to come
-    round to follow, so being overwhelmed collapses back into one fight with a
-    front. Sliding sideways along the escape bearing would spill them around
-    the edges instead. The rear already leans toward the escape route through
-    compute_axis, so -facing IS the way out, inside the blend cone.
-
-    Recomputed from the STORED engagement point, not a fresh one: the contact
-    point is where the fight was when the pin was placed, and holding it is
-    what makes each step a retreat from that line rather than a fresh reading
-    of a mob that is busy chasing us.
+    The plotted route sets it, not a constant: backing up further than the way
+    out actually runs walks the formation into the geometry the route already
+    mapped. A margin is held back so the pin never lands exactly on the far end,
+    where the next step would have nowhere to go.
     """
-    if inputs.party_health_avg >= cfg.hold_ground_health:
-        zone.giving_ground = False
-        return
-    # Between the marks: keep what has been given, take no more. Pushing back up
-    # the moment a heal lands is how the formation ends up yo-yoing on a spike.
-    if inputs.party_health_avg > cfg.give_ground_health:
-        return
-    if (inputs.now_ms - zone.last_give_ground_ms) < cfg.give_ground_interval_ms:
+    if not inputs.retreat_path or inputs.retreat_distance <= 0.0:
+        return 0.0
+    return max(0.0, min(cfg.max_given_ground, inputs.retreat_distance - cfg.give_ground_margin))
+
+
+def given_ground(zone: FightZone) -> float:
+    return sum(math.hypot(x, y) for x, y in zone.retreat_steps)
+
+
+def ground_offset(zone: FightZone) -> tuple[float, float]:
+    """Latched displacement of the formation from its authored position."""
+    x = sum(step[0] for step in zone.retreat_steps)
+    y = sum(step[1] for step in zone.retreat_steps)
+    if zone.advance > 0.0:
+        x += math.cos(zone.facing) * zone.advance
+        y += math.sin(zone.facing) * zone.advance
+    return (x, y)
+
+
+def blob_depth(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> float | None:
+    """How far in FRONT of the front line the enemy blob's centre sits.
+
+    Negative means it has pushed past the pin and in among the formation.
+    """
+    blob = centroid(resolve_engagement_blob(cfg, inputs.party_xy, inputs.enemy_positions))
+    if blob is None:
+        return None
+    return ((blob[0] - zone.anchor_x) * math.cos(zone.facing)) + ((blob[1] - zone.anchor_y) * math.sin(zone.facing))
+
+
+def overrun_depth(inputs: "ZoneInputs") -> float:
+    """The no-cross line, imposed FORWARD of the mid rank.
+
+    Halfway between the front and mid ranks. A trigger at the mid rank itself
+    fires only when the casters are already being walked through — too late by
+    definition, since the whole point is that the blob's centre must never get
+    there. Halfway sits behind honest front-line wrap (a pack mobbing the pins
+    puts its centroid just behind them at worst), and one give_ground_step
+    still clears it, so the trigger stays self-releasing.
+    """
+    return inputs.midline_depth * 0.5
+
+
+def overrun(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> bool:
+    """The blob's centre has crossed the line imposed ahead of the mid rank.
+
+    Geometric rather than a health reading, and self-releasing because of it:
+    backing up moves the line away from the mob, so the condition clears
+    itself once enough ground has been given and not a step sooner. A health
+    threshold has no such feedback and simply ratchets.
+    """
+    depth = blob_depth(zone, cfg, inputs)
+    return depth is not None and depth < -overrun_depth(inputs)
+
+
+def blob_too_far(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> bool:
+    """The fight is not joined: the blob's centre has not closed to the engage
+    band, and nothing here waits to be engaged. Measured on the centre, not the
+    nearest member, so one runner brushing past the pins cannot stall the close
+    on the pack the party is actually fighting."""
+    depth = blob_depth(zone, cfg, inputs)
+    return depth is not None and depth > cfg.engage_depth
+
+
+def retreat_step_vector(inputs: "ZoneInputs", step: float) -> tuple[float, float] | None:
+    """One step along the escape route's local heading, where the party is now.
+
+    Only the STEP is read off the route, never the whole displacement. The route
+    is replotted every second from a party centre that is itself moving, so its
+    bearing wobbles by a ray step or two even when nothing has changed; measuring
+    the full withdrawal against it each time multiplied that wobble by how far
+    the party had already withdrawn, and walked the formation around all fight.
+    Stepping instead means a replot can only ever affect the next step.
+    """
+    if step <= 0.0 or not inputs.retreat_path:
+        return None
+    origin = inputs.retreat_path[0]
+    ahead = sample_at(inputs.retreat_path, step)
+    dx = ahead[0] - origin[0]
+    dy = ahead[1] - origin[1]
+    span = math.hypot(dx, dy)
+    if span < 0.001:
+        return None
+    # Normalised to exactly `step`: sampling across a bend returns a chord, and
+    # letting that shorten the move would make cornering quietly lose ground.
+    return (dx * (step / span), dy * (step / span))
+
+
+def ground_dwell_ms(cfg: ZoneConfig, inputs: "ZoneInputs", tiers: tuple[float, ...]) -> int:
+    """Dwell for the size of the blob being measured, off the authored table."""
+    blob = resolve_engagement_blob(cfg, inputs.party_xy, inputs.enemy_positions)
+    return int(tier_for(tiers, len(blob)))
+
+
+def adjust_ground(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> None:
+    """Back off, close, or hold — one deliberate move, then sit.
+
+    One measured quantity decides everything: the blob centre's depth from the
+    front line. PURELY GEOMETRIC — health deliberately has no vote. The reading
+    is not yet trusted, and a wrong number here either routs a winning party or
+    pins a losing one; it is published for the tab so it can be watched until
+    it is.
+
+    RETREAT when the depth crosses the no-cross line imposed ahead of the mid
+    rank.
+
+    CLOSE when the blob's centre sits beyond the engage band — a fight the
+    enemy refuses to join is walked to, one step per dwell. Self-limiting:
+    every step shrinks the depth, so closing stops at the band's edge and the
+    front line never walks onto the mob.
+
+    HOLD in the band between the two lines, and always for the dwell after any
+    move — one deliberate move, then long enough for heals to land and the mob
+    to re-form in front, rather than a continuous slide. The dwell comes off
+    the authored per-size tables: the tail of a fight is the twitchiest
+    reading, so it moves the ground the most rarely.
+
+    The formation TRANSLATES and never rotates, so the enemies stay squarely in
+    front however far it moves; facing is decided elsewhere, on the blob.
+    """
+    if inputs.now_ms < zone.hold_until_ms:
         return
 
-    ceiling = cfg.engagement_standoff + cfg.max_extra_standoff
-    if zone.standoff >= ceiling:
-        zone.giving_ground = True
-        return
+    if overrun(zone, cfg, inputs):
+        ceiling = ground_ceiling(cfg, inputs)
+        step = min(cfg.give_ground_step, max(0.0, ceiling - given_ground(zone)))
+        vector = retreat_step_vector(inputs, step)
+        if vector is not None:
+            if zone.advance > 0.0:
+                zone.advance = max(0.0, zone.advance - cfg.give_ground_step)
+            else:
+                zone.retreat_steps.append(vector)
+            zone.hold_until_ms = inputs.now_ms + ground_dwell_ms(cfg, inputs, cfg.recover_hold_tiers_ms)
+    elif blob_too_far(zone, cfg, inputs):
+        # Give back the way out first, retracing it exactly, before pushing past
+        # the authored position. Popping the stack is what stops a dogleg
+        # withdrawal being unwound through the corner it went round.
+        if zone.retreat_steps:
+            zone.retreat_steps.pop()
+        else:
+            zone.advance += cfg.give_ground_step
+        zone.hold_until_ms = inputs.now_ms + ground_dwell_ms(cfg, inputs, cfg.advance_hold_tiers_ms)
 
-    zone.standoff = min(ceiling, zone.standoff + cfg.give_ground_step)
-    zone.last_give_ground_ms = inputs.now_ms
-    zone.giving_ground = True
-    zone.anchor_x, zone.anchor_y = apply_standoff((zone.engagement_x, zone.engagement_y), zone.facing, zone.standoff)
+    zone.giving_ground = bool(zone.retreat_steps)
+    zone.closing = zone.advance > 0.0
+    # Unconditional, including when the offset is back to zero. Skipping that
+    # case left the pin wherever the last step had put it, so the formation
+    # never actually returned to its authored position — it just stopped
+    # being told to move.
+    zone.anchor_x, zone.anchor_y = positioned_anchor(zone, cfg)
+
+
+def positioned_anchor(zone: FightZone, cfg: ZoneConfig) -> tuple[float, float]:
+    """Authored pin plus whatever ground has been given or taken."""
+    base = apply_standoff((zone.engagement_x, zone.engagement_y), zone.facing, cfg.engagement_standoff)
+    offset_x, offset_y = ground_offset(zone)
+    return (base[0] + offset_x, base[1] + offset_y)
 
 
 def latch_facing(
@@ -611,9 +823,15 @@ class ZoneInputs:
     # Bearing of the plotted escape route, pointing OUTWARD from the party.
     # The formation's rear is aimed along it so backing up follows the way out.
     retreat_axis: float | None = None
-    # Mean health fraction across the party. 1.0 when nothing is known, so a
-    # missing reading never argues for retreating.
-    party_health_avg: float = 1.0
+    # The escape route as a polyline from the party outward, and its length.
+    # give_ground walks this, so a backtrack round a corner is followed rather
+    # than cut across.
+    retreat_path: list[tuple[float, float]] = field(default_factory=list)
+    retreat_distance: float = 0.0
+    # Depth of the formation's middle rank behind the front line, positive.
+    # The no-cross line is imposed at overrun_depth ahead of it. Read from the
+    # loaded formation so an authored one is judged by its own shape.
+    midline_depth: float = 320.0
 
 
 def enter_state(zone: FightZone, state: ZoneState, now_ms: int) -> None:
@@ -631,10 +849,15 @@ def tick_zone(zone: FightZone, cfg: ZoneConfig, inputs: ZoneInputs) -> FightZone
             zone.radius = cfg.engage_radius
             zone.last_facing_target = None
             zone.last_blob_size = 0
-            # A new fight starts at full standoff. The abandon-and-redrop below
-            # deliberately does NOT reset this: that path is the same fight
-            # continuing somewhere else, and ground given to it still counts.
+            # A new fight starts at the authored position. The abandon-and-
+            # redrop below deliberately does NOT reset this: that path is the
+            # same fight continuing somewhere else, and ground given to it
+            # still counts.
+            zone.retreat_steps.clear()
+            zone.advance = 0.0
+            zone.hold_until_ms = 0
             zone.giving_ground = False
+            zone.closing = False
             zone.anchor_x, zone.anchor_y = anchor_and_facing(
                 zone,
                 cfg,
@@ -687,7 +910,7 @@ def tick_zone(zone: FightZone, cfg: ZoneConfig, inputs: ZoneInputs) -> FightZone
                 now,
                 inputs.retreat_axis,
             )
-        give_ground(zone, cfg, inputs)
+        adjust_ground(zone, cfg, inputs)
         if not inputs.party_in_aggro:
             enter_state(zone, ZoneState.CLEARING, now)
             return zone
@@ -707,7 +930,7 @@ def tick_zone(zone: FightZone, cfg: ZoneConfig, inputs: ZoneInputs) -> FightZone
                 now,
                 inputs.retreat_axis,
             )
-        give_ground(zone, cfg, inputs)
+        adjust_ground(zone, cfg, inputs)
         if not inputs.party_in_aggro:
             enter_state(zone, ZoneState.CLEARING, now)
         return zone
