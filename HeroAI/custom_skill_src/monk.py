@@ -1,6 +1,9 @@
-from Core import GLOBAL_CACHE, Range
-from HeroAI.types import SkillNature, Skilltarget, SkillType
+from Core import GLOBAL_CACHE
+from Core import Range
 from HeroAI.custom_skill import CustomSkill
+from HeroAI.types import SkillNature
+from HeroAI.types import Skilltarget
+from HeroAI.types import SkillType
 
 
 class MonkSkills:
@@ -1039,7 +1042,7 @@ class MonkSkills:
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Symbol_of_Wrath")
         skill.SkillType = SkillType.Spell.value
-        skill.TargetAllegiance = Skilltarget.Self.value
+        skill.TargetAllegiance = Skilltarget.Enemy.value
         skill.Nature = SkillNature.Offensive.value
         skill_data[skill.SkillID] = skill
 
