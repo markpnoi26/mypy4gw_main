@@ -82,6 +82,9 @@ class SharedCommandType(IntEnum):
     # build-declared fight line is reported to the leader rather than published.
     # Append only: auto() renumbers everything below an insertion.
     ReportCombatLine = auto()
+    # Handled by the Inventory Lite widget on the receiving client, not by the Messaging panel.
+    # Append only: auto() renumbers everything below an insertion.
+    DepositAndOrganize = auto()
     # endregion
 
 

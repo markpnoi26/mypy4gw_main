@@ -13,14 +13,19 @@ from dataclasses import field
 
 import PyImGui
 import PyInventory
+import PySystem
 
 from Core import ImGui
 from Core.enums_src.Item_enums import INVENTORY_BAGS
 from Core.enums_src.Item_enums import STORAGE_BAGS
 from Core.enums_src.Item_enums import ItemType
+from Core.enums_src.Multiboxing_enums import SharedCommandType
 from Core.GlobalCache import GLOBAL_CACHE
+from Core.ImGui_src.IconsFontAwesome5 import IconsFontAwesome5
 from Core.Inventory import Inventory
+from Core.Player import Player
 from Core.Py4GWcorelib import ActionQueueManager
+from Core.Py4GWcorelib import Color
 from Core.Py4GWcorelib import Console
 from Core.Py4GWcorelib import ConsoleLog
 from Core.py4gwcorelib_src.Settings import Settings
@@ -47,6 +52,9 @@ IDENTIFY_RARITIES = ("Blue", "Purple", "Gold")
 SALVAGE_RARITIES = ("White", "Blue")
 
 POLL_MS = 50
+#: How long an unclaimed cross-account deposit request may hold an inbox slot. Generous on purpose:
+#: it only has to outlast a peer being mid-load, and expiry here means "nobody is listening".
+DEPOSIT_REQUEST_TTL_MS = 300000
 STORAGE_OPEN_TIMEOUT_MS = 4000
 DEPOSIT_CONFIRM_TIMEOUT_MS = 2500
 MAX_MOVES_PER_ITEM = 8
@@ -118,30 +126,51 @@ DYE_ITEM_TYPE = int(ItemType.Dye)
 
 SETTINGS_SECTION = "InventoryLite"
 RULES_DOC = "Widgets/Items/InventoryLiteRules.json"
-TRACE_INI = "Widgets/Config/Inventory Lite Trace.ini"
-TRACE_SECTION = "LastRun"
+SEEDED_UNNAMED_KEY = "seeded_unnamed"
+UNNAMED_RULE_NAME = "Unnamed - park in storage"
 
 GRAY = (0.66, 0.67, 0.70, 1.0)
 WARN = (0.79, 0.63, 0.29, 1.0)
 
-LAST_TRACE: dict[str, str] = {}
+BAR_GAP = 2.0
+BAR_SPACING = 4.0
+OUTPOST_ONLY_REASON = "Outpost only - the Xunlai chest is out of reach here."
+
+# (base, hovered, active) per action. Grouped by what the button does to your items: amber consumes,
+# blue moves, green rearranges, red stops.
+BUTTON_SALVAGE = (Color(150, 90, 40), Color(184, 114, 52), Color(118, 70, 30))
+BUTTON_DEPOSIT = (Color(44, 94, 150), Color(58, 120, 186), Color(34, 74, 118))
+BUTTON_XUNLAI = (Color(70, 80, 100), Color(90, 104, 130), Color(54, 62, 78))
+BUTTON_ORGANIZE = (Color(50, 114, 76), Color(64, 144, 96), Color(38, 88, 58))
+BUTTON_CONFIG = (Color(80, 80, 88), Color(104, 104, 114), Color(60, 60, 66))
+BUTTON_CANCEL = (Color(150, 54, 54), Color(184, 70, 70), Color(118, 42, 42))
+# Violet stands alone: the only button here that acts on accounts you are not looking at.
+BUTTON_BROADCAST = (Color(104, 66, 150), Color(130, 84, 184), Color(82, 50, 118))
 
 
-def trace(stage: str):
-    """Force a step marker to disk.
+def bar_button(label: str, palette, tooltip: str = "", icon: bool = False, disabled_reason: str = "") -> bool:
+    """A coloured bar button. `icon` routes through ImGui.icon_button, which swaps in the glyph font.
 
-    A native crash takes the console with it and console output is memory-only, so this file is the
-    only thing that can report which step was reached.
+    A non-empty `disabled_reason` greys the button out and shows that instead of `tooltip`, so a bar
+    that has gone quiet still says why. The hover check allows disabled items or the reason would be
+    the one tooltip nobody can read.
     """
-    if LAST_TRACE.get("stage") == stage:
-        return
-    LAST_TRACE["stage"] = stage
+    base, hovered, active = palette
+    PyImGui.push_style_color(PyImGui.ImGuiCol.Button, base.to_tuple_normalized())
+    PyImGui.push_style_color(PyImGui.ImGuiCol.ButtonHovered, hovered.to_tuple_normalized())
+    PyImGui.push_style_color(PyImGui.ImGuiCol.ButtonActive, active.to_tuple_normalized())
+    if disabled_reason:
+        PyImGui.begin_disabled(True)
     try:
-        handler = Settings(TRACE_INI, scope="global")
-        handler.set_str(TRACE_SECTION, "LastStage", stage)
-        handler.save()
-    except Exception:
-        pass
+        clicked = ImGui.icon_button(label) if icon else PyImGui.button(label)
+    finally:
+        if disabled_reason:
+            PyImGui.end_disabled()
+        PyImGui.pop_style_color(3)
+    tip = disabled_reason or tooltip
+    if tip and PyImGui.is_item_hovered(PyImGui.HoveredFlags.AllowWhenDisabled):
+        PyImGui.set_tooltip(tip)
+    return clicked and not disabled_reason
 
 
 def display_safe(text: str) -> str:
@@ -257,7 +286,6 @@ def resolve_unknown_names(facts_by_id: dict):
     learned = 0
     unresolved: list[int] = []
     for model_id, item_id in unknown.items():
-        trace("name model %d" % model_id)
         facts = facts_by_id[item_id]
         name = yield from fetch_base_name(item_id, model_id, facts["prefix"], facts["suffix"])
         if name:
@@ -277,7 +305,6 @@ def resolve_unknown_names(facts_by_id: dict):
             % ", ".join(str(m) for m in unresolved),
             Console.MessageType.Warning,
         )
-    trace("names learned: %d" % learned)
     return learned
 
 
@@ -287,10 +314,8 @@ def gather_facts(learn_names: bool = True):
 
     out: dict[int, dict] = {}
     for item_id, (model_id, quantity) in list(live_bag_items().items()):
-        trace("facts %d" % item_id)
         out[item_id] = item_facts(item_id, model_id, quantity)
         yield
-    trace("facts done: %d" % len(out))
 
     if learn_names:
         learned = yield from resolve_unknown_names(out)
@@ -326,6 +351,8 @@ class Rule:
     inherent_max_only: bool = False
     #: Every mod on the item is maxed -- a perfect item, not just a perfect slot.
     all_mods_max: bool = False
+    #: Nothing could name the model. Parks the item in storage until naming catches up.
+    unnamed_only: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -343,6 +370,7 @@ class Rule:
             "suffix_max_only": self.suffix_max_only,
             "inherent_max_only": self.inherent_max_only,
             "all_mods_max": self.all_mods_max,
+            "unnamed_only": self.unnamed_only,
         }
 
     @staticmethod
@@ -369,6 +397,7 @@ class Rule:
             # rule names is max", which is the per-slot check above; mapping it here silently turned
             # rules into "every mod on the item is max" and stopped them matching anything imperfect.
             all_mods_max=bool(raw.get("all_mods_max", False)),
+            unnamed_only=bool(raw.get("unnamed_only", False)),
         )
 
     def criteria_count(self) -> int:
@@ -383,6 +412,7 @@ class Rule:
             ("suffix max",) if self.suffix_max_only else (),
             ("inherent max",) if self.inherent_max_only else (),
             ("all max",) if self.all_mods_max else (),
+            ("unnamed",) if self.unnamed_only else (),
         )
         return sum(1 for c in filled if c)
 
@@ -423,6 +453,11 @@ class Rule:
         if self.all_mods_max:
             results.append(("all %d mods max" % facts["mod_count"], facts["all_mods_max"]))
 
+        # Read AFTER resolve_unknown_names has run, so an empty name means every rung of the ladder
+        # failed for this model -- not that the scan simply has not asked yet.
+        if self.unnamed_only:
+            results.append(("unnamed (model %d)" % facts["model_id"], not facts["name"]))
+
         if not results:
             return False, results
         passed = [ok for _label, ok in results]
@@ -446,6 +481,25 @@ def load_rules() -> list[Rule]:
             except Exception:
                 continue
     return out
+
+
+def seed_unnamed_rule(rules) -> bool:
+    """Add the park-the-unnameable rule, once ever. True when it was appended.
+
+    Guarded by a flag in the document rather than by "does such a rule exist", so deleting the rule is
+    a decision that sticks instead of one the next load undoes.
+    """
+    try:
+        from Core.py4gwcorelib_src.JsonFactory import JsonFactory
+
+        doc = JsonFactory(RULES_DOC, "global")
+        if doc.get_bool(SEEDED_UNNAMED_KEY, False):
+            return False
+        doc.set_bool(SEEDED_UNNAMED_KEY, True)
+    except Exception:
+        return False
+    rules.append(Rule(name=UNNAMED_RULE_NAME, unnamed_only=True))
+    return True
 
 
 def save_rules(rules) -> None:
@@ -823,6 +877,7 @@ class InventoryLite:
         self.active_since = 0.0
         self.auto_identify = True
         self.show_config = False
+        self.bar_size: tuple[float, float] = (0.0, 0.0)
         self.last_identify_check = 0.0
         self.rules: list[Rule] = []
         self.report_rows: list[list[str]] = []
@@ -851,6 +906,14 @@ class InventoryLite:
             return False
         self.auto_identify = handler.get_bool(SETTINGS_SECTION, "AutoIdentify", True)
         self.rules = load_rules()
+        if seed_unnamed_rule(self.rules):
+            save_rules(self.rules)
+            ConsoleLog(
+                MODULE_NAME,
+                f"Added the '{UNNAMED_RULE_NAME}' rule. Nothing moves until you press Deposit; "
+                "Preview matches shows what it would take.",
+                Console.MessageType.Info,
+            )
         return True
 
     def save_settings(self):
@@ -936,24 +999,20 @@ class InventoryLite:
 
     def scan(self):
         """Read every bag item's facts and show them -- exactly what the rules will see."""
-        trace("scan begin")
         facts_by_id = yield from gather_facts()
         self.report_title = "%d item(s) read" % len(facts_by_id)
         self.report_columns = SCAN_COLUMNS
         self.report_rows = [facts_row(f) for f in facts_by_id.values()]
-        trace("scan done")
 
     def start_preview(self):
         self.run(self.preview(), "Preview")
 
     def preview(self):
-        trace("preview begin")
         facts_by_id = yield from gather_facts()
         matched, rows = deposit_matches(self.rules, facts_by_id)
         self.report_title = "%d of %d item(s) would be deposited" % (len(matched), len(facts_by_id))
         self.report_columns = PREVIEW_COLUMNS
         self.report_rows = rows
-        trace("preview done")
 
     def start_deposit(self):
         if not [r for r in self.rules if r.enabled and not r.keep]:
@@ -962,7 +1021,6 @@ class InventoryLite:
         self.run(self.deposit(), "Deposit")
 
     def deposit(self):
-        trace("deposit begin")
         facts_by_id = yield from gather_facts()
         matched, rows = deposit_matches(self.rules, facts_by_id)
         self.report_title = "%d of %d item(s) matched" % (len(matched), len(facts_by_id))
@@ -977,7 +1035,6 @@ class InventoryLite:
         deposited = 0
         unconfirmed = 0
         for item_id in matched:
-            trace("deposit %d" % item_id)
             status = yield from deposit_item(item_id)
             if status == DEPOSIT_FULL:
                 ConsoleLog(MODULE_NAME, "Storage is full; stopping.", Console.MessageType.Warning)
@@ -994,7 +1051,47 @@ class InventoryLite:
             f"Deposited {deposited} of {len(matched)} item(s){tail}.",
             Console.MessageType.Success if deposited == len(matched) else Console.MessageType.Warning,
         )
-        trace("deposit done")
+
+    def deposit_and_organize(self):
+        """Deposit what the rules claim, then tidy both ends -- storage first, then the freed bags."""
+        yield from self.deposit()
+        yield from self.organize_storage()
+        yield from organize(inventory_bags)
+
+    def remote_deposit_and_organize(self, index: int, account_email: str):
+        """Run the chain for a peer's request, then release the message however it ends."""
+        try:
+            if not Routines.Checks.Map.IsOutpost():
+                ConsoleLog(
+                    MODULE_NAME,
+                    "Ignoring a deposit request: storage is only reachable from an outpost.",
+                    Console.MessageType.Warning,
+                )
+                return
+            yield from self.deposit_and_organize()
+        finally:
+            GLOBAL_CACHE.ShMem.MarkMessageAsFinished(account_email, index)
+
+    def poll_deposit_requests(self):
+        """Claim a peer's deposit request. One at a time: a second would fight the first for storage."""
+        if self.busy:
+            return
+        account_email = Player.GetAccountEmail()
+        if not account_email:
+            return
+        try:
+            index, message = GLOBAL_CACHE.ShMem.GetNextMessage(account_email)
+        except Exception:
+            return
+        if index == -1 or message is None:
+            return
+        if int(getattr(message, "Command", SharedCommandType.NoCommand)) != int(SharedCommandType.DepositAndOrganize):
+            return
+        # Claim it before running: GetNextMessage skips Running messages, so this is what stops both
+        # the Messaging panel and the next frame of this poll from picking it up again.
+        GLOBAL_CACHE.ShMem.MarkMessageAsRunning(account_email, index)
+        ConsoleLog(MODULE_NAME, f"Deposit and organize requested by {message.SenderEmail}.", Console.MessageType.Info)
+        self.run(self.remote_deposit_and_organize(index, account_email), "Remote deposit")
 
     def start_organize(self):
         self.run(organize(inventory_bags), "Organize")
@@ -1020,7 +1117,14 @@ class InventoryLite:
         if right <= left:
             return
 
-        PyImGui.set_next_window_pos(left, bottom + 2)
+        # An auto-sized window only knows its extent after it has drawn, so centring uses last frame's
+        # measurement. Frame one lands flush left and every frame after is centred.
+        width, height = self.bar_size
+        x = left + ((right - left) - width) / 2.0
+        y = top - height - BAR_GAP
+        if y < 0.0:
+            y = bottom + BAR_GAP
+        PyImGui.set_next_window_pos(x, y)
         flags = (
             PyImGui.WindowFlags.AlwaysAutoResize
             | PyImGui.WindowFlags.NoTitleBar
@@ -1033,6 +1137,7 @@ class InventoryLite:
         try:
             if opened:
                 self.draw_bar_body()
+                self.bar_size = PyImGui.get_window_size()
         except Exception as exc:
             self.log_once("bar", f"Button bar draw failed: {exc}\n{traceback.format_exc()}")
         finally:
@@ -1042,24 +1147,43 @@ class InventoryLite:
         if self.busy:
             PyImGui.text_disabled(f"{self.active_label.lower()}...")
             PyImGui.same_line(0, 6)
-            if PyImGui.button("Cancel"):
+            if bar_button("Cancel", BUTTON_CANCEL, "Stop the running routine"):
                 self.cancel()
             return
-        if PyImGui.button("Salvage"):
-            self.start_salvage()
-        PyImGui.same_line(0, 4)
-        if PyImGui.button("Deposit"):
-            self.start_deposit()
-        PyImGui.same_line(0, 4)
-        if PyImGui.button("Xunlai"):
-            Inventory.OpenXunlaiWindow()
-        if PyImGui.button("Organize bags"):
-            self.start_organize()
-        PyImGui.same_line(0, 4)
-        if PyImGui.button("Organize storage"):
-            self.start_organize_storage()
-        PyImGui.same_line(0, 4)
-        if PyImGui.button("Config"):
+
+        # The chest is an outpost fixture, so every button that reaches for it greys out elsewhere --
+        # the broadcast included, since the peers it asks are in the map you are standing in.
+        outpost_only = "" if Routines.Checks.Map.IsOutpost() else OUTPOST_ONLY_REASON
+
+        actions = (
+            ("Salvage", BUTTON_SALVAGE, f"Salvage {', '.join(SALVAGE_RARITIES)} items", self.start_salvage, ""),
+            ("Deposit", BUTTON_DEPOSIT, "Deposit everything the rules claim", self.start_deposit, outpost_only),
+            ("Xunlai", BUTTON_XUNLAI, "Open storage", Inventory.OpenXunlaiWindow, outpost_only),
+            ("Organize bags", BUTTON_ORGANIZE, "Sort and condense the carry bags", self.start_organize, ""),
+            (
+                "Organize storage",
+                BUTTON_ORGANIZE,
+                "Sort and condense storage",
+                self.start_organize_storage,
+                outpost_only,
+            ),
+        )
+        for label, palette, tip, action, blocked in actions:
+            if bar_button(label, palette, tip, disabled_reason=blocked):
+                action()
+            PyImGui.same_line(0, BAR_SPACING)
+
+        if bar_button(
+            IconsFontAwesome5.ICON_USERS,
+            BUTTON_BROADCAST,
+            "Deposit and organize on every OTHER account (they run their own rules)",
+            icon=True,
+            disabled_reason=outpost_only,
+        ):
+            send_deposit_and_organize()
+        PyImGui.same_line(0, BAR_SPACING)
+
+        if bar_button(IconsFontAwesome5.ICON_COG, BUTTON_CONFIG, "Rules, report and settings", icon=True):
             self.show_config = not self.show_config
 
     def draw_config(self):
@@ -1191,6 +1315,13 @@ class InventoryLite:
             rule.all_mods_max = all_max
             save_rules(self.rules)
 
+        unnamed = PyImGui.checkbox("Nothing could name it##unnamed_%s" % tag, rule.unnamed_only)
+        if unnamed != rule.unnamed_only:
+            rule.unnamed_only = unnamed
+            save_rules(self.rules)
+        if rule.unnamed_only:
+            PyImGui.text_colored("    matches models the name ladder gave up on - shown as 'model <id>'", GRAY)
+
         PyImGui.text_colored("Rarity", GRAY)
         for name in RARITY_NAMES:
             on = name in rule.rarities
@@ -1257,6 +1388,66 @@ class InventoryLite:
 widget = InventoryLite()
 
 
+def reap_stale_deposit_requests():
+    """Release requests that were never claimed.
+
+    Inbox slots are a small pool shared by every account and nothing in the framework expires them, so
+    a request sent to a client with this widget switched off would hold a slot for everyone, forever.
+    Running requests are left alone: those have an owner working through them.
+    """
+    now = PySystem.get_tick_count64()
+    for index, message in GLOBAL_CACHE.ShMem.GetAllMessages():
+        if message is None or not getattr(message, "Active", False) or getattr(message, "Running", False):
+            continue
+        if int(getattr(message, "Command", SharedCommandType.NoCommand)) != int(SharedCommandType.DepositAndOrganize):
+            continue
+        if now - int(getattr(message, "Timestamp", 0) or 0) < DEPOSIT_REQUEST_TTL_MS:
+            continue
+        receiver = str(getattr(message, "ReceiverEmail", "") or "")
+        if not receiver:
+            continue
+        GLOBAL_CACHE.ShMem.MarkMessageAsFinished(receiver, index)
+        ConsoleLog(
+            MODULE_NAME,
+            f"Dropped an unanswered deposit request for {receiver} - is Inventory Lite enabled there?",
+            Console.MessageType.Warning,
+        )
+
+
+def send_deposit_and_organize():
+    """Ask every OTHER account to deposit and tidy.
+
+    Fire and forget: each client runs the chain against its own bags, so nothing here waits on them.
+    Peers not in an outpost decline the request rather than queueing it.
+    """
+    try:
+        reap_stale_deposit_requests()
+    except Exception as exc:
+        ConsoleLog(MODULE_NAME, f"Could not check for stale requests: {exc}", Console.MessageType.Warning)
+    sender = Player.GetAccountEmail()
+    if not sender:
+        ConsoleLog(MODULE_NAME, "No account email yet; not sending.", Console.MessageType.Warning)
+        return
+    sent = 0
+    for account in GLOBAL_CACHE.ShMem.GetAllAccountData():
+        email = str(getattr(account, "AccountEmail", "") or "")
+        if not email or email == sender:
+            continue
+        if GLOBAL_CACHE.ShMem.SendMessage(sender, email, SharedCommandType.DepositAndOrganize) >= 0:
+            sent += 1
+        else:
+            ConsoleLog(MODULE_NAME, f"Could not queue a deposit request for {email}.", Console.MessageType.Warning)
+    ConsoleLog(
+        MODULE_NAME,
+        (
+            f"Asked {sent} other account(s) to deposit and organize."
+            if sent
+            else "No other accounts are available to ask."
+        ),
+        Console.MessageType.Success if sent else Console.MessageType.Info,
+    )
+
+
 def configure():
     widget.show_config = True
 
@@ -1268,6 +1459,7 @@ def main():
         widget.initialized = True
 
     widget.pump()
+    widget.poll_deposit_requests()
     widget.tick_auto_identify()
     widget.draw_buttons()
     widget.draw_config()

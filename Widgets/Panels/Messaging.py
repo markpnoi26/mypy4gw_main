@@ -3532,6 +3532,11 @@ def ProcessMessages():
         case SharedCommandType.LootEx:
             # privately Handled Command, by frenkey
             pass
+        case SharedCommandType.DepositAndOrganize:
+            # Handled by the Inventory Lite widget. Deliberately NOT finished here: the catch-all
+            # below consumes anything it does not recognise, which would drop it before that widget
+            # ever polls. Once Lite marks it running, GetNextMessage stops returning it.
+            pass
         case SharedCommandType.ReservedLegacyCommand:
             GLOBAL_CACHE.ShMem.MarkMessageAsFinished(account_email, index)
             pass
