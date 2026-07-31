@@ -3,9 +3,13 @@
 No ImGui and no Py4GW imports: this module must stay importable and unit-testable from a
 plain interpreter, same contract as ``launch_bar.model``.
 
-Scripts live flat in ``Scripts/`` and declare a literal ``__script__`` dict near the top of
-the file. Discovery reads only the first ``HEADER_WINDOW`` bytes of each file, so a rescan
-costs ~18ms for 150 scripts instead of ~3s for a full ``ast.parse`` of every module.
+Scripts declare a literal ``__script__`` dict near the top of the file. Discovery reads
+only the first ``HEADER_WINDOW`` bytes of each file, so a rescan costs ~18ms for 150
+scripts instead of ~3s for a full ``ast.parse`` of every module.
+
+Two shapes are scanned: loose ``.py`` at the root, and each pack's ``scripts/`` folder.
+The layout generator emits packs, so the flat form this was first written for holds
+nothing at all — see ``script_roots``.
 """
 
 import ast
@@ -13,6 +17,10 @@ import os
 from dataclasses import dataclass
 
 HEADER_WINDOW = 8192
+
+PACK_MANIFEST = "pack.json"
+PACK_SCRIPT_ROOT = "scripts"
+SKIP_DIRS = ("__pycache__",)
 
 RESOURCES = ("character", "inventory", "skills", "dialog", "ui", "sharedmem")
 
@@ -115,6 +123,49 @@ def build_meta(path: str, mtime: float) -> ScriptMeta:
     )
 
 
+def script_roots(path: str) -> list:
+    """Directories that hold launchable scripts: ``path`` itself, then one per pack.
+
+    The folder name is the ``script_roots`` default rather than a value read from
+    ``pack.json``. Parsing that would mean either raw ``json`` — forbidden — or
+    JsonFactory, which this module cannot import without losing the stdlib-only
+    contract that lets it be tested outside the client. All eight packs ship the
+    default; a pack that declares anything else is the signal to revisit.
+    """
+    roots = [path]
+    try:
+        names = sorted(os.listdir(path))
+    except OSError:
+        return roots
+    for name in names:
+        pack = os.path.join(path, name)
+        if not os.path.isfile(os.path.join(pack, PACK_MANIFEST)):
+            continue
+        root = os.path.join(pack, PACK_SCRIPT_ROOT)
+        if os.path.isdir(root):
+            roots.append(root)
+    return roots
+
+
+def python_files(root: str, recursive: bool):
+    """``.py`` under ``root``. ``__init__.py`` is never a script, and it is also the
+    only basename that repeats across packs."""
+    if not recursive:
+        try:
+            names = sorted(os.listdir(root))
+        except OSError:
+            return
+        for name in names:
+            if name.endswith(".py") and name != "__init__.py":
+                yield os.path.join(root, name)
+        return
+    for current, dirs, files in os.walk(root):
+        dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS)
+        for name in sorted(files):
+            if name.endswith(".py") and name != "__init__.py":
+                yield os.path.join(current, name)
+
+
 class ScriptRegistry:
     """Flat registry of ``Scripts/*.py``, refreshed on demand.
 
@@ -128,20 +179,29 @@ class ScriptRegistry:
         self.scripts: dict = {}
         self.pinned: set = set()
         self.stale: set = set()
+        self.shadowed: dict = {}
         self.revision = 0
 
     def scan_mtimes(self) -> dict:
-        try:
-            names = [f for f in os.listdir(self.path) if f.endswith(".py")]
-        except OSError:
-            return {}
+        """Script id to (path, mtime).
+
+        Ids are bare filenames, so two packs shipping the same one collide. First
+        wins, and the loser is recorded rather than dropped on the floor: a script
+        that silently vanishes because another pack owns its name is the kind of
+        thing nobody thinks to look for.
+        """
         out = {}
-        for name in names:
-            full = os.path.join(self.path, name)
-            try:
-                out[os.path.splitext(name)[0]] = (full, os.stat(full).st_mtime)
-            except OSError:
-                continue
+        self.shadowed = {}
+        for index, root in enumerate(script_roots(self.path)):
+            for full in python_files(root, recursive=index > 0):
+                script_id = os.path.splitext(os.path.basename(full))[0]
+                if script_id in out:
+                    self.shadowed.setdefault(script_id, []).append(full)
+                    continue
+                try:
+                    out[script_id] = (full, os.stat(full).st_mtime)
+                except OSError:
+                    continue
         return out
 
     def changed_on_disk(self) -> bool:
