@@ -153,13 +153,20 @@ class ZoneConfig:
     # again on the next tick is how a withdrawal turns into a rout that never
     # stops. Nothing moves, in either direction, until the dwell expires.
     #
-    # Authored per blob size, same shape as the re-aim tiers: index 0 is a lone
-    # enemy, the last entry covers every size at or above its own. Small blobs
-    # are the twitchiest centroids, so the tail of a fight moves the ground the
-    # most rarely. Retreats dwell slightly longer than advances at the twitchy
-    # end — backing up is the move that must never become a slide.
+    # RETREAT dwell is authored per blob size, same shape as the re-aim tiers:
+    # index 0 is a lone enemy, the last entry covers every size at or above its
+    # own. Small blobs are the twitchiest centroids, so the tail of a fight
+    # gives ground the most rarely. Backing up is the move that must never
+    # become a slide, so it keeps the tiering.
     recover_hold_tiers_ms: tuple[float, ...] = (18000.0, 12000.0, 7500.0, 5000.0)
-    advance_hold_tiers_ms: tuple[float, ...] = (15000.0, 10000.0, 7500.0, 5000.0)
+    # ADVANCE is flat, and deliberately not tiered. Tiering it inverted: tier_for
+    # clamps with max(size, 1), so zero enemies read as a lone enemy and drew the
+    # slowest dwell of all, at exactly the moment there was nothing left to be
+    # careful about. A jittery centroid is also self-correcting forwards in a way
+    # it is not backwards — an early step is walked off by the next one, where an
+    # early retreat compounds. 250u every 4s is ~22% of run speed: a deliberate
+    # creep onto a camped mob, not a charge.
+    advance_hold_ms: int = 4000
     # Hard ceiling on ground given, in route metres. The route's own length is
     # the usual limit; this is the backstop. Sized against abandon_distance:
     # the pin sits at most max_anchor_offset_from_party + engagement_standoff
@@ -198,14 +205,26 @@ class ZoneConfig:
     # backline_ring would bite on a formation that was ordered fine.
     ring_escalation_margin: float = 100.0
     # Frontline: where the party can still find a fight. Static rather than
-    # derived, because it describes REACH, not formation shape. Sized from the
-    # advance floor (-512) and a ceiling 300u inside engagement_scan_radius, so
-    # no part of it sits in ground where an enemy could never be detected: the
-    # ring's furthest point from the pin is 1060u against a 1248 scan.
+    # derived, because it describes REACH, not formation shape.
+    #
+    # `fwd` is set so the floor lands on the mid rank (218 - 538 = -320): behind
+    # that is the midline ring's business, and anything level with or behind the
+    # casters should not be deciding whether the party advances. The ceiling
+    # follows at +756. Deliberately flat rather than small — `lat` stays at
+    # Earshot, because narrowing it is what stops a mob wrapping the flank from
+    # registering, and that is the failure worth avoiding. The furthest point
+    # from the pin is 1044u against a 1248 scan, so no part of the ring tests
+    # ground where an enemy could never be detected.
+    #
+    # The cost is early warning: the party now looks 756u ahead rather than 948
+    # before concluding there is nothing to fight, so a pack camped beyond that
+    # reads as empty ground and gets walked at.
+    #
     # `fwd` is tunable live from the Fight Lines tab; the publisher clamps and
-    # applies engage_depth_u from FightRuntime.ini on its reload timer.
+    # applies engage_depth_u from FightRuntime.ini on its reload timer, and a
+    # saved value there WINS over this default.
     frontline_ring_centre: float = 218.0
-    frontline_ring_fwd: float = 730.0
+    frontline_ring_fwd: float = 538.0
     frontline_ring_lat: float = float(Range.Earshot.value)
     # A backline breach bypasses the recover dwell — waiting out 18s with a mob
     # standing on the monks is what the ring exists to prevent — but it must not
@@ -795,19 +814,21 @@ def backline_breached(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") ->
     return blob is not None and inside_ring(backline_ring(cfg, inputs), blob, zone)
 
 
-def frontline_clear(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> bool:
-    """NOTHING is in reach — not one enemy anywhere in the frontline ring.
+def frontline_reached(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> bool:
+    """The blob's centre of mass has arrived inside the frontline ring.
 
-    Tested on every enemy rather than the centroid, unlike the two retreat
-    rings. Retreat answers to the centre of mass; advance must answer to
-    emptiness. A centroid test lets a pack straddling the ring average out
-    beyond it, and the formation then walks forward into a fight it is already
-    in.
+    Closing stops here, not when the ring empties. All three rings now read the
+    same centroid, so a single straggler, a puller, or the one enemy that ran
+    ahead no longer pins the party where it stands while the pack it is supposed
+    to be fighting sits out of reach.
+
+    The cost is deliberate and worth stating: the front rank is already trading
+    blows before the centroid arrives, because half a pack straddling the ring
+    averages out beyond it. Advancing into a fight already joined is the accepted
+    trade for not stalling on one body in the hole.
     """
-    if not inputs.enemy_positions:
-        return True
-    ring = frontline_ring(cfg)
-    return not any(inside_ring(ring, position, zone) for position in inputs.enemy_positions)
+    blob = blob_centre(cfg, inputs)
+    return blob is not None and inside_ring(frontline_ring(cfg), blob, zone)
 
 
 def retreat_step_vector(inputs: "ZoneInputs", step: float) -> tuple[float, float] | None:
@@ -855,15 +876,15 @@ def adjust_ground(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> Non
     midline tip is the shallower of the pair, so the soft step always gets its
     chance before the emergency does.
 
-    CLOSE only when the frontline ring is EMPTY. A fight nothing is joining is
-    walked to, one step per dwell. Self-limiting: every step drags the ring
-    forward onto the mob, so closing stops as soon as anything is in reach.
+    CLOSE while the blob's centre of mass is still OUTSIDE the frontline ring,
+    one step per dwell. Self-limiting: every step drags the ring forward onto the
+    mob, so closing stops as soon as the centre of the pack is in reach.
 
     HOLD otherwise, and always for the dwell after any move — one deliberate
     move, then long enough for heals to land and the mob to re-form in front,
-    rather than a continuous slide. The dwell comes off the authored per-size
-    tables: the tail of a fight is the twitchiest reading, so it moves the
-    ground the most rarely.
+    rather than a continuous slide. Retreat dwells come off the authored
+    per-size table, since the tail of a fight is the twitchiest reading and
+    should give ground most rarely; advance is a flat cadence at any blob size.
 
     The formation TRANSLATES and never rotates, so the enemies stay squarely in
     front however far it moves; facing is decided elsewhere, on the blob.
@@ -885,7 +906,7 @@ def adjust_ground(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> Non
             zone.hold_until_ms = inputs.now_ms + (
                 cfg.breach_hold_ms if breached else ground_dwell_ms(cfg, inputs, cfg.recover_hold_tiers_ms)
             )
-    elif frontline_clear(zone, cfg, inputs):
+    elif not frontline_reached(zone, cfg, inputs):
         # Give back the way out first, retracing it exactly, before pushing past
         # the authored position. Popping the stack is what stops a dogleg
         # withdrawal being unwound through the corner it went round.
@@ -893,7 +914,7 @@ def adjust_ground(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> Non
             zone.retreat_steps.pop()
         else:
             zone.advance += cfg.give_ground_step
-        zone.hold_until_ms = inputs.now_ms + ground_dwell_ms(cfg, inputs, cfg.advance_hold_tiers_ms)
+        zone.hold_until_ms = inputs.now_ms + cfg.advance_hold_ms
 
     zone.giving_ground = bool(zone.retreat_steps)
     zone.closing = zone.advance > 0.0

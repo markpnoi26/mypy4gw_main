@@ -1817,9 +1817,9 @@ class HeroAI_BaseUI:
                 # A re-aim banks its backwards component as advance rather than
                 # walking it, so advance with the blob inside the band means
                 # the pin is holding won ground, not still closing.
-                if bool(snapshot.get("frontline_clear", False)):
+                if bool(snapshot.get("closing_armed", False)):
                     PyImGui.text_colored(
-                        f"CLOSING — nothing inside the frontline ring, pushed {advance:.0f}u forward",
+                        f"CLOSING — blob centre outside the frontline ring, pushed {advance:.0f}u forward",
                         ColorPalette.GetColor("dodger_blue").to_tuple_normalized(),
                     )
                 else:
@@ -1849,9 +1849,9 @@ class HeroAI_BaseUI:
                         f"Blob centre {float(blob_front):+.0f}u — inside the midline ring (tip {mid_trip:+.0f}u), backing armed",
                         ColorPalette.GetColor("gw_gold").to_tuple_normalized(),
                     )
-                elif bool(snapshot.get("frontline_clear", False)):
+                elif bool(snapshot.get("closing_armed", False)):
                     PyImGui.text_disabled(
-                        f"Blob centre {float(blob_front):+.0f}u — frontline ring empty to {front_reach:+.0f}u, closing armed"
+                        f"Blob centre {float(blob_front):+.0f}u — outside the frontline ring ({front_reach:+.0f}u), closing armed"
                     )
                 else:
                     PyImGui.text_disabled(f"Blob centre {float(blob_front):+.0f}u — engaged, no ring tripped")
@@ -2529,7 +2529,7 @@ class HeroAI_BaseUI:
             armed = {
                 "backline": bool(snapshot.get("breached", False)),
                 "midline": past_midline,
-                "frontline": bool(snapshot.get("frontline_clear", False)),
+                "frontline": bool(snapshot.get("closing_armed", False)),
             }
             ring_colors = {
                 "backline": Utils.RGBToColor(255, 60, 60, 230),

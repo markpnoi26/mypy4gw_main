@@ -50,7 +50,7 @@ from .zone import ZoneState
 from .zone import backline_ring
 from .zone import blob_depth
 from .zone import centroid
-from .zone import frontline_clear
+from .zone import frontline_reached
 from .zone import frontline_ring
 from .zone import given_ground
 from .zone import midline_ring
@@ -394,7 +394,7 @@ class FightZonePublisher:
         blob_centre = None
         blob_front_depth = None
         past_midline = False
-        clear_ahead = False
+        closing_armed = False
         # The rings the triggers actually enforce, not the raw rank depths —
         # what is drawn must be what the blob is judged against.
         rings: dict[str, tuple[float, float, float]] = {}
@@ -402,7 +402,7 @@ class FightZonePublisher:
             blob_centre = centroid(resolve_engagement_blob(ZONE_CFG, inputs.party_xy, inputs.enemy_positions))
             blob_front_depth = blob_depth(self.zone, ZONE_CFG, inputs)
             past_midline = overrun(self.zone, ZONE_CFG, inputs)
-            clear_ahead = frontline_clear(self.zone, ZONE_CFG, inputs)
+            closing_armed = not frontline_reached(self.zone, ZONE_CFG, inputs)
             rings = {
                 name: (ring.centre, ring.fwd, ring.lat)
                 for name, ring in (
@@ -434,7 +434,7 @@ class FightZonePublisher:
             "rings": rings,
             "overrun": past_midline,
             "breached": self.zone.breached,
-            "frontline_clear": clear_ahead,
+            "closing_armed": closing_armed,
             "escape": (
                 None
                 if route is None
