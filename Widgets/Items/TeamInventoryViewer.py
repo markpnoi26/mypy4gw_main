@@ -1,5 +1,4 @@
 import json
-import os
 import re
 import traceback
 from collections import OrderedDict
@@ -20,18 +19,13 @@ from Core import ThrottledTimer
 from Core import get_texture_for_model
 from Core.enums import Bags
 from Core.enums import ModelID
-from Core.enums_src.Item_enums import ItemType
 from Core.enums_src.Item_enums import Rarity
 from Core.Item import Item
-
-from Sources.marks_sources.mods_parser import MatchedRuneInfo
-from Sources.marks_sources.mods_parser import MatchedWeaponModInfo
-from Sources.marks_sources.mods_parser import ModDatabase
-from Sources.marks_sources.mods_parser import parse_modifiers
-
-project_root = PySystem.Console.get_projects_path()
-
-MOD_DB = ModDatabase.load(os.path.join(project_root, "Sources/marks_sources/mods_data"))
+from Sources.marks_sources.item_naming import NAME_CACHE
+from Sources.marks_sources.item_naming import armor_display_name
+from Sources.marks_sources.item_naming import clean_gw_item_name
+from Sources.marks_sources.item_naming import strip_markup
+from Sources.marks_sources.item_naming import weapon_display_name
 
 MODULE_ALIASES = ['Guild Wars/Items & Loot/TeamInventoryViewer.py']
 MODULE_NAME = "TeamInventoryViewer"
@@ -76,264 +70,17 @@ STORAGE_BAGS = {
     "MaterialStorage": Bags.MaterialStorage.value,
 }
 
-ATTRIBUTES = {
-    "Axe Mastery",
-    "Hammer Mastery",
-    "Swordsmanship",
-    "Tactics",
-    "Strength",
-    "Marksmanship",
-    "Beast Mastery",
-    "Wilderness Survival",
-    "Expertise",
-    "Divine Favor",
-    "Healing Prayers",
-    "Protection Prayers",
-    "Smiting Prayers",
-    "Blood Magic",
-    "Curses",
-    "Death Magic",
-    "Soul Reaping",
-    "Domination Magic",
-    "Fast Casting",
-    "Illusion Magic",
-    "Inspiration Magic",
-    "Energy Storage",
-    "Air Magic",
-    "Earth Magic",
-    "Fire Magic",
-    "Water Magic",
-    "Critical Strikes",
-    "Dagger Mastery",
-    "Deadly Arts",
-    "Shadow Arts",
-    "Channeling Magic",
-    "Communing",
-    "Restoration Magic",
-    "Spawning Power",
-    "Command",
-    "Leadership",
-    "Motivation",
-    "Spear Mastery",
-    "Earth Prayers",
-    "Mysticism",
-    "Scythe Mastery",
-    "Wind Prayers",
-}
-
-# 1. Armor runes â†’ "of Vitae", "of Major Vigor", "of Superior Soul Reaping", â€¦
-NON_ATTRIBUTE_RUNES = {"Vitae", "Vigor", "Attunement", "Clarity", "Purity", "Recovery", "Restoration", "Absorption"}
-ARMOR_RUNE_SUFFIXES = {
-    f"of {mod}{rune}" for rune in ATTRIBUTES | NON_ATTRIBUTE_RUNES for mod in ["", "Minor ", "Major ", "Superior "]
-}
-
-# 2. Weapon grips / handles / inscriptions â†’ "Grip of Axe Mastery", "Handle of Soul Reaping", â€¦
-WEAPON_ATTRIBUTE_SUFFIXES = {f"of {attr}" for attr in ATTRIBUTES}
-
-OTHER_WEAPON_SUFFIXES = {
-    "of Defense",
-    "of Shelter",
-    "of Warding",
-    "of Enchanting",
-    "of Swiftness",
-    "of Aptitude",
-    "of Fortitude",
-    "of Devotion",
-    "of Endurance",
-    "of Valor",
-    "of Mastery",
-    "of Quickening",
-    "of Memory",
-    # Profession
-    "of the Warrior",
-    "of the Ranger",
-    "of the Necromancer",
-    "of the Elementalist",
-    "of the Mesmer",
-    "of the Monk",
-    "of the Ritualist",
-    "of the Assassin",
-    "of the Paragon",
-    "of the Dervish",
-    # Slaying
-    "of Charrslaying",
-    "of Demonslaying",
-    "of Dragonslaying",
-    "of Dwarfslaying",
-    "of Giantslaying",
-    "of Ogreslaying",
-    "of Pruning",
-    "of Tenguslaying",
-    "of Trollslaying",
-    "of Undeadbane",
-    "of Skeletonslaying",
-    "of Deathbane",
-}
-
-ALL_SUFFIXES = ARMOR_RUNE_SUFFIXES | WEAPON_ATTRIBUTE_SUFFIXES | OTHER_WEAPON_SUFFIXES
-
-WEAPON_PREFIXES = {
-    "Barbed",
-    "Crippling",
-    "Cruel",
-    "Heavy",
-    "Poisonous",
-    "Silencing",
-    "Ebon",
-    "Fiery",
-    "Icy",
-    "Shocking",
-    "Furious",
-    "Sundering",
-    "Vampiric",
-    "Zealous",
-    "Adept",
-    "Defensive",
-    "Hale",
-    "Insightful",
-    "Swift",
-}
-
-INSIGNIAS = {
-    "Survivor",
-    "Radiant",
-    "Stalwart",
-    "Brawler's",
-    "Blessed",
-    "Herald's",
-    "Sentry's",
-    "Knight's",
-    "Stonefist",
-    "Dreadnought",
-    "Sentinel's",
-    "Lieutenant's",
-    "Frostbound",
-    "Pyrebound",
-    "Stormbound",
-    "Scout's",
-    "Earthbound",
-    "Beastmaster's",
-    "Wanderer's",
-    "Disciple's",
-    "Anchorite's",
-    "Bloodstained",
-    "Tormentor's",
-    "Bonelace",
-    "Minion Master's",
-    "Blighter's",
-    "Undertaker's",
-    "Virtuoso's",
-    "Artificer's",
-    "Prodigy's",
-    "Hydromancer",
-    "Geomancer",
-    "Pyromancer",
-    "Aeromancer",
-    "Prismatic",
-    "Vanguard's",
-    "Infiltrator's",
-    "Saboteur's",
-    "Nightstalker's",
-    "Shaman's",
-    "Ghostforge",
-    "Mystic's",
-    "Centurion's",
-    "Windwalker",
-    "Forsaken",
-}
-
-
-def clean_gw_item_name(item_name: str):
-    """
-    PERFECT Guild Wars 1 item name cleaner for weapons AND armor.
-    - Removes at most one prefix/insignia + one suffix/rune.
-    - Supports partial matches like: 'Survivor' -> "Survivor's"
-    - Returns: (base_name, removed_prefix, removed_suffix)
-    """
-    if not item_name:
-        return "", None, None
-
-    words = item_name.strip().split()
-    if not words:
-        return "", None, None
-
-    result = []
-    removed_prefix = None
-    removed_suffix = None
-
-    i = 0
-    n = len(words)
-
-    # Normalize prefix/insignia list for flexible matching
-    all_prefixes = WEAPON_PREFIXES | INSIGNIAS
-    normalized_prefixes = {p.lower().rstrip("'s") for p in all_prefixes}
-
-    if i < n:
-        original = words[i].rstrip(".,!?")
-        normalized = original.lower().rstrip("'s")
-
-        if normalized in normalized_prefixes:
-            removed_prefix = original  # store EXACT original prefix
-            i += 1
-
-    while i < n:
-        remaining = words[i:]
-        suffix_matched = False
-
-        # Try longest suffix first (up to 5 words)
-        for length in range(min(5, len(remaining)), 0, -1):
-            candidate = " ".join(remaining[:length]).rstrip(".,!?")
-            if candidate in ALL_SUFFIXES:
-                removed_suffix = candidate  # store EXACT matched suffix phrase
-                suffix_matched = True
-                break
-
-        if suffix_matched:
-            break
-
-        result.append(words[i])
-        i += 1
-
-    # Final cleanup of base name
-    base_name = " ".join(result).strip()
-    base_name = ''.join(c for c in base_name if not c.isdigit())
-
-    return base_name, removed_prefix, removed_suffix
-
-
 # endregion
 
 
 # region JSONStore
 
 
-class ModelIDJSONStore:
-    """Shared {model_id: model_name} map, backed by a global-scope JsonFactory doc.
-
-    Global scope is safe under multibox: saves merge every client's discoveries
-    through a cross-process lock, so different accounts scanning different items all
-    contribute to the same on-disk map without clobbering each other.
-    """
-
-    FILE = "TeamInventoryViewer/model_ids.json"
-
-    def __init__(self):
-        self.file = JsonFactory(self.FILE, "global")
-
-    def save_model_id(self, model_id, model_name):
-        if not model_id or not model_name:
-            return
-        self.file.set(str(model_id), str(model_name))
-
-    def get(self, model_id, default=""):
-        return self.file.get_str(str(model_id), default)
-
-
 class ModelFileIDJSONStore:
     """Shared {model_id: file_id} lookup so any character can render icons straight
     from GW.dat, even for items they've never held themselves.
 
-    Global scope; same multibox-safe merge semantics as ModelIDJSONStore.
+    Global scope; same multibox-safe merge semantics as the shared name cache.
     """
 
     FILE = "TeamInventoryViewer/model_file_ids.json"
@@ -498,7 +245,6 @@ class MultiAccountInventoryStore:
 
 
 multi_store = MultiAccountInventoryStore()
-inventory_model_ids_store = ModelIDJSONStore()
 inventory_mod_hash_store = ModHashJSONStore()
 inventory_model_file_ids_store = ModelFileIDJSONStore()
 
@@ -590,74 +336,8 @@ def get_storage_bag_items_coroutine(bag, bag_id, email, storage_name):
     store.save_bag(storage_name=storage_name, bag_items=bag_items)
 
 
-def get_mods_from_item(item_id, model_id):
-    """Fetch modifiers via GLOBAL_CACHE — bag.GetItems() returns bag-slot stubs
-    without a `.modifiers` attribute; the real PyItem instance is what carries
-    them (see Core/GlobalCache/ItemCache.py:571)."""
-    raw_modifiers = GLOBAL_CACHE.Item.Mods.GetModifiers(item_id) or []
-    item_type_int, _item_type_name = GLOBAL_CACHE.Item.GetItemType(item_id)
-    if not raw_modifiers:
-        return (None, None, None)
-
-    try:
-        item_type = ItemType(item_type_int)
-    except ValueError:
-        return (None, None, None)
-
-    modifiers = []
-    for mod in raw_modifiers:
-        modifiers.append(
-            [
-                mod.GetIdentifier(),
-                mod.GetArg1(),
-                mod.GetArg2(),
-            ]
-        )
-    result = parse_modifiers(
-        modifiers=modifiers,
-        item_type=item_type,
-        model_id=model_id,
-        db=MOD_DB,
-    )
-
-    prefix = None
-    suffix = None
-    inherent = None
-
-    if result.prefix and isinstance(result.prefix, MatchedWeaponModInfo):
-        prefix = result.prefix.weapon_mod.name
-    elif result.prefix and isinstance(result.prefix, MatchedRuneInfo):
-        prefix = result.prefix.rune.name
-
-    if result.inherent and isinstance(result.inherent, MatchedWeaponModInfo):
-        inherent = result.inherent.weapon_mod.name
-
-    if result.suffix and isinstance(result.suffix, MatchedWeaponModInfo):
-        suffix = result.suffix.weapon_mod.name
-    elif result.suffix and isinstance(result.suffix, MatchedRuneInfo):
-        suffix = result.suffix.rune.name
-
-    return (prefix, suffix, inherent)
-
-
 def _collect_bag_items(bag, bag_id, email, storage_name=None, char_name=None):
     """Shared coroutine to fetch all items from a bag with modifier and frenkey DB name support."""
-
-    def _strip_markup(text):
-        if not text:
-            return ""
-
-        text = re.sub(r"<c=[^>]+>(.*?)</c>", r"\1", text, flags=re.IGNORECASE)
-        text = re.sub(r"\{s\}", "", text, flags=re.IGNORECASE)
-        text = re.sub(r"\{sc\}", "", text, flags=re.IGNORECASE)
-        text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
-        text = re.sub(r"</?p>", "\n", text, flags=re.IGNORECASE)
-        text = re.sub(r"<[^>]+>", "", text)
-        text = re.sub(r"\{[^}]+\}", "", text)
-        text = re.sub(r"[ \t]+", " ", text)
-        text = re.sub(r"\n\s+", "\n", text)
-
-        return text.strip()
 
     def _find_last_name_stored_model_id(model_id, slot, count, storage_name=None, char_name=None):
         if char_name:
@@ -723,9 +403,9 @@ def _collect_bag_items(bag, bag_id, email, storage_name=None, char_name=None):
 
         # Try LootEx, will fail if model id data isn't there
         if GLOBAL_CACHE.Item.Type.IsWeapon(item_id) and not GLOBAL_CACHE.Item.Rarity.IsGreen(item_id):
-            final_name = get_weapon_name_from_modifiers(item)
+            final_name = weapon_display_name(item_id, model_id)
         elif GLOBAL_CACHE.Item.Type.IsArmor(item_id):
-            final_name = get_armor_name_from_modifiers(item)
+            final_name = armor_display_name(item_id, model_id)
 
         # For generic items, we use Model ID
         if not final_name:
@@ -750,10 +430,10 @@ def _collect_bag_items(bag, bag_id, email, storage_name=None, char_name=None):
         if not final_name:
             try:
                 markedup = yield from Routines.Yield.Items.GetItemNameByItemID(item_id)
-                final_name = _strip_markup(markedup)
+                final_name = strip_markup(markedup)
                 if final_name:
                     model_name, prefix, suffix = clean_gw_item_name(final_name)
-                    inventory_model_ids_store.save_model_id(model_id, model_name)
+                    NAME_CACHE.remember(model_id, model_name)
                     raw_modifiers = GLOBAL_CACHE.Item.Mods.GetModifiers(item_id) or []
                     if raw_modifiers:
                         mod_hash = ModHashJSONStore.hash_mods(raw_modifiers)
@@ -825,6 +505,8 @@ def record_account_data():
         return
 
     current_character_name = char_name
+    # Re-read once per pass rather than per item, so names another client discovered still show up.
+    NAME_CACHE.load(force=True)
     raw_item_cache = GLOBAL_CACHE.Inventory._raw_item_cache
 
     for bag_name, bag_id in INVENTORY_BAGS.items():
@@ -865,59 +547,6 @@ def search(query: str, items: list[str]) -> list[str]:
     partial_matches = [item for item in items if query in item.lower()]
 
     return sorted(partial_matches)
-
-
-def get_armor_name_from_modifiers(item):
-    base_name = inventory_model_ids_store.get(str(item.model_id), "")
-    if not base_name:
-        try:
-            base_name = ModelID(item.model_id).name.replace("_", " ")
-        except ValueError:
-            return None
-
-    # Collect mods
-    prefix, suffix, _inherent = get_mods_from_item(item.item_id, item.model_id)
-
-    # --- Construct name ---
-    name_parts = []
-
-    name_parts.append(base_name)
-
-    if prefix:
-        name_parts.append(f'| {prefix}')
-
-    if suffix:
-        name_parts.append(f"| {suffix}")
-
-    return " ".join(name_parts)
-
-
-def get_weapon_name_from_modifiers(item):
-    base_name = inventory_model_ids_store.get(str(item.model_id), "")
-    if not base_name:
-        try:
-            base_name = ModelID(item.model_id).name.replace("_", " ")
-        except ValueError:
-            return None
-
-    prefix, suffix, inherent = get_mods_from_item(item.item_id, item.model_id)
-
-    # --- Construct name ---
-    name_parts = []
-
-    # Inherent mods like â€œVampiricâ€ or â€œInsightfulâ€ go before everything else
-    if prefix:
-        name_parts.append(prefix)
-
-    name_parts.append(base_name)
-
-    if suffix:
-        name_parts.append(f"{suffix}")
-
-    if inherent:
-        name_parts.append(f"({inherent})")
-
-    return " ".join(name_parts)
 
 
 # region Widget

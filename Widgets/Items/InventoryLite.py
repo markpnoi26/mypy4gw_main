@@ -1,14 +1,11 @@
 """Lightweight inventory helper: auto-identify, salvage, organize, and its own item filtering.
 
-The filtering is deliberately self-contained. Facts about an item come from its modifier words
-matched against the LootEx mod tables -- the method TeamInventoryViewer uses, and the only one that
-has proven stable here -- and rules then match those facts in pure Python. Nothing asks the server
-for a name, and nothing builds a `PyItem` from a raw id.
+Facts about an item come from its modifier words matched against the LootEx mod tables, and rules
+match those facts in pure Python. Naming -- the mod tables, the shared model_id cache and the
+resolution ladder -- lives in `Sources.marks_sources.item_naming`, shared with TeamInventoryViewer.
 """
 
-import os
 import re
-import struct
 import time
 import traceback
 from dataclasses import dataclass
@@ -16,7 +13,6 @@ from dataclasses import field
 
 import PyImGui
 import PyInventory
-import PySystem
 
 from Core import ImGui
 from Core.enums_src.Item_enums import INVENTORY_BAGS
@@ -31,8 +27,13 @@ from Core.py4gwcorelib_src.Settings import Settings
 from Core.Routines import Routines
 from Core.UIManager import UIManager
 from Core.UIManager import WindowFrame
-from Sources.marks_sources.mods_parser import ModDatabase
-from Sources.marks_sources.mods_parser import parse_modifiers
+from Sources.marks_sources.item_naming import NAME_CACHE
+from Sources.marks_sources.item_naming import fetch_base_name
+from Sources.marks_sources.item_naming import known_base_name
+from Sources.marks_sources.item_naming import mod_database
+from Sources.marks_sources.item_naming import mod_display_name
+from Sources.marks_sources.item_naming import parse_item_mods
+from Sources.marks_sources.item_naming import request_names
 
 MODULE_NAME = "Inventory Lite"
 MODULE_CATEGORY = "Items"
@@ -48,8 +49,6 @@ SALVAGE_RARITIES = ("White", "Blue")
 POLL_MS = 50
 STORAGE_OPEN_TIMEOUT_MS = 4000
 DEPOSIT_CONFIRM_TIMEOUT_MS = 2500
-DECODE_TIMEOUT_MS = 3000
-STRING_TABLE_TIMEOUT_MS = 20000
 MAX_MOVES_PER_ITEM = 8
 DISPLAY_LINE_CAP = 220
 REPORT_LINES = 40
@@ -119,7 +118,6 @@ DYE_ITEM_TYPE = int(ItemType.Dye)
 
 SETTINGS_SECTION = "InventoryLite"
 RULES_DOC = "Widgets/Items/InventoryLiteRules.json"
-NAMES_DOC = "Widgets/Items/InventoryLiteNames.json"
 TRACE_INI = "Widgets/Config/Inventory Lite Trace.ini"
 TRACE_SECTION = "LastRun"
 
@@ -157,228 +155,9 @@ def display_safe(text: str) -> str:
 # ---------------------------------------------------------------- item facts
 
 
-def load_mod_db():
-    """The LootEx rune / weapon-mod tables, loaded as TeamInventoryViewer loads them."""
-    try:
-        root = PySystem.Console.get_projects_path()
-        return ModDatabase.load(os.path.join(root, "Sources/marks_sources/mods_data"))
-    except Exception as exc:
-        ConsoleLog(MODULE_NAME, f"Could not load the mod database: {exc}", Console.MessageType.Error)
-        return None
-
-
-MOD_DB = load_mod_db()
-LEARNED_NAMES: dict = {}
-OWN_NAMES: dict = {}
-
-
-def own_names_doc():
-    from Core.py4gwcorelib_src.JsonFactory import JsonFactory
-
-    return JsonFactory(NAMES_DOC, "global")
-
-
-def load_own_names() -> dict:
-    """Names this widget has learned. Global, so every account benefits from one resolution.
-
-    Entries that are raw encodings are dropped and rewritten out. An earlier version stored those as
-    though they were names, which made the model look resolved and stopped it ever being retried --
-    so a single failed decode became permanent.
-    """
-    try:
-        raw = own_names_doc().get_json("names", {})
-    except Exception:
-        return {}
-    if not isinstance(raw, dict):
-        return {}
-    clean = {k: v for k, v in raw.items() if v and not str(v).startswith("enc:")}
-    if len(clean) != len(raw):
-        try:
-            own_names_doc().set_json("names", clean)
-            ConsoleLog(
-                MODULE_NAME,
-                f"Cleared {len(raw) - len(clean)} unresolved name(s) so they can be decoded again.",
-                Console.MessageType.Info,
-            )
-        except Exception:
-            pass
-    return clean
-
-
-def remember_name(model_id: int, name: str):
-    """Write a RESOLVED name down so no later scan has to ask for it again.
-
-    A raw encoding is not a name: storing one would mark the model resolved and it would never be
-    retried, which is exactly how `enc:...` ended up displayed as an item's name.
-    """
-    if not name or name.startswith("enc:"):
-        return
-    OWN_NAMES[str(model_id)] = name
-    try:
-        own_names_doc().set_json("names", OWN_NAMES)
-    except Exception as exc:
-        ConsoleLog(MODULE_NAME, f"Could not store the name for model {model_id}: {exc}", Console.MessageType.Warning)
-
-
 def normalize_match(text: str) -> str:
     """Lowercase, letters and digits only -- the form both sides of a text criterion compare in."""
     return re.sub(r"[^a-z0-9]+", "", (text or "").lower())
-
-
-def strip_markup(text: str) -> str:
-    """GW names arrive wrapped in colour and style codes. Storage keeps the words only."""
-    cleaned = re.sub(r"<[^>]*>", "", text or "")
-    cleaned = re.sub(r"\{s c?\}|\{s\}|\{sc\}", "", cleaned)
-    return " ".join(cleaned.split())
-
-
-def strip_mod_words(full_name: str, prefix: str, suffix: str) -> str:
-    """The base name with the mod words taken off.
-
-    A decoded weapon name reads "Zealous Scythe of Fortitude" -- storing that against the MODEL id
-    would label every scythe of that skin with one roll's mods. The parser already told us which mod
-    words are on this item, so they can be removed by name rather than guessed at.
-    """
-    base = full_name
-    for word in (prefix, suffix):
-        if not word:
-            continue
-        base = re.sub(r"\b%s\b" % re.escape(word), " ", base, flags=re.IGNORECASE)
-        head = word.split()[0] if word.split() else ""
-        if head and head.lower() not in ("of", "the"):
-            base = re.sub(r"\b%s\b" % re.escape(head), " ", base, flags=re.IGNORECASE)
-    base = re.sub(r"\bof\s*$", "", " ".join(base.split()), flags=re.IGNORECASE)
-    return " ".join(base.split())
-
-
-def encoded_codepoints(item_id: int) -> list[int]:
-    """The item's encoded name as uint16 codepoints, off the item the cache resolved."""
-    try:
-        item = GLOBAL_CACHE.Item.raw_item_array.get_item_by_id(item_id)
-        if item is None:
-            return []
-        return [int(c) & 0xFFFF for c in (item.GetNameEnc() or [])]
-    except Exception:
-        return []
-
-
-def ensure_string_table():
-    """Wait for the game's string table, once per session.
-
-    `load_string_table` enqueues the load ON THE GAME THREAD and it reads ~100K entries out of
-    gw.dat, so `decode` answers "" until that finishes. Waiting only as long as a single string takes
-    is why the first attempt fell through to the raw encoding: the table itself was not up yet.
-    """
-    try:
-        from Core.native_src.internals import string_table
-    except Exception:
-        return False
-
-    if getattr(string_table, "_string_table_loaded", False):
-        return True
-    try:
-        string_table.load_string_table(string_table._get_client_language())
-    except Exception as exc:
-        ConsoleLog(MODULE_NAME, f"Could not start the string table load: {exc}", Console.MessageType.Warning)
-        return False
-
-    trace("waiting for string table")
-    waited = 0
-    while waited < STRING_TABLE_TIMEOUT_MS:
-        if getattr(string_table, "_string_table_loaded", False):
-            trace("string table ready")
-            return True
-        yield from Routines.Yield.wait(POLL_MS)
-        waited += POLL_MS
-
-    ConsoleLog(
-        MODULE_NAME,
-        "The game string table did not finish loading; names stay unresolved for now.",
-        Console.MessageType.Warning,
-    )
-    return False
-
-
-def decode_encoded_name(item_id: int):
-    """Decode the item's encoded name through the game's own string table.
-
-    `string_table.decode` takes the raw little-endian uint16 bytes and answers from gw.dat, with no
-    server round trip. It is asynchronous by design: the first call submits the work and returns "",
-    and the answer appears in its cache a frame or two later -- so this polls rather than assuming.
-    """
-    codepoints = encoded_codepoints(item_id)
-    if not codepoints:
-        return ""
-
-    raw = b"".join(struct.pack("<H", c) for c in codepoints) + b"\x00\x00"
-    try:
-        from Core.native_src.internals import string_table
-    except Exception:
-        return ""
-
-    waited = 0
-    while waited <= DECODE_TIMEOUT_MS:
-        try:
-            text = string_table.decode(raw)
-        except Exception:
-            return ""
-        if text:
-            return strip_markup(text)
-        yield from Routines.Yield.wait(POLL_MS)
-        waited += POLL_MS
-    return ""
-
-
-def mod_display_name(matched) -> str:
-    """A matched mod's name. Runes and weapon mods carry it on different attributes."""
-    if matched is None:
-        return ""
-    holder = getattr(matched, "rune", None) or getattr(matched, "weapon_mod", None)
-    return str(getattr(holder, "name", "") or "")
-
-
-def modifier_triples(item_id: int) -> list[tuple[int, int, int]]:
-    """(identifier, arg1, arg2) per modifier, off the item the cache already holds."""
-    out: list[tuple[int, int, int]] = []
-    for modifier in GLOBAL_CACHE.Item.Mods.GetModifiers(item_id) or []:
-        try:
-            out.append((modifier.GetIdentifier(), modifier.GetArg1(), modifier.GetArg2()))
-        except Exception:
-            continue
-    return out
-
-
-def load_learned_names() -> dict:
-    """Names TeamInventoryViewer already resolved. Read-only: we consume its work and never write to
-    its documents."""
-    try:
-        from Core.py4gwcorelib_src.JsonFactory import JsonFactory
-
-        doc = JsonFactory("TeamInventoryViewer/model_ids.json", "global")
-        for getter in ("get_all", "get_json_all", "all"):
-            if hasattr(doc, getter):
-                data = getattr(doc, getter)()
-                if isinstance(data, dict):
-                    return data
-    except Exception:
-        pass
-    return {}
-
-
-def base_name(model_id: int) -> str:
-    """The base name without asking the server, cheapest rung first.
-
-    ModelID enum, then what this widget learned earlier, then what TeamInventoryViewer learned. Only
-    when all three come back empty does anything get requested -- see `resolve_unknown_names`.
-    """
-    try:
-        from Core.enums import ModelID
-
-        return ModelID(model_id).name.replace("_", " ")
-    except Exception:
-        pass
-    key = str(model_id)
-    return str(OWN_NAMES.get(key) or LEARNED_NAMES.get(key) or "")
 
 
 def item_facts(item_id: int, model_id: int, quantity: int) -> dict:
@@ -388,7 +167,7 @@ def item_facts(item_id: int, model_id: int, quantity: int) -> dict:
         "item_id": item_id,
         "model_id": model_id,
         "quantity": quantity,
-        "name": base_name(model_id),
+        "name": known_base_name(model_id),
         "item_type": int(item_type_value),
         "item_type_name": str(item_type_name or ""),
         "rarity": str(GLOBAL_CACHE.Item.Rarity.GetRarity(item_id)[1] or ""),
@@ -409,17 +188,8 @@ def item_facts(item_id: int, model_id: int, quantity: int) -> dict:
         "all_mods_max": False,
     }
 
-    if MOD_DB is None:
-        return facts
-
-    try:
-        parsed = parse_modifiers(
-            modifiers=modifier_triples(item_id),
-            item_type=ItemType(facts["item_type"]),
-            model_id=model_id,
-            db=MOD_DB,
-        )
-    except Exception:
+    parsed = parse_item_mods(item_id, model_id, facts["item_type"])
+    if parsed is None:
         return facts
 
     facts["requirement"] = int(getattr(parsed, "requirements", 0) or 0)
@@ -469,10 +239,9 @@ def facts_row(facts: dict) -> list[str]:
 def resolve_unknown_names(facts_by_id: dict):
     """Name the items nothing could name, ONCE PER MODEL, and write the answer down.
 
-    This is the only thing here that asks the game anything, so it is last, it is one item at a time
-    through the framework's own behaviour tree (`GetItemNameByItemID` -- request, then a repeater with
-    a 2000 ms timeout at a 100 ms throttle), and it is skipped entirely for models already known. The
-    result is stored globally, so a model costs one resolution ever rather than one per scan.
+    This is the only thing here that asks the game anything, so it is last, and it is skipped entirely
+    for models already known. The answer is stored globally, so a model costs one resolution ever
+    rather than one per scan.
     """
     unknown: dict[int, int] = {}
     for facts in facts_by_id.values():
@@ -481,43 +250,25 @@ def resolve_unknown_names(facts_by_id: dict):
     if not unknown:
         return 0
 
-    table_ready = yield from ensure_string_table()
+    # Every request goes out before any is collected, so the server resolves them in parallel instead
+    # of the routine stalling on each in turn.
+    request_names(unknown.values())
+
     learned = 0
     unresolved: list[int] = []
     for model_id, item_id in unknown.items():
         trace("name model %d" % model_id)
         facts = facts_by_id[item_id]
-        full = ""
-
-        # 1. The encoded name, decoded locally from gw.dat. No server involved, so this goes first.
-        if table_ready:
-            try:
-                full = yield from decode_encoded_name(item_id)
-            except Exception as exc:
-                ConsoleLog(MODULE_NAME, f"Decode failed for model {model_id}: {exc}", Console.MessageType.Warning)
-
-        # 2. Ask the game, the framework's way.
-        if not full:
-            try:
-                full = strip_markup((yield from Routines.Yield.Items.GetItemNameByItemID(item_id)) or "")
-            except Exception as exc:
-                ConsoleLog(MODULE_NAME, f"Name lookup failed for model {model_id}: {exc}", Console.MessageType.Warning)
-
-        # The ROOT name is what gets stored: the name is keyed by MODEL, and one roll's prefix and
-        # suffix must not end up labelling every item of that skin.
-        name = strip_mod_words(full, facts["prefix"], facts["suffix"]) if full else ""
-
+        name = yield from fetch_base_name(item_id, model_id, facts["prefix"], facts["suffix"])
         if name:
-            remember_name(model_id, name)
             learned += 1
         else:
-            # Left unresolved on purpose, and NOT written down: the model has to stay retryable, and
-            # the encoding is a diagnostic, not a name.
+            # Left unresolved on purpose and NOT written down: the model has to stay retryable.
             unresolved.append(model_id)
 
     for facts in facts_by_id.values():
         if not facts["name"]:
-            facts["name"] = base_name(facts["model_id"])
+            facts["name"] = known_base_name(facts["model_id"])
 
     if unresolved:
         ConsoleLog(
@@ -532,9 +283,7 @@ def resolve_unknown_names(facts_by_id: dict):
 
 def gather_facts(learn_names: bool = True):
     """Facts for every bag item, ONE ITEM PER FRAME. Returns {item_id: facts}."""
-    global LEARNED_NAMES, OWN_NAMES
-    OWN_NAMES = load_own_names()
-    LEARNED_NAMES = load_learned_names()
+    NAME_CACHE.load(force=True)
 
     out: dict[int, dict] = {}
     for item_id, (model_id, quantity) in list(live_bag_items().items()):
@@ -1342,7 +1091,7 @@ class InventoryLite:
 
     def draw_rules(self):
         PyImGui.text("Deposit rules")
-        if MOD_DB is None:
+        if mod_database() is None:
             PyImGui.text_colored("Mod database failed to load - prefix/suffix criteria cannot match.", WARN)
         else:
             PyImGui.text_colored(

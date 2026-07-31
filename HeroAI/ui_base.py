@@ -1737,7 +1737,7 @@ class HeroAI_BaseUI:
             cfg.save()
         if new_overlay:
             circles_only = bool(cfg.get_bool("FightRuntime", "fight_zone_overlay_circles_only", False))
-            new_circles_only = PyImGui.checkbox("Circles only (no trail, spokes or labels)", circles_only)
+            new_circles_only = PyImGui.checkbox("Circles only (no spokes, arrow or labels)", circles_only)
             if new_circles_only != circles_only:
                 cfg.set_bool("FightRuntime", "fight_zone_overlay_circles_only", new_circles_only)
                 cfg.save()
@@ -1762,13 +1762,38 @@ class HeroAI_BaseUI:
             else:
                 PyImGui.text(f"Zone: {snapshot.get('state', '?')}    depth {depth:.0f}")
             blob_size = int(snapshot.get("reaim_blob_size", 0))
+            forced = int(snapshot.get("forced_reaims", 0))
             PyImGui.text_disabled(
                 "Re-aim: no approaching enemies — holding"
                 if blob_size <= 0
                 else f"Re-aim: blob {blob_size} approaching"
                 f" — confirm {float(snapshot.get('reaim_commit_ms', 0.0)) / 1000.0:.1f}s,"
                 f" then at most one per {float(snapshot.get('reaim_floor_ms', 0.0)) / 1000.0:.0f}s"
+                + (f"   (forced {forced}x)" if forced else "")
             )
+            health = float(snapshot.get("party_health", 1.0))
+            standoff = float(snapshot.get("standoff", 0.0))
+            if bool(snapshot.get("giving_ground", False)):
+                PyImGui.text_colored(
+                    f"GIVING GROUND — party at {health * 100.0:.0f}%, standing off {standoff:.0f}u",
+                    ColorPalette.GetColor("gw_gold").to_tuple_normalized(),
+                )
+            else:
+                PyImGui.text_disabled(f"Party {health * 100.0:.0f}%    standoff {standoff:.0f}u")
+
+            escape = snapshot.get("escape")
+            if escape is None:
+                # Three different silences: no terrain to reason about, searched
+                # and found nothing, or not run yet. They need different fixes.
+                if not bool(snapshot.get("escape_terrain_known", False)):
+                    escape_status = "Escape: no navmesh — nothing to plot against"
+                elif bool(snapshot.get("escape_boxed_in", False)):
+                    escape_status = "Escape: NO ROUTE — nothing open far enough to run to"
+                else:
+                    escape_status = "Escape: not plotted yet"
+                PyImGui.text_colored(escape_status, ColorPalette.GetColor("gw_gold").to_tuple_normalized())
+            else:
+                PyImGui.text_disabled(f"Escape: {float(escape.get('distance', 0.0)):.0f}u")
             # Worst case is what decides whether a heal lands during a spike:
             # front and back drifting to opposite edges of their tolerances.
             PyImGui.text_disabled(
@@ -2335,10 +2360,6 @@ class HeroAI_BaseUI:
         except Exception:
             pass
 
-    # Segment budgets for the fight overlay. It redraws every UI frame, so these
-    # trade shape fidelity against per-frame cost.
-    FIGHT_OVERLAY_TRAIL_SEGMENTS = 10
-
     @staticmethod
     def DrawFightZone3DOverlay(cached_data: CacheData):
         # Leader-only: the fight publisher runs there, so it is the only client
@@ -2362,9 +2383,9 @@ class HeroAI_BaseUI:
         }
 
         # Read from the snapshot rather than hero_globals so the flag the
-        # publisher actually drew this frame is the one honoured — the trail and
-        # approach are omitted from the snapshot in this mode, and reading a
-        # different source could ask for points that were never published.
+        # publisher actually drew this frame is the one honoured — the approach
+        # point and slot list are omitted from the snapshot in this mode, and
+        # reading a different source could ask for points never published.
         circles_only = bool(snapshot.get("circles_only", False))
 
         try:
@@ -2403,26 +2424,10 @@ class HeroAI_BaseUI:
                     2.5,
                 )
 
-            # The walked-in path and the point the advance axis is measured from.
-            # Without these a wrong formation angle is impossible to diagnose:
-            # you cannot tell a bad axis from a bad formation.
-            # FindZ is a terrain lookup, so resolve each point once and stride
-            # the polyline: drawing every breadcrumb of a 32-point trail cost
-            # 62 FindZ calls per frame for a line whose shape reads fine at a
-            # tenth of that.
-            trail = snapshot.get("trail") or ()
-            trail_color = Utils.RGBToColor(120, 200, 120, 130)
-            if len(trail) >= 2:
-                stride = max(1, len(trail) // HeroAI_BaseUI.FIGHT_OVERLAY_TRAIL_SEGMENTS)
-                sampled = list(trail[::stride])
-                if sampled[-1] != trail[-1]:
-                    sampled.append(trail[-1])
-                resolved = [(float(px), float(py), Overlay().FindZ(float(px), float(py), 0)) for px, py in sampled]
-                for i in range(1, len(resolved)):
-                    x1, y1, z1 = resolved[i - 1]
-                    x2, y2, z2 = resolved[i]
-                    Overlay().DrawLine3D(x1, y1, z1, x2, y2, z2, trail_color, 1.5)
-
+            # The last spot the party was safe, and the point the advance axis is
+            # measured from — one and the same now. Without it a wrong formation
+            # angle is impossible to diagnose: you cannot tell a bad axis from a
+            # bad formation.
             approach = snapshot.get("approach")
             if approach is not None:
                 apx, apy = float(approach[0]), float(approach[1])
@@ -2431,6 +2436,21 @@ class HeroAI_BaseUI:
                 Overlay().DrawPoly3D(apx, apy, apz, radius=60.0, color=approach_color, numsegments=12, thickness=2.0)
                 Overlay().DrawLine3D(apx, apy, apz, ax, ay, az, approach_color, 2.0)
                 Overlay().DrawText3D(apx, apy, apz, "came from", approach_color)
+
+            # The escape route drives nothing — it is drawn so a bad one is
+            # visible before it ever gets the chance to. Two FindZ calls: the
+            # route is a probed straight ray, so its ends are the whole shape.
+            escape = snapshot.get("escape")
+            if escape is not None:
+                escape_color = Utils.RGBToColor(210, 120, 255, 220)
+                waypoint = escape.get("waypoint") or (0.0, 0.0)
+                start = escape.get("from") or (ax, ay)
+                wx, wy = float(waypoint[0]), float(waypoint[1])
+                sx, sy = float(start[0]), float(start[1])
+                wz = Overlay().FindZ(wx, wy, 0)
+                Overlay().DrawPoly3D(wx, wy, wz, radius=70.0, color=escape_color, numsegments=12, thickness=2.0)
+                Overlay().DrawText3D(wx, wy, wz, f"escape {float(escape.get('distance', 0.0)):.0f}u", escape_color)
+                Overlay().DrawLine3D(sx, sy, Overlay().FindZ(sx, sy, 0), wx, wy, wz, escape_color, 2.5)
 
             clamped = bool(snapshot.get("depth_clamped", False))
             # A clamped depth still gets its label in circles-only mode: it is a

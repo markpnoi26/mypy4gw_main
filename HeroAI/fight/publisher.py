@@ -24,6 +24,10 @@ from .assignment import MemberLine
 from .engagement import ENGAGEMENT_CFG
 from .engagement import EngagementState
 from .engagement import update_engagement
+from .escape import ESCAPE_CFG
+from .escape import EscapeState
+from .escape import TerrainProbe
+from .escape import plot_escape
 from .formation import CAST_RANGE
 from .formation import FightFormationLoader
 from .formation import rotate_fight_local_to_world
@@ -32,10 +36,10 @@ from .lines import LineSource
 from .lines import ResolvedLine
 from .lines import get_manual_line
 from .lines import infer_line_from_profession
-from .trail import TRAIL_CFG
-from .trail import LeaderTrail
-from .trail import approach_point
-from .trail import sample_trail
+from .safespot import SAFE_CFG
+from .safespot import SafeSpot
+from .safespot import approach_from
+from .safespot import update_safe_spot
 from .zone import FightZone
 from .zone import ZONE_CFG
 from .zone import ZoneInputs
@@ -57,9 +61,16 @@ class FightRuntimeConfig:
     # until it has been watched through the overlay.
     enabled: bool = False
     show_overlay: bool = False
-    # Ground circles only — no trail, spokes, arrow or labels. The trail is the
+    # Ground circles only — no spokes, arrow or labels. The per-slot list is the
     # expensive half of the snapshot, so this drops building it too.
     circles_only: bool = False
+
+
+def mean_party_health(party_health: dict[int, float]) -> float:
+    """1.0 when nothing is known: an absent reading must never argue for retreat."""
+    if not party_health:
+        return 1.0
+    return sum(party_health.values()) / len(party_health)
 
 
 def party_centroid(
@@ -103,8 +114,9 @@ class FightPlan:
 class FightZonePublisher:
     def __init__(self) -> None:
         self.zone = FightZone()
-        self.trail = LeaderTrail()
+        self.safe_spot = SafeSpot()
         self.engagement = EngagementState()
+        self.escape = EscapeState()
         self.last_approach_xy: tuple[float, float] | None = None
         self.formation_loader = FightFormationLoader()
         self.assignment = AssignmentLatch()
@@ -113,6 +125,7 @@ class FightZonePublisher:
         self.plan = FightPlan(zone=self.zone)
         self.build_lines_by_character: dict[str, CombatLine] = {}
         self.resolved_by_character: dict[str, ResolvedLine] = {}
+        self.last_party_health: dict[int, float] = {}
 
     def runtime_cfg(self) -> Settings:
         return Settings(f"{RUNTIME_INI_PATH}/{RUNTIME_INI_NAME}", "global")
@@ -204,19 +217,21 @@ class FightZonePublisher:
         now_ms: int,
         party_health: dict[int, float] | None = None,
         party_target_ids: dict[int, int] | None = None,
+        terrain_probe: TerrainProbe | None = None,
     ) -> FightPlan:
         party_health = party_health or {}
         party_target_ids = party_target_ids or {}
+        self.last_party_health = party_health
         self.reload_runtime()
 
         # Track the PARTY centroid, not the leader. A leader jinks back and
         # forth while pulling and repositioning; the blob as a whole travels in
         # one coherent direction, which is the axis the formation wants.
-        # Sampled unconditionally and kept running through the fight — the
-        # min_sample_distance means shuffling around an engagement adds almost
-        # nothing, so the lookback still reaches back to the travel approach.
         party_centre = party_centroid(leader_xy, member_positions)
-        sample_trail(self.trail, TRAIL_CFG, party_centre, now_ms)
+        # Runs before the dry-run bail so the latch keeps following the party
+        # while the feature is off. Otherwise the first fight after switching it
+        # on would remember wherever the party happened to be at that moment.
+        update_safe_spot(self.safe_spot, SAFE_CFG, party_centre, party_in_aggro)
 
         # Dry run: with the feature off but the overlay on, the zone is still
         # computed and drawn, it just never becomes an active plan. That is the
@@ -224,13 +239,14 @@ class FightZonePublisher:
         if not (self.runtime.enabled or self.runtime.show_overlay):
             self.zone.state = ZoneState.TRAVELING
             self.assignment.clear()
+            self.escape.clear()
             self.plan = FightPlan(zone=self.zone)
             hero_globals.fight_zone_debug_snapshot = None
             return self.plan
 
         enemy_ids = self.collect_enemy_ids(leader_xy)
         enemy_positions = self.collect_enemy_positions(enemy_ids)
-        self.last_approach_xy = approach_point(self.trail, TRAIL_CFG, now_ms)
+        self.last_approach_xy = approach_from(self.safe_spot, SAFE_CFG, party_centre)
         was_active = self.zone.is_active()
 
         # Proximity is not a fight, and it must not be able to end one either:
@@ -247,6 +263,23 @@ class FightZonePublisher:
             now_ms,
         )
 
+        # Plotted from the party centre, not the pin, and BEFORE the zone ticks:
+        # the route still places nobody, but the formation's rear is aimed along
+        # it, so the pin has to be able to read this tick's route rather than
+        # last tick's. Nothing here depends on the zone, so there is no cycle.
+        if engaged or self.zone.is_active():
+            plot_escape(
+                self.escape,
+                ESCAPE_CFG,
+                party_centre,
+                enemy_positions,
+                self.safe_spot.xy,
+                now_ms,
+                probe=terrain_probe,
+            )
+        else:
+            self.escape.clear()
+
         tick_zone(
             self.zone,
             ZONE_CFG,
@@ -260,12 +293,15 @@ class FightZonePublisher:
                 now_ms=now_ms,
                 party_xy=party_centre,
                 approach_xy=self.last_approach_xy,
+                retreat_axis=self.escape.route.axis if self.escape.route is not None else None,
+                party_health_avg=mean_party_health(party_health),
             ),
         )
 
         if not self.zone.is_active():
             if was_active:
                 self.assignment.clear()
+            self.escape.clear()
             self.plan = FightPlan(zone=self.zone)
             hero_globals.fight_zone_debug_snapshot = None
             return self.plan
@@ -311,10 +347,10 @@ class FightZonePublisher:
             hero_globals.fight_zone_debug_snapshot = None
             return
         # The Fight Lines tab still wants the scalars with the overlay off, but
-        # only the 3D draw needs the trail and per-slot lists — and those are
-        # what cost, rebuilt on every publish.
+        # only the 3D draw needs the per-slot list, which is what costs.
         drawing = self.runtime.show_overlay
         tracing = drawing and not self.runtime.circles_only
+        route = self.escape.route
         hero_globals.fight_zone_debug_snapshot = {
             "state": self.zone.state.name,
             "enabled": self.runtime.enabled,
@@ -322,12 +358,26 @@ class FightZonePublisher:
             "anchor": (self.zone.anchor_x, self.zone.anchor_y),
             "facing": self.zone.facing,
             "approach": self.last_approach_xy if tracing else None,
-            "trail": [(x, y) for x, y, _ in self.trail.points] if tracing else (),
             "circles_only": self.runtime.circles_only,
             "radius": self.zone.radius,
             "reaim_blob_size": self.zone.reaim_blob_size,
             "reaim_commit_ms": self.zone.reaim_commit_window_ms,
             "reaim_floor_ms": self.zone.reaim_floor_ms,
+            "forced_reaims": self.zone.forced_reaim_count,
+            "giving_ground": self.zone.giving_ground,
+            "standoff": self.zone.standoff,
+            "party_health": mean_party_health(self.last_party_health),
+            "escape": (
+                None
+                if route is None
+                else {
+                    "from": route.origin,
+                    "waypoint": route.waypoint,
+                    "distance": route.distance,
+                }
+            ),
+            "escape_boxed_in": self.escape.boxed_in,
+            "escape_terrain_known": self.escape.terrain_known,
             "depth": depth,
             "worst_case": worst_case,
             "cast_range": CAST_RANGE,

@@ -15,6 +15,9 @@ from Core.GlobalCache.shared_memory_src.AllAccounts import AllAccounts
 from Core.GlobalCache.shared_memory_src.HeroAIOptionStruct import HeroAIOptionStruct
 from Core.native_src.internals.types import Vec2f
 
+from HeroAI.follow.placement import PLACEMENT_CFG
+from HeroAI.follow.placement import resolve_placement
+
 
 # Force-load the navmesh on first call. AutoPathing's cache is normally
 # populated by get_path() coroutine pumps; leader-side validation skips that.
@@ -40,11 +43,13 @@ class SharedMemoryManagerProtocol(Protocol):
 class NavMeshProtocol(Protocol):
     def contains(self, x: float, y: float, margin: float) -> bool: ...
 
-    def find_nearest_reachable(
+    def has_line_of_sight(
         self,
-        origin: tuple[float, float],
-        margin: float = 20,
-    ) -> tuple[float, float] | None: ...
+        p1: tuple[float, float],
+        p2: tuple[float, float],
+        margin: float,
+        step_dist: float,
+    ) -> bool: ...
 
 
 @dataclass(slots=True)
@@ -461,6 +466,26 @@ class FollowFormationPublisher:
             self.fight_publisher = FightZonePublisher()
         return self.fight_publisher
 
+    def fight_terrain_probe(self, navmesh_sane: bool):
+        """Standability test for the escape plotter, or None to say "no idea".
+
+        Gated on the sanity flag rather than on the cache being populated: a
+        cached mesh that failed its own leader-contains check is left in place
+        by the recovery path, and a stale mesh reports open ground as wall,
+        which would plot an escape route straight into geometry.
+        """
+        navmesh = self._get_cached_navmesh()
+        if navmesh is None or not navmesh_sane:
+            return None
+
+        def probe(point: tuple[float, float]) -> bool:
+            try:
+                return bool(navmesh.contains(point[0], point[1], self.tuning.followpos_contains_margin))
+            except Exception:
+                return False
+
+        return probe
+
     def _resolve_fight_plan(
         self,
         all_accounts: AllAccounts,
@@ -469,6 +494,7 @@ class FollowFormationPublisher:
         leader_options: HeroAIOptionStruct,
         leader_x: float,
         leader_y: float,
+        navmesh_sane: bool,
     ):
         """Tick the fight zone and hand back its per-member slots.
 
@@ -527,6 +553,7 @@ class FollowFormationPublisher:
             now_ms=int(Utils.GetBaseTimestamp()),
             party_health=party_health,
             party_target_ids=party_target_ids,
+            terrain_probe=self.fight_terrain_probe(navmesh_sane),
         )
         self._apply_fight_all_flag(leader_options, plan)
         return plan if plan.is_active() else None
@@ -668,38 +695,40 @@ class FollowFormationPublisher:
         bypass_validation: bool = False,
         fallback_candidates: list[tuple[float, float]] | None = None,
     ) -> tuple[float, float]:
-        """Use the raw FollowPos when valid; otherwise fall back near party mass."""
+        """Use the raw FollowPos when a body can stand there AND walk to it.
+
+        Reachability is measured from the anchor, so "can this member get to its
+        pin" is the question actually being asked. A bad anchor makes every slot
+        fail it at once, which degrades to on-mesh-only — the old behaviour —
+        rather than to nothing.
+        """
 
         navmesh = self._get_cached_navmesh()
         if navmesh is None:
             return (raw_x, raw_y)
-
-        try:
-            if navmesh.contains(raw_x, raw_y, self.tuning.followpos_contains_margin):
-                return (raw_x, raw_y)
-        except Exception:
-            return (raw_x, raw_y)
+        # An untrustworthy mesh must not be searched at all: nudging a good pin
+        # on bad geometry is worse than publishing it unvalidated. Hoisted from
+        # below the contains() check, where it produced the same answer.
         if bypass_validation:
             return (raw_x, raw_y)
+
+        origin = (float(fallback_x), float(fallback_y))
         max_fallback_distance = float(Range.Spellcast.value)
 
         def _resolve_candidate(candidate_x: float, candidate_y: float) -> tuple[float, float] | None:
             try:
-                if navmesh.contains(candidate_x, candidate_y, self.tuning.followpos_contains_margin):
-                    resolved_x = float(candidate_x)
-                    resolved_y = float(candidate_y)
-                else:
-                    snapped = navmesh.find_nearest_reachable((candidate_x, candidate_y))
-                    if snapped is None:
-                        return None
-                    resolved_x = float(snapped[0])
-                    resolved_y = float(snapped[1])
+                resolved = resolve_placement(navmesh, (float(candidate_x), float(candidate_y)), origin, PLACEMENT_CFG)
             except Exception:
                 return None
-
-            if math.hypot(resolved_x - fallback_x, resolved_y - fallback_y) > max_fallback_distance:
+            if resolved is None:
                 return None
-            return (resolved_x, resolved_y)
+            if math.hypot(resolved[0] - fallback_x, resolved[1] - fallback_y) > max_fallback_distance:
+                return None
+            return (float(resolved[0]), float(resolved[1]))
+
+        placed = _resolve_candidate(raw_x, raw_y)
+        if placed is not None:
+            return placed
 
         candidate_centers = [
             (float(candidate_x), float(candidate_y)) for candidate_x, candidate_y in (fallback_candidates or [])
@@ -743,10 +772,6 @@ class FollowFormationPublisher:
                 resolved_candidate = _resolve_candidate(candidate_x, candidate_y)
                 if resolved_candidate is not None:
                     return resolved_candidate
-
-        resolved_raw_snap = _resolve_candidate(raw_x, raw_y)
-        if resolved_raw_snap is not None:
-            return resolved_raw_snap
 
         return (fallback_x, fallback_y)
 
@@ -866,6 +891,7 @@ class FollowFormationPublisher:
             leader_options,
             leader_x,
             leader_y,
+            leader_navmesh_sane,
         )
 
         self._update_combat_anchor_facing(leader_in_combat, leader_facing)
