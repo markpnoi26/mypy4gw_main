@@ -169,20 +169,49 @@ class ZoneConfig:
     # Never withdraw onto the far end of the route, where the next step would
     # have nowhere to go and a re-plot could leave the pin off the path.
     give_ground_margin: float = 200.0
-    # Far edge of the engage band: the blob's centre further than this in front
-    # of the front line is not meaningful engagement, and the formation closes
-    # on it. Derived from what each rank can actually do from its pin: melee
-    # frontliners rush forward anyway, and 70% of earshot leaves the mid rank —
-    # a midline depth behind the front — still inside spellcast of the blob's
-    # centre (320 + 708 = 1028 <= 1248), so nobody NEEDS the pin closer. With
-    # the no-cross line behind, the band is far wider than give_ground_step, so
-    # one step always lands inside it and the two triggers cannot hand the pin
-    # back and forth. No advance cap: the band is self-limiting, closing stops
-    # at its edge. A cap stranded the formation out of range of a camped mob —
-    # nothing moved, so no re-aim ever rebased, and the fight never started.
-    # Tunable live from the Fight Lines tab; the publisher clamps and applies
-    # engage_depth_u from FightRuntime.ini on its reload timer.
-    engage_depth: float = float(Range.Earshot.value) * 0.70
+    # --- trigger rings -------------------------------------------------------
+    # The three tests below run on ELLIPSES in the formation's local frame
+    # rather than on flat depth planes. Depth alone is a projection onto the
+    # facing axis, which throws the lateral component away entirely; that is
+    # tolerable only while facing points at the blob, and facing is gated on
+    # purpose (reaim_commit_ms, min_facing_recompute_ms, and slowdown tiers that
+    # stretch the floor to 24s for a lone enemy). Through those hold windows the
+    # blob slides off-axis and the projection under-reads it. A ring does not
+    # care where the formation is looking.
+    #
+    # Each ring is (centre, fwd, lat) along facing. `fwd` sets how deep it
+    # reaches; `lat` is a free knob for wrap-around that cannot move the forward
+    # trigger. That separation is the whole reason for authoring them this way.
+    #
+    # Midline: the soft trip. Its forward tip lands at overrun_depth, so the
+    # trigger DEPTH is unchanged from the flat-plane version it replaces and the
+    # only new behaviour is lateral.
+    midline_ring_fwd: float = 240.0
+    midline_ring_lat: float = 900.0
+    # Backline: the panic ring, centred on the rear rank. Area-deep so its tip
+    # sits ~300u in front of the casters, well behind the midline trip — the two
+    # must stay in that order or the emergency fires before the soft step.
+    backline_ring_fwd: float = float(Range.Area.value)
+    backline_ring_lat: float = 450.0
+    # Minimum daylight between the midline tip and the backline tip. Must stay
+    # under the 138u the default formation already has, or the clamp in
+    # backline_ring would bite on a formation that was ordered fine.
+    ring_escalation_margin: float = 100.0
+    # Frontline: where the party can still find a fight. Static rather than
+    # derived, because it describes REACH, not formation shape. Sized from the
+    # advance floor (-512) and a ceiling 300u inside engagement_scan_radius, so
+    # no part of it sits in ground where an enemy could never be detected: the
+    # ring's furthest point from the pin is 1060u against a 1248 scan.
+    # `fwd` is tunable live from the Fight Lines tab; the publisher clamps and
+    # applies engage_depth_u from FightRuntime.ini on its reload timer.
+    frontline_ring_centre: float = 218.0
+    frontline_ring_fwd: float = 730.0
+    frontline_ring_lat: float = float(Range.Earshot.value)
+    # A backline breach bypasses the recover dwell — waiting out 18s with a mob
+    # standing on the monks is what the ring exists to prevent — but it must not
+    # become a per-tick slide either, so it sets this instead. max_given_ground
+    # and the route length still cap the total.
+    breach_hold_ms: int = 1000
 
 
 ZONE_CFG = ZoneConfig()
@@ -229,6 +258,9 @@ class FightZone:
     hold_until_ms: int = 0
     giving_ground: bool = False
     closing: bool = False
+    # Blob centre of mass is inside the backline ring. Latched each tick so the
+    # tab can show the emergency without recomputing the test.
+    breached: bool = False
 
     def is_active(self) -> bool:
         return self.state != ZoneState.TRAVELING
@@ -654,19 +686,54 @@ def ground_offset(zone: FightZone) -> tuple[float, float]:
     return (x, y)
 
 
+@dataclass(slots=True, frozen=True)
+class TriggerRing:
+    """An ellipse in the formation's local frame, all distances along facing."""
+
+    centre: float
+    fwd: float
+    lat: float
+
+    def tip(self) -> float:
+        """Depth of the forward edge — where this ring trips."""
+        return self.centre + self.fwd
+
+
+def local_frame(
+    point: tuple[float, float],
+    anchor: tuple[float, float],
+    facing: float,
+) -> tuple[float, float]:
+    """World point to (along-facing, across-facing), origin at the pin."""
+    dx = point[0] - anchor[0]
+    dy = point[1] - anchor[1]
+    cos_f = math.cos(facing)
+    sin_f = math.sin(facing)
+    return ((dx * cos_f) + (dy * sin_f), (dy * cos_f) - (dx * sin_f))
+
+
+def inside_ring(ring: TriggerRing, point: tuple[float, float], zone: FightZone) -> bool:
+    if ring.fwd <= 0.0 or ring.lat <= 0.0:
+        return False
+    fwd, lat = local_frame(point, (zone.anchor_x, zone.anchor_y), zone.facing)
+    return (((fwd - ring.centre) / ring.fwd) ** 2) + ((lat / ring.lat) ** 2) < 1.0
+
+
 def blob_depth(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> float | None:
     """How far in FRONT of the front line the enemy blob's centre sits.
 
-    Negative means it has pushed past the pin and in among the formation.
+    Negative means it has pushed past the pin and in among the formation. Kept
+    as the readout the tab shows; the triggers themselves run on rings, which
+    also read the lateral half this discards.
     """
     blob = centroid(resolve_engagement_blob(cfg, inputs.party_xy, inputs.enemy_positions))
     if blob is None:
         return None
-    return ((blob[0] - zone.anchor_x) * math.cos(zone.facing)) + ((blob[1] - zone.anchor_y) * math.sin(zone.facing))
+    return local_frame(blob, (zone.anchor_x, zone.anchor_y), zone.facing)[0]
 
 
 def overrun_depth(inputs: "ZoneInputs") -> float:
-    """The no-cross line, imposed FORWARD of the mid rank.
+    """The no-cross depth, imposed FORWARD of the mid rank.
 
     Halfway between the front and mid ranks. A trigger at the mid rank itself
     fires only when the casters are already being walked through — too late by
@@ -678,25 +745,69 @@ def overrun_depth(inputs: "ZoneInputs") -> float:
     return inputs.midline_depth * 0.5
 
 
+def midline_ring(cfg: ZoneConfig, inputs: "ZoneInputs") -> TriggerRing:
+    """Soft trip. Tip pinned to overrun_depth so the depth matches the flat
+    plane this replaces and `lat` is the only new quantity."""
+    return TriggerRing(-overrun_depth(inputs) - cfg.midline_ring_fwd, cfg.midline_ring_fwd, cfg.midline_ring_lat)
+
+
+def backline_ring(cfg: ZoneConfig, inputs: "ZoneInputs") -> TriggerRing:
+    """Panic ring, centred on the rear rank, tip held behind the midline's.
+
+    The clamp is not cosmetic. backline_ring_fwd is a fixed 322 while the rank
+    it sits on comes from the formation, so a compressed one puts the tip in
+    FRONT of the midline trip — at a 310u back rank it lands at +12, ahead of
+    the pin, and the emergency fires before the soft step ever gets a chance.
+    Untouched on any formation deep enough to order itself: the default clears
+    this by 138u against a 100u margin.
+    """
+    ring = TriggerRing(-inputs.backline_depth, cfg.backline_ring_fwd, cfg.backline_ring_lat)
+    ceiling = midline_ring(cfg, inputs).tip() - cfg.ring_escalation_margin
+    if ring.tip() <= ceiling:
+        return ring
+    return TriggerRing(ring.centre, max(0.0, ceiling - ring.centre), ring.lat)
+
+
+def frontline_ring(cfg: ZoneConfig) -> TriggerRing:
+    return TriggerRing(cfg.frontline_ring_centre, cfg.frontline_ring_fwd, cfg.frontline_ring_lat)
+
+
+def blob_centre(cfg: ZoneConfig, inputs: "ZoneInputs") -> tuple[float, float] | None:
+    return centroid(resolve_engagement_blob(cfg, inputs.party_xy, inputs.enemy_positions))
+
+
 def overrun(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> bool:
-    """The blob's centre has crossed the line imposed ahead of the mid rank.
+    """The blob's centre is inside the midline ring.
 
     Geometric rather than a health reading, and self-releasing because of it:
-    backing up moves the line away from the mob, so the condition clears
-    itself once enough ground has been given and not a step sooner. A health
-    threshold has no such feedback and simply ratchets.
+    backing up moves the ring away from the mob, so the condition clears itself
+    once enough ground has been given and not a step sooner. A health threshold
+    has no such feedback and simply ratchets.
     """
-    depth = blob_depth(zone, cfg, inputs)
-    return depth is not None and depth < -overrun_depth(inputs)
+    blob = blob_centre(cfg, inputs)
+    return blob is not None and inside_ring(midline_ring(cfg, inputs), blob, zone)
 
 
-def blob_too_far(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> bool:
-    """The fight is not joined: the blob's centre has not closed to the engage
-    band, and nothing here waits to be engaged. Measured on the centre, not the
-    nearest member, so one runner brushing past the pins cannot stall the close
-    on the pack the party is actually fighting."""
-    depth = blob_depth(zone, cfg, inputs)
-    return depth is not None and depth > cfg.engage_depth
+def backline_breached(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> bool:
+    """The blob's centre of mass has reached the rear rank. Outranks every other
+    reading and does not wait out the recover dwell."""
+    blob = blob_centre(cfg, inputs)
+    return blob is not None and inside_ring(backline_ring(cfg, inputs), blob, zone)
+
+
+def frontline_clear(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> bool:
+    """NOTHING is in reach — not one enemy anywhere in the frontline ring.
+
+    Tested on every enemy rather than the centroid, unlike the two retreat
+    rings. Retreat answers to the centre of mass; advance must answer to
+    emptiness. A centroid test lets a pack straddling the ring average out
+    beyond it, and the formation then walks forward into a fight it is already
+    in.
+    """
+    if not inputs.enemy_positions:
+        return True
+    ring = frontline_ring(cfg)
+    return not any(inside_ring(ring, position, zone) for position in inputs.enemy_positions)
 
 
 def retreat_step_vector(inputs: "ZoneInputs", step: float) -> tuple[float, float] | None:
@@ -732,33 +843,37 @@ def ground_dwell_ms(cfg: ZoneConfig, inputs: "ZoneInputs", tiers: tuple[float, .
 def adjust_ground(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> None:
     """Back off, close, or hold — one deliberate move, then sit.
 
-    One measured quantity decides everything: the blob centre's depth from the
-    front line. PURELY GEOMETRIC — health deliberately has no vote. The reading
-    is not yet trusted, and a wrong number here either routs a winning party or
-    pins a losing one; it is published for the tab so it can be watched until
-    it is.
+    Three rings decide everything, tested against the blob in the formation's
+    own frame. PURELY GEOMETRIC — health deliberately has no vote. The readings
+    are not yet trusted, and a wrong one here either routs a winning party or
+    pins a losing one; they are published for the tab so they can be watched
+    until they are.
 
-    RETREAT when the depth crosses the no-cross line imposed ahead of the mid
-    rank.
+    RETREAT on the midline ring, whose forward tip sits ahead of the mid rank,
+    and again — harder, and without waiting out the dwell — on the backline
+    ring centred on the rear rank. The two are ordered by construction: the
+    midline tip is the shallower of the pair, so the soft step always gets its
+    chance before the emergency does.
 
-    CLOSE when the blob's centre sits beyond the engage band — a fight the
-    enemy refuses to join is walked to, one step per dwell. Self-limiting:
-    every step shrinks the depth, so closing stops at the band's edge and the
-    front line never walks onto the mob.
+    CLOSE only when the frontline ring is EMPTY. A fight nothing is joining is
+    walked to, one step per dwell. Self-limiting: every step drags the ring
+    forward onto the mob, so closing stops as soon as anything is in reach.
 
-    HOLD in the band between the two lines, and always for the dwell after any
-    move — one deliberate move, then long enough for heals to land and the mob
-    to re-form in front, rather than a continuous slide. The dwell comes off
-    the authored per-size tables: the tail of a fight is the twitchiest
-    reading, so it moves the ground the most rarely.
+    HOLD otherwise, and always for the dwell after any move — one deliberate
+    move, then long enough for heals to land and the mob to re-form in front,
+    rather than a continuous slide. The dwell comes off the authored per-size
+    tables: the tail of a fight is the twitchiest reading, so it moves the
+    ground the most rarely.
 
     The formation TRANSLATES and never rotates, so the enemies stay squarely in
     front however far it moves; facing is decided elsewhere, on the blob.
     """
-    if inputs.now_ms < zone.hold_until_ms:
+    breached = backline_breached(zone, cfg, inputs)
+    zone.breached = breached
+    if not breached and inputs.now_ms < zone.hold_until_ms:
         return
 
-    if overrun(zone, cfg, inputs):
+    if breached or overrun(zone, cfg, inputs):
         ceiling = ground_ceiling(cfg, inputs)
         step = min(cfg.give_ground_step, max(0.0, ceiling - given_ground(zone)))
         vector = retreat_step_vector(inputs, step)
@@ -767,8 +882,10 @@ def adjust_ground(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> Non
                 zone.advance = max(0.0, zone.advance - cfg.give_ground_step)
             else:
                 zone.retreat_steps.append(vector)
-            zone.hold_until_ms = inputs.now_ms + ground_dwell_ms(cfg, inputs, cfg.recover_hold_tiers_ms)
-    elif blob_too_far(zone, cfg, inputs):
+            zone.hold_until_ms = inputs.now_ms + (
+                cfg.breach_hold_ms if breached else ground_dwell_ms(cfg, inputs, cfg.recover_hold_tiers_ms)
+            )
+    elif frontline_clear(zone, cfg, inputs):
         # Give back the way out first, retracing it exactly, before pushing past
         # the authored position. Popping the stack is what stops a dogleg
         # withdrawal being unwound through the corner it went round.
@@ -829,9 +946,11 @@ class ZoneInputs:
     retreat_path: list[tuple[float, float]] = field(default_factory=list)
     retreat_distance: float = 0.0
     # Depth of the formation's middle rank behind the front line, positive.
-    # The no-cross line is imposed at overrun_depth ahead of it. Read from the
-    # loaded formation so an authored one is judged by its own shape.
+    # The midline ring's tip is imposed at overrun_depth ahead of it. Read from
+    # the loaded formation so an authored one is judged by its own shape.
     midline_depth: float = 320.0
+    # Depth of the rear rank, where the panic ring is centred. Same reasoning.
+    backline_depth: float = 620.0
 
 
 def enter_state(zone: FightZone, state: ZoneState, now_ms: int) -> None:

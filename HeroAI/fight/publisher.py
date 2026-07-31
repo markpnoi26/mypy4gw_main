@@ -47,12 +47,14 @@ from .zone import FightZone
 from .zone import ZONE_CFG
 from .zone import ZoneInputs
 from .zone import ZoneState
+from .zone import backline_ring
 from .zone import blob_depth
-from .zone import blob_too_far
 from .zone import centroid
+from .zone import frontline_clear
+from .zone import frontline_ring
 from .zone import given_ground
+from .zone import midline_ring
 from .zone import overrun
-from .zone import overrun_depth
 from .zone import resolve_engagement_blob
 from .zone import tick_zone
 
@@ -63,9 +65,12 @@ ENABLED_KEY = "fight_zone_enabled"
 OVERLAY_KEY = "show_fight_zone_overlay"
 CIRCLES_ONLY_KEY = "fight_zone_overlay_circles_only"
 ENGAGE_DEPTH_KEY = "engage_depth_u"
-# Floor keeps the band wider than a step, so the two triggers cannot hand the
-# pin back and forth; ceiling keeps the mid rank inside spellcast of a blob
-# sitting on the line (900 + 320 < 1248). Matches the tab's slider range.
+# Drives the frontline ring's forward semi-axis: how far ahead the formation
+# looks before deciding there is nothing to fight. Key and range are unchanged
+# from the flat engage line this replaced, whose default sat at 708 — close
+# enough to the ring's 730 that an existing saved value carries over meaning
+# rather than needing a migration. Ceiling keeps the ring inside the scan
+# radius (218 + 900 < 1248).
 ENGAGE_DEPTH_MIN = 250.0
 ENGAGE_DEPTH_MAX = 900.0
 RUNTIME_RELOAD_MS = 1000
@@ -163,8 +168,8 @@ class FightZonePublisher:
             self.runtime.circles_only = bool(cfg.get_bool(RUNTIME_SECTION, CIRCLES_ONLY_KEY, False))
             # Applied onto the shared config so the whole controller — triggers,
             # snapshot, drawn bar — reads the tuned value with no plumbing.
-            depth = float(cfg.get_float(RUNTIME_SECTION, ENGAGE_DEPTH_KEY, float(ZONE_CFG.engage_depth)))
-            ZONE_CFG.engage_depth = min(ENGAGE_DEPTH_MAX, max(ENGAGE_DEPTH_MIN, depth))
+            depth = float(cfg.get_float(RUNTIME_SECTION, ENGAGE_DEPTH_KEY, float(ZONE_CFG.frontline_ring_fwd)))
+            ZONE_CFG.frontline_ring_fwd = min(ENGAGE_DEPTH_MAX, max(ENGAGE_DEPTH_MIN, depth))
             hero_globals.show_fight_zone_overlay = self.runtime.show_overlay
             hero_globals.fight_zone_overlay_circles_only = self.runtime.circles_only
         except Exception:
@@ -325,6 +330,7 @@ class FightZonePublisher:
             retreat_path=list(self.escape.route.path) if self.escape.route is not None else [],
             retreat_distance=self.escape.route.distance if self.escape.route is not None else 0.0,
             midline_depth=formation.midline_depth(),
+            backline_depth=formation.backline_depth(),
         )
         tick_zone(self.zone, ZONE_CFG, zone_inputs)
         self.last_zone_inputs = zone_inputs
@@ -388,16 +394,23 @@ class FightZonePublisher:
         blob_centre = None
         blob_front_depth = None
         past_midline = False
-        too_far = False
-        midline = 0.0
+        clear_ahead = False
+        # The rings the triggers actually enforce, not the raw rank depths —
+        # what is drawn must be what the blob is judged against.
+        rings: dict[str, tuple[float, float, float]] = {}
         if inputs is not None:
             blob_centre = centroid(resolve_engagement_blob(ZONE_CFG, inputs.party_xy, inputs.enemy_positions))
             blob_front_depth = blob_depth(self.zone, ZONE_CFG, inputs)
             past_midline = overrun(self.zone, ZONE_CFG, inputs)
-            too_far = blob_too_far(self.zone, ZONE_CFG, inputs)
-            # The line the trigger enforces, not the raw rank depth — the drawn
-            # bar must be the one the blob is judged against.
-            midline = float(overrun_depth(inputs))
+            clear_ahead = frontline_clear(self.zone, ZONE_CFG, inputs)
+            rings = {
+                name: (ring.centre, ring.fwd, ring.lat)
+                for name, ring in (
+                    ("backline", backline_ring(ZONE_CFG, inputs)),
+                    ("midline", midline_ring(ZONE_CFG, inputs)),
+                    ("frontline", frontline_ring(ZONE_CFG)),
+                )
+            }
         hero_globals.fight_zone_debug_snapshot = {
             "state": self.zone.state.name,
             "enabled": self.runtime.enabled,
@@ -418,10 +431,10 @@ class FightZonePublisher:
             "party_health": mean_party_health(self.last_party_health),
             "blob": blob_centre,
             "blob_depth": blob_front_depth,
-            "midline_depth": midline,
-            "engage_depth": float(ZONE_CFG.engage_depth),
+            "rings": rings,
             "overrun": past_midline,
-            "blob_too_far": too_far,
+            "breached": self.zone.breached,
+            "frontline_clear": clear_ahead,
             "escape": (
                 None
                 if route is None

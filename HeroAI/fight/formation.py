@@ -87,6 +87,18 @@ class FightFormation:
             return self.depth() / 2.0
         return abs(sum(ys) / len(ys))
 
+    def backline_depth(self) -> float:
+        """How far the rear rank sits behind the front line, positive.
+
+        Where the panic ring is centred, so it comes from the authored formation
+        for the same reason midline_depth does — a compressed formation must not
+        end up with its panic ring floating behind everybody.
+        """
+        ys = [pin.y for pin in self.pins if pin.line == CombatLine.BACK]
+        if not ys:
+            return self.depth()
+        return abs(sum(ys) / len(ys))
+
     def depth(self) -> float:
         if not self.pins:
             return 0.0

@@ -41,6 +41,11 @@ from HeroAI.constants import (
     RANGED_RANGE_VALUE,
 )
 
+# Segments per trigger-ring polyline. Each one costs a FindZ, which is the
+# expensive call here, so three rings at 20 is ~60 a frame against ~6 for the
+# flat bars this replaced. Circles-only mode draws just the armed ring.
+RING_SEGMENTS = 20
+
 _SKILL_NAME_SUFFIXES: dict[str, str] = {
     "Summon_Spirits_kurzick": "(Kurzick)",
     "Summon_Spirits_luxon": "(Luxon)",
@@ -739,6 +744,20 @@ class HeroAI_BaseUI:
                         )
                 ImGui.pop_font()
                 ImGui.show_tooltip("Pick up Loot")
+                ImGui.push_font("Regular", 10)
+                PyImGui.same_line(0, -1)
+                PyImGui.text("|")
+                PyImGui.same_line(0, -1)
+
+                if PyImGui.button(f"{IconsFontAwesome5.ICON_SYNC}##library_reload", btn_size, btn_size):
+                    from Core.py4gwcorelib_src.WidgetManager import get_widget_handler
+
+                    if PyImGui.get_io().key_ctrl:
+                        get_widget_handler().request_reload()
+                    else:
+                        get_widget_handler().broadcast_reload()
+                ImGui.pop_font()
+                ImGui.show_tooltip("Reload the library on every account\nCtrl+click: this client only")
                 ImGui.push_font("Regular", 10)
                 PyImGui.same_line(0, -1)
 
@@ -1741,15 +1760,15 @@ class HeroAI_BaseUI:
             if new_circles_only != circles_only:
                 cfg.set_bool("FightRuntime", "fight_zone_overlay_circles_only", new_circles_only)
                 cfg.save()
-        engage_default = float(Range.Earshot.value) * 0.70
+        engage_default = 730.0
         engage_setting = float(cfg.get_float("FightRuntime", "engage_depth_u", engage_default))
-        new_engage = PyImGui.slider_float("Engage line##fight_engage_depth", engage_setting, 250.0, 900.0)
+        new_engage = PyImGui.slider_float("Engage reach##fight_engage_depth", engage_setting, 250.0, 900.0)
         if abs(new_engage - engage_setting) > 0.5:
             cfg.set_float("FightRuntime", "engage_depth_u", float(new_engage))
             cfg.save()
         PyImGui.text_disabled(
-            f"Close on the blob when its centre is further out than this. Mid rank would cast from"
-            f" ~{new_engage + 320.0:.0f}u (spellcast {float(Range.Spellcast.value):.0f}u)."
+            f"How far the frontline ring looks for a fight. Close only when NOTHING is inside it —"
+            f" reaching {218.0 + new_engage:.0f}u ahead and {218.0 - new_engage:.0f}u behind the pin."
         )
         PyImGui.text_disabled("Overlay works with the zone disabled — watch where lines form before switching it on.")
 
@@ -1784,7 +1803,12 @@ class HeroAI_BaseUI:
             health = float(snapshot.get("party_health", 1.0))
             given = float(snapshot.get("given_ground", 0.0))
             advance = float(snapshot.get("advance", 0.0))
-            if bool(snapshot.get("giving_ground", False)):
+            if bool(snapshot.get("breached", False)):
+                PyImGui.text_colored(
+                    f"BACKLINE BREACHED — blob centre on the rear rank, withdrawn {given:.0f}u without waiting",
+                    ColorPalette.GetColor("red").to_tuple_normalized(),
+                )
+            elif bool(snapshot.get("giving_ground", False)):
                 PyImGui.text_colored(
                     f"BACKING OFF — party at {health * 100.0:.0f}%, withdrawn {given:.0f}u along the route",
                     ColorPalette.GetColor("gw_gold").to_tuple_normalized(),
@@ -1793,9 +1817,9 @@ class HeroAI_BaseUI:
                 # A re-aim banks its backwards component as advance rather than
                 # walking it, so advance with the blob inside the band means
                 # the pin is holding won ground, not still closing.
-                if bool(snapshot.get("blob_too_far", False)):
+                if bool(snapshot.get("frontline_clear", False)):
                     PyImGui.text_colored(
-                        f"CLOSING — blob centre beyond the engage band, pushed {advance:.0f}u forward",
+                        f"CLOSING — nothing inside the frontline ring, pushed {advance:.0f}u forward",
                         ColorPalette.GetColor("dodger_blue").to_tuple_normalized(),
                     )
                 else:
@@ -1807,22 +1831,30 @@ class HeroAI_BaseUI:
                 PyImGui.text_disabled(f"Holding position    party {health * 100.0:.0f}%")
 
             blob_front = snapshot.get("blob_depth")
-            midline = float(snapshot.get("midline_depth", 0.0))
-            engage = float(snapshot.get("engage_depth", 0.0))
+            rings = snapshot.get("rings") or {}
+            # Depth is only half the reading now — a blob can sit at a harmless
+            # depth and still be inside a ring, or vice versa — so the tips are
+            # shown as context rather than as the test itself.
+            mid_trip = sum(rings.get("midline", (0.0, 0.0, 0.0))[:2])
+            back_trip = sum(rings.get("backline", (0.0, 0.0, 0.0))[:2])
+            front_reach = sum(rings.get("frontline", (0.0, 0.0, 0.0))[:2])
             if blob_front is not None:
-                if bool(snapshot.get("overrun", False)):
+                if bool(snapshot.get("breached", False)):
                     PyImGui.text_colored(
-                        f"Blob centre {float(blob_front):+.0f}u — PAST the no-cross line (-{midline:.0f}u), backing armed",
+                        f"Blob centre {float(blob_front):+.0f}u — inside the BACKLINE ring (tip {back_trip:+.0f}u)",
+                        ColorPalette.GetColor("red").to_tuple_normalized(),
+                    )
+                elif bool(snapshot.get("overrun", False)):
+                    PyImGui.text_colored(
+                        f"Blob centre {float(blob_front):+.0f}u — inside the midline ring (tip {mid_trip:+.0f}u), backing armed",
                         ColorPalette.GetColor("gw_gold").to_tuple_normalized(),
                     )
-                elif bool(snapshot.get("blob_too_far", False)):
+                elif bool(snapshot.get("frontline_clear", False)):
                     PyImGui.text_disabled(
-                        f"Blob centre {float(blob_front):+.0f}u — beyond the engage line (+{engage:.0f}u), closing armed"
+                        f"Blob centre {float(blob_front):+.0f}u — frontline ring empty to {front_reach:+.0f}u, closing armed"
                     )
                 else:
-                    PyImGui.text_disabled(
-                        f"Blob centre {float(blob_front):+.0f}u — in the band (-{midline:.0f}u .. +{engage:.0f}u)"
-                    )
+                    PyImGui.text_disabled(f"Blob centre {float(blob_front):+.0f}u — engaged, no ring tripped")
 
             escape = snapshot.get("escape")
             if escape is None:
@@ -2485,55 +2517,50 @@ class HeroAI_BaseUI:
                 if not circles_only and blob_front is not None:
                     Overlay().DrawText3D(bx, by, bz, f"blob {float(blob_front):+.0f}u", blob_color)
 
-            # The bar survives circles-only while breached: a formation backing
-            # up for no visible reason is exactly when it must say why.
-            midline = float(snapshot.get("midline_depth", 0.0))
-            if midline > 0.0 and (not circles_only or past_midline):
-                mid_facing = float(snapshot.get("facing", 0.0))
-                mx = ax - (math.cos(mid_facing) * midline)
-                my = ay - (math.sin(mid_facing) * midline)
-                half_x = -math.sin(mid_facing) * 350.0
-                half_y = math.cos(mid_facing) * 350.0
-                midline_color = (
-                    Utils.RGBToColor(255, 60, 60, 230) if past_midline else Utils.RGBToColor(255, 255, 255, 110)
-                )
-                Overlay().DrawLine3D(
-                    mx - half_x,
-                    my - half_y,
-                    Overlay().FindZ(mx - half_x, my - half_y, 0),
-                    mx + half_x,
-                    my + half_y,
-                    Overlay().FindZ(mx + half_x, my + half_y, 0),
-                    midline_color,
-                    3.0 if past_midline else 1.5,
-                )
+            # The three trigger rings, drawn as the ellipses the tests actually
+            # run on. DrawPoly3D takes a scalar radius and so cannot express
+            # them; they go out as closed polylines instead. An armed ring
+            # survives circles-only — a formation moving for no visible reason
+            # is exactly when it must say why.
+            rings = snapshot.get("rings") or {}
+            ring_facing = float(snapshot.get("facing", 0.0))
+            cos_f = math.cos(ring_facing)
+            sin_f = math.sin(ring_facing)
+            armed = {
+                "backline": bool(snapshot.get("breached", False)),
+                "midline": past_midline,
+                "frontline": bool(snapshot.get("frontline_clear", False)),
+            }
+            ring_colors = {
+                "backline": Utils.RGBToColor(255, 60, 60, 230),
+                "midline": Utils.RGBToColor(255, 210, 60, 230),
+                "frontline": Utils.RGBToColor(60, 150, 255, 230),
+            }
+            for name, geometry in rings.items():
+                is_armed = armed.get(name, False)
+                if circles_only and not is_armed:
+                    continue
+                centre, ring_fwd, ring_lat = (float(v) for v in geometry)
+                if ring_fwd <= 0.0 or ring_lat <= 0.0:
+                    continue
+                color = ring_colors.get(name) if is_armed else Utils.RGBToColor(255, 255, 255, 90)
+                points = []
+                for step in range(RING_SEGMENTS + 1):
+                    angle = (2.0 * math.pi * step) / RING_SEGMENTS
+                    fwd = centre + (ring_fwd * math.cos(angle))
+                    lat = ring_lat * math.sin(angle)
+                    px = ax + (fwd * cos_f) - (lat * sin_f)
+                    py = ay + (fwd * sin_f) + (lat * cos_f)
+                    points.append((px, py, Overlay().FindZ(px, py, 0)))
+                for start, end in zip(points, points[1:]):
+                    Overlay().DrawLine3D(
+                        start[0], start[1], start[2], end[0], end[1], end[2], color, 3.0 if is_armed else 1.5
+                    )
                 if not circles_only:
-                    Overlay().DrawText3D(mx, my, Overlay().FindZ(mx, my, 0), "no-cross", midline_color)
-
-            # The engage line, ahead of the pin: the blob's centre beyond it
-            # arms the close. Bright while it is armed, for the same reason the
-            # no-cross bar is: a formation walking forward should say why.
-            engage = float(snapshot.get("engage_depth", 0.0))
-            blob_far = bool(snapshot.get("blob_too_far", False))
-            if engage > 0.0 and (not circles_only or blob_far):
-                eng_facing = float(snapshot.get("facing", 0.0))
-                ex = ax + (math.cos(eng_facing) * engage)
-                ey = ay + (math.sin(eng_facing) * engage)
-                eng_half_x = -math.sin(eng_facing) * 350.0
-                eng_half_y = math.cos(eng_facing) * 350.0
-                engage_color = Utils.RGBToColor(60, 150, 255, 230) if blob_far else Utils.RGBToColor(255, 255, 255, 110)
-                Overlay().DrawLine3D(
-                    ex - eng_half_x,
-                    ey - eng_half_y,
-                    Overlay().FindZ(ex - eng_half_x, ey - eng_half_y, 0),
-                    ex + eng_half_x,
-                    ey + eng_half_y,
-                    Overlay().FindZ(ex + eng_half_x, ey + eng_half_y, 0),
-                    engage_color,
-                    3.0 if blob_far else 1.5,
-                )
-                if not circles_only:
-                    Overlay().DrawText3D(ex, ey, Overlay().FindZ(ex, ey, 0), "engage", engage_color)
+                    tip_fwd = centre + ring_fwd
+                    tx = ax + (tip_fwd * cos_f)
+                    ty = ay + (tip_fwd * sin_f)
+                    Overlay().DrawText3D(tx, ty, Overlay().FindZ(tx, ty, 0), name, color)
 
             # The last spot the party was safe, and the point the advance axis is
             # measured from — one and the same now. Without it a wrong formation
