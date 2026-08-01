@@ -23,6 +23,8 @@ from Core.enums_src.Item_enums import STORAGE_BAGS
 from Core.enums_src.Item_enums import ItemType
 from Core.enums_src.Model_enums import ModelID
 from Core.enums_src.Multiboxing_enums import SharedCommandType
+from Core.FrameTree import Frame
+from Core.FrameTree import FrameId
 from Core.GlobalCache import GLOBAL_CACHE
 from Core.ImGui_src.IconsFontAwesome5 import IconsFontAwesome5
 from Core.Inventory import Inventory
@@ -35,7 +37,6 @@ from Core.Py4GWcorelib import Utils
 from Core.py4gwcorelib_src.Settings import Settings
 from Core.Routines import Routines
 from Core.UIManager import UIManager
-from Core.UIManager import WindowFrame
 from Sources.marks_sources.item_naming import NAME_CACHE
 from Sources.marks_sources.item_naming import fetch_base_name
 from Sources.marks_sources.item_naming import known_base_name
@@ -1632,10 +1633,10 @@ class InventoryLite:
     # -- drawing. Reads NOTHING off an item: every value shown was gathered by a routine. --
 
     def draw_buttons(self):
-        frame = WindowFrame.InventoryBags
-        if not frame.FrameExists():
+        frame = Frame(FrameId.InventoryBagsWindow)
+        if not frame.exists:
             return
-        frame_id = frame.GetFrameID()
+        frame_id = frame.frame_id
         if not frame_id:
             return
         left, top, right, bottom = UIManager.GetFrameCoords(frame_id)
