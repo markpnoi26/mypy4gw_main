@@ -124,3 +124,54 @@ def drain_game_thread() -> None:
         PyGameThread.clear_calls()
     except Exception:
         pass
+
+
+def release_shared_memory() -> None:
+    """Close the multibox mapping cleanly before the module holding it is dropped.
+
+    GetAllAccounts hands out ``AllAccounts.from_buffer(shm.buf)``, a ctypes view that keeps a
+    buffer export on the mmap. Purging drops the manager while those views are still alive, so
+    the collector reaches SharedMemory.__del__ first and mmap.close() raises
+    ``BufferError: cannot close exported pointers exist``. Python swallows that inside __del__,
+    which means the mapping is never closed and one OS handle leaks per reload.
+
+    Dropping the export holders and collecting them before closing avoids the whole race. The
+    region itself is owned and kept alive by the C++ side, so closing this process's view is
+    safe -- the rebuilt manager re-attaches to the same region.
+    """
+    import gc
+
+    holder = None
+    try:
+        from Core.GlobalCache.GlobalCache import GLOBAL_CACHE
+
+        # Both hold from_buffer views: the frame cache memoises the AllAccounts struct, and
+        # queued coroutines close over structs they were mid-way through reading.
+        try:
+            GLOBAL_CACHE.Coroutines.clear()
+        except Exception:
+            pass
+        try:
+            from Core.py4gwcorelib_src.FrameCache import FRAME_CACHE
+
+            FRAME_CACHE.clear()
+        except Exception:
+            pass
+
+        manager = getattr(GLOBAL_CACHE, "ShMem", None)
+        if manager is not None:
+            holder = getattr(manager, "shm", None)
+            manager.shm = None
+    except Exception:
+        return
+
+    if holder is None:
+        return
+
+    gc.collect()
+    try:
+        holder.close()
+    except BufferError as exc:
+        log("shared memory still had live views at reload: %s" % exc, error=True)
+    except Exception:
+        pass
