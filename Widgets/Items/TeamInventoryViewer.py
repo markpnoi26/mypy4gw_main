@@ -9,7 +9,6 @@ import PySystem
 from Core import GLOBAL_CACHE
 from Core import Color
 from Core import ConsoleLog
-from Core import DyeColor
 from Core import ImGui
 from Core import JsonFactory
 from Core import Map
@@ -18,14 +17,14 @@ from Core import Routines
 from Core import ThrottledTimer
 from Core import get_texture_for_model
 from Core.enums import Bags
-from Core.enums import ModelID
 from Core.enums_src.Item_enums import Rarity
 from Core.Item import Item
 from Sources.marks_sources.item_naming import NAME_CACHE
-from Sources.marks_sources.item_naming import armor_display_name
-from Sources.marks_sources.item_naming import clean_gw_item_name
-from Sources.marks_sources.item_naming import strip_markup
-from Sources.marks_sources.item_naming import weapon_display_name
+from Sources.marks_sources.item_naming import display_name
+from Sources.marks_sources.item_naming import learn_base_name
+from Sources.marks_sources.item_naming import mod_names
+from Sources.marks_sources.item_naming import name_key
+from Sources.marks_sources.item_naming import request_names
 
 MODULE_ALIASES = ['Guild Wars/Items & Loot/TeamInventoryViewer.py']
 MODULE_NAME = "TeamInventoryViewer"
@@ -76,25 +75,30 @@ STORAGE_BAGS = {
 # region JSONStore
 
 
-class ModelFileIDJSONStore:
-    """Shared {model_id: file_id} lookup so any character can render icons straight
+class ItemFileIDJSONStore:
+    """Shared {encoded singular name: file_id} lookup so any character can render icons straight
     from GW.dat, even for items they've never held themselves.
+
+    Keyed the same way as the name cache. The old model-id-keyed model_file_ids.json is left where
+    it is and simply stops being read; it refills under the new key on the next scan.
 
     Global scope; same multibox-safe merge semantics as the shared name cache.
     """
 
-    FILE = "TeamInventoryViewer/model_file_ids.json"
+    FILE = "TeamInventoryViewer/item_file_ids.json"
 
     def __init__(self):
         self.file = JsonFactory(self.FILE, "global")
 
-    def save_model_file_id(self, model_id, file_id):
-        if not model_id or not file_id or file_id <= 0:
+    def save_file_id(self, key, file_id):
+        if not key or not file_id or file_id <= 0:
             return
-        self.file.set(str(model_id), int(file_id))
+        self.file.set(str(key), int(file_id))
 
-    def get(self, model_id, default=0):
-        return self.file.get_int(str(model_id), default)
+    def get(self, key, default=0):
+        if not key:
+            return default
+        return self.file.get_int(str(key), default)
 
 
 class ModHashJSONStore:
@@ -246,7 +250,7 @@ class MultiAccountInventoryStore:
 
 multi_store = MultiAccountInventoryStore()
 inventory_mod_hash_store = ModHashJSONStore()
-inventory_model_file_ids_store = ModelFileIDJSONStore()
+inventory_file_ids_store = ItemFileIDJSONStore()
 
 
 ROW_ICON_SIZE = 36.0
@@ -300,17 +304,17 @@ def _icon_texture_for(info):
 
     Lookup order:
       1. The item's own stored model_file_id (freshest, gender-correct).
-      2. The shared model_id → file_id cache (populated by any scan on any
+      2. The shared encoded-name → file_id cache (populated by any scan on any
          character, so we get real icons even for items we haven't held).
-      3. On-disk PNG atlas via get_texture_for_model (last resort).
+      3. The not-found placeholder. The PNG atlas rung that used to sit here needed a model id to
+         index by, and only ever fired for items neither of the rungs above had seen.
     """
     file_id = int(info.get("model_file_id") or 0)
     if file_id <= 0:
-        model_id = info.get("model_id", 0)
-        file_id = inventory_model_file_ids_store.get(str(model_id), 0)
+        file_id = inventory_file_ids_store.get(info.get("name_key", ""), 0)
     if file_id > 0:
         return f"gwdat://{file_id}"
-    return get_texture_for_model(info.get("model_id", 0))
+    return get_texture_for_model(0)
 
 
 # region Generators
@@ -321,7 +325,7 @@ def get_character_bag_items_coroutine(bag, bag_id, email, char_name, bag_name):
     if not email or not char_name:
         return
 
-    bag_items = yield from _collect_bag_items(bag, bag_id, email, char_name=char_name)
+    bag_items = yield from _collect_bag_items(bag)
     store.save_bag(char_name=char_name, bag_name=bag_name, bag_items=bag_items)
 
 
@@ -332,40 +336,16 @@ def get_storage_bag_items_coroutine(bag, bag_id, email, storage_name):
     if not email:
         return
 
-    bag_items = yield from _collect_bag_items(bag, bag_id, email, storage_name=storage_name)
+    bag_items = yield from _collect_bag_items(bag)
     store.save_bag(storage_name=storage_name, bag_items=bag_items)
 
 
-def _collect_bag_items(bag, bag_id, email, storage_name=None, char_name=None):
-    """Shared coroutine to fetch all items from a bag with modifier and frenkey DB name support."""
+def _collect_bag_items(bag):
+    """Shared coroutine to fetch all items from a bag with modifier and frenkey DB name support.
 
-    def _find_last_name_stored_model_id(model_id, slot, count, storage_name=None, char_name=None):
-        if char_name:
-            items = (
-                TEAM_INVENTORY_CACHE.get(email, {})
-                .get("Characters", {})
-                .get(char_name, {})
-                .get("Inventory", {})
-                .get(Bags(bag_id).name, {})
-            )
-        elif storage_name:
-            items = TEAM_INVENTORY_CACHE.get(email, {}).get("Storage", {}).get(storage_name, {})
-        else:
-            items = {}
-
-        # Exact match (model + slot + count) — safest for stacks that share a model.
-        for item_name, value in items.items():
-            if value.get("model_id") == model_id and value.get("slot", {}).get(str(slot), 0) == count:
-                return item_name
-
-        # Unique items (armor/weapons, count=1) rarely stack — accept a model-only
-        # match on the same slot so the name survives a slot swap or empty scan.
-        if count == 1:
-            for item_name, value in items.items():
-                if value.get("model_id") == model_id and str(slot) in value.get("slot", {}):
-                    return item_name
-
-        return None
+    Takes only the bag now: the account, character and bag id were there to look a name up out of the
+    PREVIOUS snapshot by model id, which is exactly the rung that made a mislabel permanent.
+    """
 
     def _generate_unique_key(bag_items: dict, base_name: str) -> str:
         if base_name not in bag_items:
@@ -379,17 +359,14 @@ def _collect_bag_items(bag, bag_id, email, storage_name=None, char_name=None):
 
     bag_items = OrderedDict()
 
-    # Prefetch: fire a name request for every item up front so the server can
-    # resolve them in parallel while we work through the bag. Otherwise each
-    # unknown-model item stalls the coroutine for up to 2s waiting on a name.
-    for item in bag.GetItems():
-        if not item or item.model_id == 0 or not item.item_id:
-            continue
-        try:
-            if not GLOBAL_CACHE.Item.IsNameReady(item.item_id):
-                GLOBAL_CACHE.Item.RequestName(item.item_id)
-        except Exception:
-            pass
+    # Queue every name up front, in two passes: read the ids out of the native array first, then ask.
+    # Nothing here waits for an answer -- an item whose name has not arrived is simply skipped below
+    # and picked up on a later pass.
+    request_names([item.item_id for item in bag.GetItems() if item and item.model_id and item.item_id])
+
+    # This function must stay a generator. Drop the last yield and `yield from` iterates the returned
+    # OrderedDict instead, which is how the viewer silently stopped loading once before.
+    yield
 
     for item in bag.GetItems():
         if not item or item.model_id == 0:
@@ -399,51 +376,24 @@ def _collect_bag_items(bag, bag_id, email, storage_name=None, char_name=None):
         item_id = item.item_id
         quantity = item.quantity
         slot = item.slot
-        final_name = None
 
-        # Try LootEx, will fail if model id data isn't there
-        if GLOBAL_CACHE.Item.Type.IsWeapon(item_id) and not GLOBAL_CACHE.Item.Rarity.IsGreen(item_id):
-            final_name = weapon_display_name(item_id, model_id)
-        elif GLOBAL_CACHE.Item.Type.IsArmor(item_id):
-            final_name = armor_display_name(item_id, model_id)
+        # Once per item: name_key builds a PyItem natively and this loop runs over every bag every
+        # few seconds. "" until the client has this item's name at all.
+        key = name_key(item_id)
+        final_name = display_name(item_id, model_id, key)
 
-        # For generic items, we use Model ID
+        # Never seen this encoding, but the name may already be sitting in the cache unread.
         if not final_name:
-            try:
-                final_name = ModelID(model_id).name.replace("_", " ")
+            prefix, suffix, _inherent = mod_names(item_id, model_id)
+            if learn_base_name(item_id, model_id, key):
+                key = key or name_key(item_id)
+                final_name = display_name(item_id, model_id, key)
+                raw_modifiers = GLOBAL_CACHE.Item.Mods.GetModifiers(item_id) or []
+                if raw_modifiers:
+                    mod_hash = ModHashJSONStore.hash_mods(raw_modifiers)
+                    inventory_mod_hash_store.save_mod_hash(mod_hash, prefix, suffix)
 
-                # Special dye handling - maybe need to hadle mods and whatever here too
-                if model_id == ModelID.Vial_Of_Dye:
-                    dye_int = GLOBAL_CACHE.Item.GetDyeColor(item_id)
-                    final_name = f"{final_name} [{DyeColor(dye_int).name}]"
-            except ValueError:
-                final_name = None
-
-        # Fetch from last state of the account
-        if not final_name:
-            stored_name = _find_last_name_stored_model_id(
-                model_id, slot, quantity, storage_name=storage_name, char_name=char_name
-            )
-            if stored_name:
-                final_name = stored_name
-
-        if not final_name:
-            try:
-                markedup = yield from Routines.Yield.Items.GetItemNameByItemID(item_id)
-                final_name = strip_markup(markedup)
-                if final_name:
-                    model_name, prefix, suffix = clean_gw_item_name(final_name)
-                    NAME_CACHE.remember(model_id, model_name)
-                    raw_modifiers = GLOBAL_CACHE.Item.Mods.GetModifiers(item_id) or []
-                    if raw_modifiers:
-                        mod_hash = ModHashJSONStore.hash_mods(raw_modifiers)
-                        inventory_mod_hash_store.save_mod_hash(mod_hash, prefix, suffix)
-
-            except Exception as e:
-                print(f"Exception fetching name for {item_id}: {e}")
-                final_name = None
-
-        # Nothing worked â†’ cannot name item
+        # Still nameless: it stays queued and shows up on a later pass. Never guessed at.
         if not final_name:
             continue
 
@@ -459,14 +409,14 @@ def _collect_bag_items(bag, bag_id, email, storage_name=None, char_name=None):
         except Exception:
             model_file_id = 0
 
-        # Feed the shared model_id → file_id cache so other accounts/characters
+        # Feed the shared encoded-name → file_id cache so other accounts/characters
         # can render this item's icon straight from GW.dat without needing to
         # have held it themselves.
         if model_file_id > 0:
-            inventory_model_file_ids_store.save_model_file_id(model_id, model_file_id)
+            inventory_file_ids_store.save_file_id(key, model_file_id)
 
         # Rarity drives the row background tint. Fetched per-instance because it's
-        # a live-item property (drop-time value), not derivable from model_id alone.
+        # a live-item property (drop-time value), not a property of the skin.
         try:
             rarity_val = int(GLOBAL_CACHE.Item.Rarity.GetRarity(item_id)[0])
         except Exception:
@@ -476,7 +426,7 @@ def _collect_bag_items(bag, bag_id, email, storage_name=None, char_name=None):
         if unique_name not in bag_items:
             bag_items[unique_name] = OrderedDict(
                 {
-                    "model_id": model_id,
+                    "name_key": key,
                     "model_file_id": model_file_id,
                     "rarity": rarity_val,
                     "slot": OrderedDict(),
@@ -621,7 +571,7 @@ def draw_widget():
                                                         "character": char_name,
                                                         "bag": bag_name,
                                                         "item_name": item_name,
-                                                        "model_id": info.get("model_id", 0),
+                                                        "name_key": info.get("name_key", ""),
                                                         "model_file_id": info.get("model_file_id", 0),
                                                         "rarity": info.get("rarity", -1),
                                                         "count": count or str(info.get('count', 0)),
@@ -644,7 +594,7 @@ def draw_widget():
                                                     "character": None,
                                                     "bag": storage_name,
                                                     "item_name": item_name,
-                                                    "model_id": info.get("model_id", 0),
+                                                    "name_key": info.get("name_key", ""),
                                                     "model_file_id": info.get("model_file_id", 0),
                                                     "rarity": info.get("rarity", -1),
                                                     "count": count or str(info.get('count', 0)),

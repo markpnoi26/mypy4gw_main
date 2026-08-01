@@ -41,6 +41,7 @@ from Sources.marks_sources.item_naming import fetch_base_name
 from Sources.marks_sources.item_naming import known_base_name
 from Sources.marks_sources.item_naming import mod_database
 from Sources.marks_sources.item_naming import mod_display_name
+from Sources.marks_sources.item_naming import name_key
 from Sources.marks_sources.item_naming import parse_item_mods
 from Sources.marks_sources.item_naming import request_names
 
@@ -315,7 +316,7 @@ def item_facts(item_id: int, model_id: int, quantity: int) -> dict:
         "item_id": item_id,
         "model_id": model_id,
         "quantity": quantity,
-        "name": known_base_name(model_id),
+        "name": known_base_name(item_id),
         "item_type": int(item_type_value),
         "item_type_name": str(item_type_name or ""),
         "rarity": str(GLOBAL_CACHE.Item.Rarity.GetRarity(item_id)[1] or ""),
@@ -405,37 +406,43 @@ def facts_row(facts: dict) -> list[str]:
 
 
 def resolve_unknown_names(facts_by_id: dict):
-    """Name the items nothing could name, ONCE PER MODEL, and write the answer down.
+    """Name the items nothing could name, ONCE PER ENCODED NAME, and write the answer down.
 
     This is the only thing here that asks the game anything, so it is last, and it is skipped entirely
-    for models already known. The answer is stored globally, so a model costs one resolution ever
-    rather than one per scan.
+    for items already known. The answer is stored globally, so an encoded name costs one resolution
+    ever rather than one per scan. Deduped by that key rather than by model id, so two prefixes on
+    one skin are two lookups -- both landing on the same base name.
     """
-    unknown: dict[int, int] = {}
-    for facts in facts_by_id.values():
-        if not facts["name"]:
-            unknown.setdefault(facts["model_id"], facts["item_id"])
-    if not unknown:
+    unnamed = [facts["item_id"] for facts in facts_by_id.values() if not facts["name"]]
+    if not unnamed:
         return 0
 
     # Every request goes out before any is collected, so the server resolves them in parallel instead
-    # of the routine stalling on each in turn.
-    request_names(unknown.values())
+    # of the routine stalling on each in turn. It also has to happen BEFORE any key is read: an item
+    # the client has never named has no encoded name yet either, and keying first silently dropped
+    # exactly the unfamiliar drops this function exists to name.
+    request_names(unnamed)
+
+    # Deduped by key where there is one, by item otherwise. Falling back rather than skipping matters:
+    # the key may still be empty here, and fetch_base_name reads it again after the name arrives.
+    unknown: dict[str, int] = {}
+    for item_id in unnamed:
+        unknown.setdefault(name_key(item_id) or "item:%d" % item_id, item_id)
 
     learned = 0
     unresolved: list[int] = []
-    for model_id, item_id in unknown.items():
+    for item_id in unknown.values():
         facts = facts_by_id[item_id]
-        name = yield from fetch_base_name(item_id, model_id, facts["prefix"], facts["suffix"])
+        name = yield from fetch_base_name(item_id, facts["model_id"], facts["prefix"], facts["suffix"])
         if name:
             learned += 1
         else:
-            # Left unresolved on purpose and NOT written down: the model has to stay retryable.
-            unresolved.append(model_id)
+            # Left unresolved on purpose and NOT written down: the item has to stay retryable.
+            unresolved.append(facts["model_id"])
 
     for facts in facts_by_id.values():
         if not facts["name"]:
-            facts["name"] = known_base_name(facts["model_id"])
+            facts["name"] = known_base_name(facts["item_id"])
 
     if unresolved:
         ConsoleLog(

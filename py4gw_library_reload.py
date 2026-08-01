@@ -126,27 +126,16 @@ def drain_game_thread() -> None:
         pass
 
 
-def release_shared_memory() -> None:
-    """Close the multibox mapping cleanly before the module holding it is dropped.
+def detach_shared_memory():
+    """Take a reference to the multibox mapping so it can be closed after the purge.
 
-    GetAllAccounts hands out ``AllAccounts.from_buffer(shm.buf)``, a ctypes view that keeps a
-    buffer export on the mmap. Purging drops the manager while those views are still alive, so
-    the collector reaches SharedMemory.__del__ first and mmap.close() raises
-    ``BufferError: cannot close exported pointers exist``. Python swallows that inside __del__,
-    which means the mapping is never closed and one OS handle leaks per reload.
-
-    Dropping the export holders and collecting them before closing avoids the whole race. The
-    region itself is owned and kept alive by the C++ side, so closing this process's view is
-    safe -- the rebuilt manager re-attaches to the same region.
+    Deliberately leaves ``manager.shm`` in place. GetAllAccounts re-attaches whenever it finds
+    the slot empty (SharedMemory.py:104), so clearing it here just spawns a second mapping that
+    nothing ever closes.
     """
-    import gc
-
-    holder = None
     try:
         from Core.GlobalCache.GlobalCache import GLOBAL_CACHE
 
-        # Both hold from_buffer views: the frame cache memoises the AllAccounts struct, and
-        # queued coroutines close over structs they were mid-way through reading.
         try:
             GLOBAL_CACHE.Coroutines.clear()
         except Exception:
@@ -159,14 +148,28 @@ def release_shared_memory() -> None:
             pass
 
         manager = getattr(GLOBAL_CACHE, "ShMem", None)
-        if manager is not None:
-            holder = getattr(manager, "shm", None)
-            manager.shm = None
+        return getattr(manager, "shm", None) if manager is not None else None
     except Exception:
-        return
+        return None
 
+
+def close_shared_memory(holder) -> None:
+    """Close the old mapping. Must run AFTER the purge.
+
+    GetAllAccounts hands out ``AllAccounts.from_buffer(shm.buf)``, a ctypes view holding a
+    buffer export on the mmap, and those views outlive the call: HeroAI's PartyCache keeps a
+    dict of AccountStruct harvested from them. They only become unreachable once the purge
+    drops the modules holding them, so closing any earlier hits
+    ``BufferError: cannot close exported pointers exist``, which Python swallows inside
+    __del__ -- leaking one OS handle per reload.
+
+    The region is owned and kept alive by the C++ side, so closing this process's view is safe;
+    the rebuilt manager re-attaches to the same region.
+    """
     if holder is None:
         return
+
+    import gc
 
     gc.collect()
     try:

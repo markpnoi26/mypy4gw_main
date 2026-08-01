@@ -137,9 +137,11 @@ def perform_pending_reload() -> bool:
         before = py4gw_library_reload.callback_names()
         py4gw_library_reload.drain_game_thread()
         py4gw_library_reload.teardown_callbacks()
-        # Must precede the purge: it needs the live modules to reach the mapping.
-        py4gw_library_reload.release_shared_memory()
+        # Capture before the purge (it needs live modules to reach the mapping), close after
+        # it (the ctypes views into that mapping die with the modules holding them).
+        shared_memory_holder = py4gw_library_reload.detach_shared_memory()
         dropped = py4gw_library_reload.purge()
+        py4gw_library_reload.close_shared_memory(shared_memory_holder)
 
         widget_manager = None
         launchpad_register = None

@@ -3,9 +3,10 @@
 import os
 import re
 
+import PyItem
 import PySystem
 
-from Core.enums import ModelID
+from Core.enums_src.GameData_enums import DyeColor
 from Core.enums_src.Item_enums import ItemType
 from Core.GlobalCache import GLOBAL_CACHE
 from Core.Py4GWcorelib import Console
@@ -22,11 +23,12 @@ MODULE_NAME = "ItemNaming"
 MODS_DATA_DIR = "Sources/marks_sources/mods_data"
 
 #: Shared by every widget and every account. TeamInventoryViewer built it first, which is why it still
-#: carries that name -- the entries are plain {model_id: base_name} and belong to neither widget.
-NAME_CACHE_DOC = "TeamInventoryViewer/model_ids.json"
+#: carries that name -- the entries are {encoded singular name: base_name} and belong to neither widget.
+NAME_CACHE_DOC = "TeamInventoryViewer/item_names.json"
 
-#: InventoryLite's own map before the two were merged. Read once to seed, never written.
-LEGACY_NAME_DOC = "Widgets/Items/InventoryLiteNames.json"
+#: Leading rarity-colour control wchar, stripped from the key. Documented in
+#: docs/RE/name_tag_color_reverse_engineering.md:157.
+COLOUR_CONTROL_CODEPOINTS = frozenset({0xA3F})
 
 
 ATTRIBUTES = {
@@ -221,8 +223,39 @@ def mod_database():
 # ---------------------------------------------------------------- name cache
 
 
-class ModelNameCache:
-    """Shared {model_id: base_name} map over one global-scope document.
+def name_key(item_id: int) -> str:
+    """This item's identity for the name cache: its ENCODED singular name, as hex.
+
+    Replaces the model id. The game renumbers model ids across builds, and a renumbered id makes a
+    model-keyed cache hand back the previous item's name -- a confident mislabel rather than a miss.
+    An encoded name that no longer matches anything simply stops being looked up.
+
+    Singular because that form omits the stack count, so five feathers and six key the same entry.
+    Many keys per name is expected: every prefix/suffix combination of a skin encodes differently,
+    so "Fiery Voltaic Spear" and "Furious Voltaic Spear" are two keys both holding "Voltaic Spear".
+    """
+    if not item_id:
+        return ""
+    try:
+        raw = PyItem.PyItem(item_id).GetSingleItemName() or ()
+    except Exception:
+        return ""
+    try:
+        enc = bytes(raw)
+    except Exception:
+        # Not a byte vector after all. The width does not matter to a key, only that it is stable.
+        try:
+            enc = b"".join(int(v).to_bytes(2, "little") for v in raw)
+        except Exception:
+            return ""
+    # Leading rarity-colour control wchar, or the same item at four rarities becomes four entries.
+    if len(enc) >= 2 and int.from_bytes(enc[:2], "little") in COLOUR_CONTROL_CODEPOINTS:
+        enc = enc[2:]
+    return enc.hex()
+
+
+class ItemNameCache:
+    """Shared {encoded singular name: base_name} map over one global-scope document.
 
     Global scope is multibox-safe: saves merge every client's discoveries through a cross-process
     lock, so accounts scanning different items all contribute to the same map without clobbering.
@@ -244,58 +277,31 @@ class ModelNameCache:
             raw = {}
         self.names = {str(k): str(v) for k, v in raw.items() if v and not str(v).startswith("enc:")}
         self.loaded = True
-        self.seed_from_legacy()
         return self.names
 
-    def seed_from_legacy(self):
-        """Fold InventoryLite's old private map in once. Its entries are mostly models this map lacks."""
-        try:
-            legacy = JsonFactory(LEGACY_NAME_DOC, "global").get_json("names", {})
-        except Exception:
-            return
-        if not isinstance(legacy, dict):
-            return
-        added = 0
-        for model_id, name in legacy.items():
-            key = str(model_id)
-            if key in self.names or not name or str(name).startswith("enc:"):
-                continue
-            cleaned = clean_gw_item_name(str(name))[0] or str(name)
-            self.names[key] = cleaned
-            try:
-                self.doc().set(key, cleaned)
-            except Exception:
-                continue
-            added += 1
-        if added:
-            ConsoleLog(MODULE_NAME, f"Merged {added} name(s) from the older InventoryLite map.")
-
-    def get(self, model_id, default: str = "") -> str:
+    def get(self, key: str, default: str = "") -> str:
         if not self.loaded:
             self.load()
-        return self.names.get(str(model_id), default)
+        return self.names.get(key, default)
 
-    def remember(self, model_id, name: str):
+    def remember(self, key: str, name: str):
         """Write a RESOLVED name down so no later scan has to ask for it again.
 
-        A raw encoding is not a name: storing one marks the model resolved and it is never retried,
+        A raw encoding is not a name: storing one marks the item resolved and it is never retried,
         which is how `enc:...` once ended up displayed as an item's name.
         """
-        if not model_id or not name or name.startswith("enc:"):
+        if not key or not name or name.startswith("enc:"):
             return
-        key = str(model_id)
         if self.names.get(key) == name:
             return
         self.names[key] = name
         try:
             self.doc().set(key, name)
         except Exception as exc:
-            ConsoleLog(
-                MODULE_NAME, f"Could not store the name for model {model_id}: {exc}", Console.MessageType.Warning
-            )
+            ConsoleLog(MODULE_NAME, f"Could not store the name for {key[:16]}: {exc}", Console.MessageType.Warning)
 
 
-NAME_CACHE = ModelNameCache()
+NAME_CACHE = ItemNameCache()
 
 
 # ---------------------------------------------------------------- strippers
@@ -444,20 +450,15 @@ def mod_names(item_id: int, model_id: int) -> tuple[str, str, str]:
 # ---------------------------------------------------------------- the ladder
 
 
-def known_base_name(model_id: int, prefer_cache: bool = False) -> str:
-    """The name without asking the server: the ModelID enum and the shared cache. "" when neither knows.
+def known_base_name(item_id: int) -> str:
+    """The name without asking the server: the shared cache, keyed by this item's encoded name.
 
-    `prefer_cache` flips the order for weapons and armor, where a learned name is the specific skin
-    ("Crenellated Scythe") and the enum, when it has the model at all, is the generic one.
+    "" when we have not learned it yet. The ModelID enum used to sit in front of this; it went
+    because it is a hand-maintained snapshot of ids the game renumbers, so it answers confidently
+    and sometimes wrongly. The cache is now the only source, and it cannot mistake one item for
+    another because the key IS the item's own name encoding.
     """
-    cached = NAME_CACHE.get(model_id)
-    if prefer_cache and cached:
-        return cached
-    try:
-        return ModelID(model_id).name.replace("_", " ")
-    except Exception:
-        pass
-    return cached
+    return NAME_CACHE.get(name_key(item_id))
 
 
 def request_names(item_ids):
@@ -476,28 +477,50 @@ def request_names(item_ids):
             continue
 
 
-def fetch_base_name(item_id: int, model_id: int, prefix: str = "", suffix: str = ""):
-    """Ask the game for this item's name, reduce it to a base name, and write it to the shared cache.
+def store_base_name(full: str, key: str, prefix: str = "", suffix: str = "") -> str:
+    """The one place a server-returned name becomes a cache entry.
 
-    The only rung that talks to the server, so it is last and runs once per MODEL rather than per item.
+    Both callers go through it so they cannot disagree about how a name is stripped: they write to the
+    same document under the same key, so two spellings would overwrite each other on every scan.
+    """
+    name = base_name_from_full(full or "", prefix, suffix)
+    if name and key:
+        NAME_CACHE.remember(key, name)
+    return name
+
+
+def fetch_base_name(item_id: int, model_id: int, prefix: str = "", suffix: str = ""):
+    """Ask the game for this item's name, waiting for it, and write it to the shared cache.
+
+    Blocks for up to ~2s per item, so it belongs behind an explicit "scan now" press and nowhere near
+    a loop that runs on a timer -- use learn_base_name there. Runs once per ENCODED NAME rather than
+    per item, which is finer than per model: two prefixes on one skin are two lookups, both landing on
+    the same base name.
     """
     try:
         full = yield from Routines.Yield.Items.GetItemNameByItemID(item_id)
     except Exception as exc:
         ConsoleLog(MODULE_NAME, f"Name lookup failed for model {model_id}: {exc}", Console.MessageType.Warning)
         return ""
-    name = base_name_from_full(full or "", prefix, suffix)
-    if name:
-        NAME_CACHE.remember(model_id, name)
+    key = name_key(item_id)
+    name = store_base_name(full, key, prefix, suffix)
+    if name and not key:
+        # Named but unkeyable, so it cannot be written down and every later scan asks again.
+        # Silent until now, which looked exactly like "this item never gets cached".
+        ConsoleLog(
+            MODULE_NAME,
+            f"'{name}' (model {model_id}) has no encoded name to key on; not cached.",
+            Console.MessageType.Warning,
+        )
     return name
 
 
 # ---------------------------------------------------------------- composed display names
 
 
-def armor_display_name(item_id: int, model_id: int) -> str:
+def armor_display_name(item_id: int, model_id: int, key: str | None = None) -> str:
     """Base name plus its rune and insignia, as TeamInventoryViewer shows armor."""
-    base = known_base_name(model_id, prefer_cache=True)
+    base = NAME_CACHE.get(key) if key is not None else known_base_name(item_id)
     if not base:
         return ""
     prefix, suffix, _inherent = mod_names(item_id, model_id)
@@ -509,9 +532,9 @@ def armor_display_name(item_id: int, model_id: int) -> str:
     return " ".join(parts)
 
 
-def weapon_display_name(item_id: int, model_id: int) -> str:
+def weapon_display_name(item_id: int, model_id: int, key: str | None = None) -> str:
     """Base name wrapped in its mods, as TeamInventoryViewer shows weapons."""
-    base = known_base_name(model_id, prefer_cache=True)
+    base = NAME_CACHE.get(key) if key is not None else known_base_name(item_id)
     if not base:
         return ""
     prefix, suffix, inherent = mod_names(item_id, model_id)
@@ -524,3 +547,63 @@ def weapon_display_name(item_id: int, model_id: int) -> str:
     if inherent:
         parts.append(f"({inherent})")
     return " ".join(parts)
+
+
+def dye_label(item_id: int) -> str:
+    """A dye's colour as " [Blue]", empty for everything else.
+
+    Gated on the native item type, not on a model id. GetDyeColor returns the first non-zero modifier
+    arg on ANY item, so without a gate every modded weapon picks up a colour.
+    """
+    try:
+        type_value, _name = GLOBAL_CACHE.Item.GetItemType(item_id)
+        if int(type_value) != int(ItemType.Dye):
+            return ""
+        return f" [{DyeColor(GLOBAL_CACHE.Item.GetDyeColor(item_id)).name}]"
+    except Exception:
+        return ""
+
+
+def display_name(item_id: int, model_id: int, key: str | None = None) -> str:
+    """The item as a viewer shows it: the cached base name with its mods composed back on.
+
+    "" until the base name has been learned, and deliberately nothing behind it. A model-id rung used
+    to sit here, and when the enum is wrong it does not miss -- it names a DIFFERENT item confidently,
+    which a viewer then writes down and serves back forever.
+
+    Pass `key` when the caller already has it. name_key builds a PyItem per call, so a scan that walks
+    every bag every few seconds must not pay for it three times per item.
+    """
+    try:
+        if GLOBAL_CACHE.Item.Type.IsWeapon(item_id) and not GLOBAL_CACHE.Item.Rarity.IsGreen(item_id):
+            return weapon_display_name(item_id, model_id, key)
+        if GLOBAL_CACHE.Item.Type.IsArmor(item_id):
+            return armor_display_name(item_id, model_id, key)
+    except Exception:
+        pass
+    base = NAME_CACHE.get(key) if key is not None else known_base_name(item_id)
+    return base + dye_label(item_id) if base else ""
+
+
+def learn_base_name(item_id: int, model_id: int, key: str = "") -> str:
+    """Non-blocking twin of fetch_base_name: reads a name the client ALREADY holds, or queues it.
+
+    Returns "" when the answer is not in yet -- the caller is expected to leave the item alone and
+    look again on a later pass, not to wait. GetName queues its own request when it comes up empty,
+    so an item asked about once keeps making progress without anything polling it.
+    """
+    if not key:
+        key = name_key(item_id)
+    if not key:
+        return ""
+    try:
+        if not GLOBAL_CACHE.Item.IsNameReady(item_id):
+            GLOBAL_CACHE.Item.RequestName(item_id)
+            return ""
+        full = GLOBAL_CACHE.Item.GetName(item_id)
+    except Exception:
+        return ""
+    if not full:
+        return ""
+    prefix, suffix, _inherent = mod_names(item_id, model_id)
+    return store_base_name(full, key, prefix, suffix)
