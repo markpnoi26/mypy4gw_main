@@ -16,9 +16,12 @@ import PyInventory
 import PySystem
 
 from Core import ImGui
+from Core.Agent import Agent
+from Core.AgentArray import AgentArray
 from Core.enums_src.Item_enums import INVENTORY_BAGS
 from Core.enums_src.Item_enums import STORAGE_BAGS
 from Core.enums_src.Item_enums import ItemType
+from Core.enums_src.Model_enums import ModelID
 from Core.enums_src.Multiboxing_enums import SharedCommandType
 from Core.GlobalCache import GLOBAL_CACHE
 from Core.ImGui_src.IconsFontAwesome5 import IconsFontAwesome5
@@ -28,6 +31,7 @@ from Core.Py4GWcorelib import ActionQueueManager
 from Core.Py4GWcorelib import Color
 from Core.Py4GWcorelib import Console
 from Core.Py4GWcorelib import ConsoleLog
+from Core.Py4GWcorelib import Utils
 from Core.py4gwcorelib_src.Settings import Settings
 from Core.Routines import Routines
 from Core.UIManager import UIManager
@@ -58,12 +62,27 @@ DEPOSIT_REQUEST_TTL_MS = 300000
 STORAGE_OPEN_TIMEOUT_MS = 4000
 DEPOSIT_CONFIRM_TIMEOUT_MS = 2500
 MAX_MOVES_PER_ITEM = 8
+
+#: Matched case-insensitively against agent names. Traders ("Rune Trader", "Material Trader") do not
+#: contain it, and an exact hit outranks a partial one -- see nearest_merchant.
+MERCHANT_NAME = "merchant"
+MERCHANT_SEARCH_RANGE = 5000.0
+#: How many nearby NPCs to walk to before giving up. Small: when you are standing at a merchant the
+#: first candidate is it, and a wrong guess costs a round trip across the outpost.
+MERCHANT_TRY_LIMIT = 3
+MERCHANT_WALK_TIMEOUT_MS = 30000
+MERCHANT_WINDOW_TIMEOUT_MS = 5000
+KIT_MODELS = (
+    int(ModelID.Salvage_Kit.value),
+    int(ModelID.Identification_Kit.value),
+    int(ModelID.Superior_Identification_Kit.value),
+)
 DISPLAY_LINE_CAP = 220
 REPORT_LINES = 40
 REPORT_HEIGHT = 320.0
 RARITY_NAMES = ("White", "Blue", "Purple", "Gold", "Green")
 
-SCAN_COLUMNS = ("Name", "Prefix", "Suffix", "Inherent", "Req", "Rarity", "Max", "Qty")
+SCAN_COLUMNS = ("Name", "Type", "Prefix", "Suffix", "Inherent", "Req", "Rarity", "Max", "Qty")
 PREVIEW_COLUMNS = ("Do",) + SCAN_COLUMNS + ("Rule", "Why")
 
 DEPOSIT_MOVED = "moved"
@@ -124,21 +143,120 @@ SORT_TYPE_ORDER = [
 TYPE_RANK = {type_value: index for index, type_value in enumerate(SORT_TYPE_ORDER)}
 DYE_ITEM_TYPE = int(ItemType.Dye)
 
+# What a rule can filter on by kind. Spelled out rather than taken from ITEM_TYPE_META_TYPES because
+# that table has no armour or consumable grouping, and its ARMOR_TYPES includes ItemType.Salvage --
+# an "Armor" rule that silently also claimed salvage drops would be a trap. Membership is explicit
+# everywhere, so an item type in no group is matched by no group rather than by a catch-all.
+ITEM_GROUPS: dict[str, tuple[int, ...]] = {
+    "Weapons": (
+        int(ItemType.Axe),
+        int(ItemType.Sword),
+        int(ItemType.Hammer),
+        int(ItemType.Daggers),
+        int(ItemType.Scythe),
+        int(ItemType.Spear),
+        int(ItemType.Bow),
+        int(ItemType.Staff),
+        int(ItemType.Wand),
+    ),
+    "Off-hand": (int(ItemType.Offhand), int(ItemType.Shield)),
+    "Armor": (
+        int(ItemType.Headpiece),
+        int(ItemType.Chestpiece),
+        int(ItemType.Gloves),
+        int(ItemType.Leggings),
+        int(ItemType.Boots),
+    ),
+    "Consumables": (int(ItemType.Usable), int(ItemType.Scroll), int(ItemType.Storybook)),
+    "Upgrades": (int(ItemType.Rune_Mod),),
+    "Materials": (int(ItemType.Materials_Zcoins), int(ItemType.CC_Shards), int(ItemType.Gold_Coin)),
+    "Salvage": (int(ItemType.Salvage),),
+    "Trophies": (int(ItemType.Trophy),),
+    "Kits": (int(ItemType.Kit),),
+    "Dyes": (int(ItemType.Dye),),
+    "Keys": (int(ItemType.Key),),
+    "Quest": (int(ItemType.Quest_Item),),
+    "Misc": (
+        int(ItemType.Bag),
+        int(ItemType.Bundle),
+        int(ItemType.Minipet),
+        int(ItemType.Present),
+        int(ItemType.Costume),
+        int(ItemType.Costume_Headpiece),
+    ),
+}
+GROUPS_PER_ROW = 4
+
+# The same criterion at single-type resolution, for the rules a group cannot express -- "of Enchanting
+# on a spear but not on a bow". Only the equipment types: that is where a group is too coarse to be
+# useful, and the groups above already say everything worth saying about the rest.
+ITEM_TYPES: dict[str, int] = {
+    "Axe": int(ItemType.Axe),
+    "Sword": int(ItemType.Sword),
+    "Hammer": int(ItemType.Hammer),
+    "Daggers": int(ItemType.Daggers),
+    "Scythe": int(ItemType.Scythe),
+    "Spear": int(ItemType.Spear),
+    "Bow": int(ItemType.Bow),
+    "Staff": int(ItemType.Staff),
+    "Wand": int(ItemType.Wand),
+    "Offhand": int(ItemType.Offhand),
+    "Shield": int(ItemType.Shield),
+    "Headpiece": int(ItemType.Headpiece),
+    "Chestpiece": int(ItemType.Chestpiece),
+    "Gloves": int(ItemType.Gloves),
+    "Leggings": int(ItemType.Leggings),
+    "Boots": int(ItemType.Boots),
+}
+TYPE_NAMES = {value: name for name, value in ITEM_TYPES.items()}
+TYPES_PER_ROW = 4
+
 SETTINGS_SECTION = "InventoryLite"
 RULES_DOC = "Widgets/Items/InventoryLiteRules.json"
 SEEDED_UNNAMED_KEY = "seeded_unnamed"
 UNNAMED_RULE_NAME = "Unnamed - park in storage"
+SEEDED_SALVAGE_KEY = "seeded_salvage"
+SALVAGE_RULE_NAME = "Salvage - white and blue"
+
+# In precedence order: an item claimed by an earlier action is invisible to the later ones. One item,
+# one fate, decided by the strongest claim on it rather than by which button you happen to press.
+ACTIONS = ("keep", "sell", "salvage")
+ACTION_TABS = {"keep": "Keep", "sell": "Sell", "salvage": "Salvage"}
+ACTION_VERBS = {"keep": "DEPOSIT", "sell": "SELL", "salvage": "SALVAGE"}
+ACTION_BLURBS = {
+    "keep": "Matches are deposited into storage, if there is room.",
+    "sell": "Matches are sold at the merchant.",
+    "salvage": "Matches are salvaged. Irreversible - the item is consumed.",
+}
+#: Kinds no merchant takes. Applied on the sell side whatever the rules say, so a rule that claims
+#: them stalls the run on items that cannot leave the bag instead of quietly doing nothing.
+NON_SELLABLE_GROUPS = ("Consumables", "Quest", "Kits")
 
 GRAY = (0.66, 0.67, 0.70, 1.0)
 WARN = (0.79, 0.63, 0.29, 1.0)
 
 BAR_GAP = 2.0
-BAR_SPACING = 4.0
-OUTPOST_ONLY_REASON = "Outpost only - the Xunlai chest is out of reach here."
+BAR_ICON_SIZE = 34.0
+#: One of ImGui.push_font's exact atlas sizes (14/22/30/46/62/124). An in-between number renders
+#: through push_font_scaled, which is both softer and the branch that makes nesting unsafe.
+BAR_GLYPH_SIZE = 22
+
+# Icon-only, so each one has to read as its target at a glance rather than as its verb: a hammer
+# breaks things down, a shop sells, an archive box swallows, a crate opens, a grid and a stack tidy.
+ICON_SALVAGE = IconsFontAwesome5.ICON_HAMMER
+ICON_DEPOSIT = IconsFontAwesome5.ICON_ARCHIVE
+ICON_MERCHANT = IconsFontAwesome5.ICON_STORE
+ICON_XUNLAI = IconsFontAwesome5.ICON_BOX_OPEN
+ICON_ORGANIZE_BAGS = IconsFontAwesome5.ICON_TH
+ICON_ORGANIZE_STORAGE = IconsFontAwesome5.ICON_LAYER_GROUP
+ICON_BROADCAST = IconsFontAwesome5.ICON_USERS
+ICON_CONFIG = IconsFontAwesome5.ICON_COG
+ICON_CANCEL = IconsFontAwesome5.ICON_TIMES
 
 # (base, hovered, active) per action. Grouped by what the button does to your items: amber consumes,
-# blue moves, green rearranges, red stops.
+# gold sells, blue moves, green rearranges, red stops.
 BUTTON_SALVAGE = (Color(150, 90, 40), Color(184, 114, 52), Color(118, 70, 30))
+BUTTON_MERCHANT = (Color(146, 128, 36), Color(180, 158, 50), Color(114, 100, 26))
 BUTTON_DEPOSIT = (Color(44, 94, 150), Color(58, 120, 186), Color(34, 74, 118))
 BUTTON_XUNLAI = (Color(70, 80, 100), Color(90, 104, 130), Color(54, 62, 78))
 BUTTON_ORGANIZE = (Color(50, 114, 76), Color(64, 144, 96), Color(38, 88, 58))
@@ -148,29 +266,30 @@ BUTTON_CANCEL = (Color(150, 54, 54), Color(184, 70, 70), Color(118, 42, 42))
 BUTTON_BROADCAST = (Color(104, 66, 150), Color(130, 84, 184), Color(82, 50, 118))
 
 
-def bar_button(label: str, palette, tooltip: str = "", icon: bool = False, disabled_reason: str = "") -> bool:
-    """A coloured bar button. `icon` routes through ImGui.icon_button, which swaps in the glyph font.
+def bar_button(icon: str, palette, tooltip: str) -> bool:
+    """One square icon button in the bar.
 
-    A non-empty `disabled_reason` greys the button out and shows that instead of `tooltip`, so a bar
-    that has gone quiet still says why. The hover check allows disabled items or the reason would be
-    the one tooltip nobody can read.
+    The glyph is drawn as an ordinary button label under a pushed font rather than through
+    ImGui.icon_button, which pins the glyph to `get_text_line_height() * 0.8` and cannot be told to
+    draw it bigger. Its own internal push_font calls also flip ImGui's global `_last_font_scaled`,
+    so wrapping it in an outer push would make our pop take the wrong branch.
+
+    The tooltip is the only label there is, so it is required rather than optional: an icon nobody
+    can name is a button nobody will press.
     """
     base, hovered, active = palette
     PyImGui.push_style_color(PyImGui.ImGuiCol.Button, base.to_tuple_normalized())
     PyImGui.push_style_color(PyImGui.ImGuiCol.ButtonHovered, hovered.to_tuple_normalized())
     PyImGui.push_style_color(PyImGui.ImGuiCol.ButtonActive, active.to_tuple_normalized())
-    if disabled_reason:
-        PyImGui.begin_disabled(True)
+    ImGui.push_font("Regular", BAR_GLYPH_SIZE)
     try:
-        clicked = ImGui.icon_button(label) if icon else PyImGui.button(label)
+        clicked = PyImGui.button(icon, BAR_ICON_SIZE, BAR_ICON_SIZE)
     finally:
-        if disabled_reason:
-            PyImGui.end_disabled()
+        ImGui.pop_font()
         PyImGui.pop_style_color(3)
-    tip = disabled_reason or tooltip
-    if tip and PyImGui.is_item_hovered(PyImGui.HoveredFlags.AllowWhenDisabled):
-        PyImGui.set_tooltip(tip)
-    return clicked and not disabled_reason
+    if PyImGui.is_item_hovered():
+        PyImGui.set_tooltip(tooltip)
+    return clicked
 
 
 def display_safe(text: str) -> str:
@@ -202,6 +321,7 @@ def item_facts(item_id: int, model_id: int, quantity: int) -> dict:
         "rarity": str(GLOBAL_CACHE.Item.Rarity.GetRarity(item_id)[1] or ""),
         "value": int(GLOBAL_CACHE.Item.Properties.GetValue(item_id) or 0),
         "identified": bool(GLOBAL_CACHE.Item.Usage.IsIdentified(item_id)),
+        "salvageable": bool(GLOBAL_CACHE.Item.Usage.IsSalvageable(item_id)),
         "prefix": "",
         "suffix": "",
         "inherent": "",
@@ -239,6 +359,24 @@ def item_facts(item_id: int, model_id: int, quantity: int) -> dict:
     return facts
 
 
+def group_of(item_type: int) -> str:
+    """The ITEM_GROUPS name holding this type, or "" when no group does."""
+    for name, members in ITEM_GROUPS.items():
+        if item_type in members:
+            return name
+    return ""
+
+
+def type_label(facts: dict) -> str:
+    """What the rule editor calls this item.
+
+    The precise checkbox label wins, so the column and the Kind boxes agree letter for letter: a rule
+    you cannot write from what the report shows is a rule you will get wrong.
+    """
+    item_type = facts["item_type"]
+    return TYPE_NAMES.get(item_type) or group_of(item_type) or facts["item_type_name"] or str(item_type)
+
+
 def mod_cell(facts: dict, slot: str) -> str:
     """One mod slot as a cell: the name, its roll, and whether that roll is the top of the range."""
     name = facts[slot]
@@ -254,6 +392,7 @@ def facts_row(facts: dict) -> list[str]:
         display_safe(cell)
         for cell in (
             facts["name"] or "model %d" % facts["model_id"],
+            type_label(facts),
             mod_cell(facts, "prefix"),
             mod_cell(facts, "suffix"),
             mod_cell(facts, "inherent"),
@@ -331,19 +470,41 @@ def gather_facts(learn_names: bool = True):
 # ---------------------------------------------------------------- rules
 
 
+def action_from_raw(raw: dict) -> str:
+    """The action a stored rule asks for, including the two older spellings.
+
+    Both of those became "keep": the old `keep` flag meant "worth having, do not deposit" and a plain
+    rule meant "deposit", and the Keep tab is now the one place either intent lives. Neither reading
+    can destroy an item if this guesses wrong, which is why the migration is silent.
+    """
+    action = str(raw.get("action", "") or "").lower()
+    if action in ACTIONS:
+        return action
+    if raw.get("sell"):
+        return "sell"
+    return "keep"
+
+
 @dataclass
 class Rule:
     """One rule, matched against an item's facts. Pure values: no client reads happen in here."""
 
     name: str = "New rule"
     enabled: bool = True
-    keep: bool = False  # a keep rule vetoes deposit
+    #: One of ACTIONS. Not a criterion -- it picks what happens to a match, not what matches.
+    action: str = "keep"
     match_all: bool = True
     name_contains: tuple[str, ...] = field(default_factory=tuple)
     prefix_contains: tuple[str, ...] = field(default_factory=tuple)
     suffix_contains: tuple[str, ...] = field(default_factory=tuple)
     inherent_contains: tuple[str, ...] = field(default_factory=tuple)
     rarities: tuple[str, ...] = field(default_factory=tuple)
+    #: Keys into ITEM_GROUPS. Stored by name so a hand-edited rules file stays readable and so a
+    #: renumbered ItemType cannot silently repoint a rule at a different kind of item.
+    item_groups: tuple[str, ...] = field(default_factory=tuple)
+    #: Keys into ITEM_TYPES. Unions with item_groups into ONE criterion, so ticking a group and a type
+    #: widens the same test rather than adding a second one that Match ALL would then require.
+    item_types: tuple[str, ...] = field(default_factory=tuple)
     max_requirement: int | None = None
     #: Per slot: the mod in that slot must be at the top of its roll range.
     prefix_max_only: bool = False
@@ -358,13 +519,15 @@ class Rule:
         return {
             "name": self.name,
             "enabled": self.enabled,
-            "keep": self.keep,
+            "action": self.action,
             "match_all": self.match_all,
             "name_contains": list(self.name_contains),
             "prefix_contains": list(self.prefix_contains),
             "suffix_contains": list(self.suffix_contains),
             "inherent_contains": list(self.inherent_contains),
             "rarities": list(self.rarities),
+            "item_groups": list(self.item_groups),
+            "item_types": list(self.item_types),
             "max_requirement": self.max_requirement,
             "prefix_max_only": self.prefix_max_only,
             "suffix_max_only": self.suffix_max_only,
@@ -382,13 +545,17 @@ class Rule:
         return Rule(
             name=str(raw.get("name", "New rule")),
             enabled=bool(raw.get("enabled", True)),
-            keep=bool(raw.get("keep", False)),
+            action=action_from_raw(raw),
             match_all=bool(raw.get("match_all", True)),
             name_contains=strs("name_contains"),
             prefix_contains=strs("prefix_contains"),
             suffix_contains=strs("suffix_contains"),
             inherent_contains=strs("inherent_contains"),
             rarities=strs("rarities"),
+            # Filtered against the live table, so a group we no longer ship drops out instead of
+            # sitting in the rule as a criterion nothing can ever satisfy.
+            item_groups=tuple(g for g in strs("item_groups") if g in ITEM_GROUPS),
+            item_types=tuple(t for t in strs("item_types") if t in ITEM_TYPES),
             max_requirement=None if req is None else int(req),
             prefix_max_only=bool(raw.get("prefix_max_only", False)),
             suffix_max_only=bool(raw.get("suffix_max_only", False)),
@@ -407,6 +574,8 @@ class Rule:
             self.suffix_contains,
             self.inherent_contains,
             self.rarities,
+            # One criterion, however it was spelled -- see Rule.item_types.
+            self.item_groups + self.item_types,
             (self.max_requirement,) if self.max_requirement is not None else (),
             ("prefix max",) if self.prefix_max_only else (),
             ("suffix max",) if self.suffix_max_only else (),
@@ -438,6 +607,13 @@ class Rule:
 
         if self.rarities:
             results.append(("rarity", facts["rarity"] in self.rarities))
+        if self.item_groups or self.item_types:
+            allowed: set[int] = set()
+            for group in self.item_groups:
+                allowed.update(ITEM_GROUPS.get(group, ()))
+            allowed.update(ITEM_TYPES[t] for t in self.item_types if t in ITEM_TYPES)
+            wanted = "/".join(self.item_groups + self.item_types)
+            results.append(("kind~%s" % wanted, facts["item_type"] in allowed))
         if self.max_requirement is not None:
             got = facts["requirement"]
             results.append(("req<=%d" % self.max_requirement, bool(got) and got <= self.max_requirement))
@@ -464,15 +640,20 @@ class Rule:
         return (all(passed) if self.match_all else any(passed)), results
 
 
-def load_rules() -> list[Rule]:
+def read_rules() -> list[Rule] | None:
+    """Parsed rules from the shared document, or None when it could not be read at all.
+
+    None and [] are deliberately different answers: "the file says there are no rules" and "we could
+    not ask" lead to opposite decisions once a session is already running.
+    """
     try:
         from Core.py4gwcorelib_src.JsonFactory import JsonFactory
 
         raw = JsonFactory(RULES_DOC, "global").get_json("rules", [])
     except Exception:
-        return []
+        return None
     if not isinstance(raw, list):
-        return []
+        return None
     out: list[Rule] = []
     for entry in raw:
         if isinstance(entry, dict):
@@ -483,8 +664,12 @@ def load_rules() -> list[Rule]:
     return out
 
 
-def seed_unnamed_rule(rules) -> bool:
-    """Add the park-the-unnameable rule, once ever. True when it was appended.
+def load_rules() -> list[Rule]:
+    return read_rules() or []
+
+
+def seed_once(key: str, rules, rule: Rule) -> bool:
+    """Append a starter rule, once ever. True when it was appended.
 
     Guarded by a flag in the document rather than by "does such a rule exist", so deleting the rule is
     a decision that sticks instead of one the next load undoes.
@@ -493,22 +678,66 @@ def seed_unnamed_rule(rules) -> bool:
         from Core.py4gwcorelib_src.JsonFactory import JsonFactory
 
         doc = JsonFactory(RULES_DOC, "global")
-        if doc.get_bool(SEEDED_UNNAMED_KEY, False):
+        if doc.get_bool(key, False):
             return False
-        doc.set_bool(SEEDED_UNNAMED_KEY, True)
+        doc.set_bool(key, True)
     except Exception:
         return False
-    rules.append(Rule(name=UNNAMED_RULE_NAME, unnamed_only=True))
+    rules.append(rule)
     return True
+
+
+def seed_unnamed_rule(rules) -> bool:
+    return seed_once(SEEDED_UNNAMED_KEY, rules, Rule(name=UNNAMED_RULE_NAME, unnamed_only=True))
+
+
+def seed_salvage_rule(rules) -> bool:
+    """The Salvage button used to be a hardcoded white/blue filter. Same behaviour, now a visible
+    rule you can edit, so nothing changes silently for anyone who already had the button."""
+    return seed_once(
+        SEEDED_SALVAGE_KEY,
+        rules,
+        Rule(name=SALVAGE_RULE_NAME, action="salvage", rarities=SALVAGE_RARITIES),
+    )
 
 
 def save_rules(rules) -> None:
     try:
         from Core.py4gwcorelib_src.JsonFactory import JsonFactory
 
-        JsonFactory(RULES_DOC, "global").set_json("rules", [r.to_dict() for r in rules])
+        doc = JsonFactory(RULES_DOC, "global")
+        doc.set_json("rules", [r.to_dict() for r in rules])
+        # Forced rather than left to the autosave debounce: another account can read this file at any
+        # moment, and it must never read a version older than what this client is already showing.
+        doc.save()
     except Exception as exc:
         ConsoleLog(MODULE_NAME, f"Could not save rules: {exc}", Console.MessageType.Error)
+
+
+def reload_rules(current: list[Rule]) -> list[Rule]:
+    """Re-read the shared rules from disk, picking up edits made on another account.
+
+    JsonFactory caches one instance per (name, scope) PER PROCESS and nothing polls the file, so a
+    peer's write lands on disk and never reaches this client's copy on its own. Losing an unsaved
+    local edit to the reload is not possible: save_rules flushes on every change.
+
+    Returns `current` untouched when the document cannot be read. A transient read failure must not
+    silently disarm every rule -- that turns a button press into a no-op with nothing to see.
+    """
+    try:
+        from Core.py4gwcorelib_src.JsonFactory import JsonFactory
+
+        JsonFactory(RULES_DOC, "global").reload()
+    except Exception as exc:
+        ConsoleLog(MODULE_NAME, f"Could not re-read the shared rules: {exc}", Console.MessageType.Warning)
+        return current
+    fresh = read_rules()
+    if fresh is None:
+        ConsoleLog(
+            MODULE_NAME, "Shared rules were unreadable; keeping the ones already loaded.", Console.MessageType.Warning
+        )
+        return current
+    return fresh
 
 
 def describe_verdict(rule, results) -> str:
@@ -518,44 +747,90 @@ def describe_verdict(rule, results) -> str:
     )
 
 
-def deposit_matches(rules, facts_by_id: dict) -> tuple[list[int], list[list[str]]]:
-    """Ids a deposit rule claims and no keep rule vetoes, plus one row for EVERY item.
+def action_block_reason(facts: dict, action: str) -> str:
+    """Why the game will not let this item take this action, or "" when it will.
 
-    Items that did NOT match are listed too, each with the breakdown of whichever deposit rule came
-    closest. An item you expected to be taken and was not is the case that needs explaining, and it
-    cannot explain itself if it has no row.
+    Checked ahead of the rules and separately from them, because these are facts about the item rather
+    than preferences about it. A rule cannot argue a merchant into buying a scroll.
     """
-    keepers = [r for r in rules if r.enabled and r.keep]
-    takers = [r for r in rules if r.enabled and not r.keep]
+    if action == "sell":
+        if group_of(facts["item_type"]) in NON_SELLABLE_GROUPS:
+            return "no merchant buys this kind"
+        if facts["value"] <= 0:
+            return "worth nothing to a merchant"
+    elif action == "salvage":
+        if not facts["salvageable"]:
+            return "not salvageable"
+        if not facts["identified"]:
+            return "unidentified"
+    return ""
+
+
+def match_rules(rules, facts_by_id: dict, action: str, residual: bool = False):
+    """Ids this action claims, plus one row for EVERY item. (matched, rows).
+
+    Actions run in ACTIONS order and each one only sees what the earlier ones left: an item a Keep
+    rule claims is never offered to Sell or Salvage. That is what makes one item have one fate no
+    matter which button is pressed, instead of the buttons racing each other for it.
+
+    Items that did NOT match are listed too, each with the breakdown of whichever rule came closest.
+    An item you expected to be taken and was not is the case that needs explaining, and it cannot
+    explain itself if it has no row.
+    """
+    verb = ACTION_VERBS[action]
+    rank = ACTIONS.index(action)
+    stronger = [r for r in rules if r.enabled and ACTIONS.index(r.action) < rank]
+    mine = [r for r in rules if r.enabled and r.action == action]
     matched: list[int] = []
     rows: list[list[str]] = []
 
     for item_id, facts in facts_by_id.items():
-        action = "-"
+        verdict_label = "-"
         rule_name = ""
-        why = "no enabled deposit rule has criteria"
+        why = "no enabled %s rule has criteria" % action
 
-        kept = next((r for r in keepers if r.evaluate(facts)[0]), None)
-        if kept is not None:
-            action, rule_name, why = "KEEP", kept.name, describe_verdict(kept, kept.evaluate(facts)[1])
+        claimed = next((r for r in stronger if r.evaluate(facts)[0]), None)
+        blocked = action_block_reason(facts, action)
+        if claimed is not None:
+            verdict_label = ACTION_VERBS[claimed.action]
+            rule_name = claimed.name
+            why = describe_verdict(claimed, claimed.evaluate(facts)[1])
+        elif blocked:
+            verdict_label, why = "SKIP", blocked
         else:
             best_score = -1
-            for rule in takers:
-                verdict, results = rule.evaluate(facts)
-                if verdict:
-                    action, rule_name, why = "TAKE", rule.name, describe_verdict(rule, results)
+            for rule in mine:
+                passes, results = rule.evaluate(facts)
+                if passes:
+                    verdict_label, rule_name, why = verb, rule.name, describe_verdict(rule, results)
                     matched.append(item_id)
                     break
                 score = sum(1 for _label, ok in results if ok)
                 if results and score > best_score:
                     best_score = score
                     rule_name, why = rule.name, describe_verdict(rule, results)
+            else:
+                if residual:
+                    verdict_label, rule_name, why = verb, "", "unclaimed by any rule"
+                    matched.append(item_id)
 
-        rows.append([action] + facts_row(facts) + [display_safe(rule_name), display_safe(why)])
+        rows.append([verdict_label] + facts_row(facts) + [display_safe(rule_name), display_safe(why)])
 
-    order = {"TAKE": 0, "KEEP": 1, "-": 2}
-    rows.sort(key=lambda row: order.get(row[0], 3))
+    order = {verb: 0, "SKIP": 2, "-": 3}
+    rows.sort(key=lambda row: order.get(row[0], 1))
     return matched, rows
+
+
+def deposit_matches(rules, facts_by_id: dict):
+    return match_rules(rules, facts_by_id, "keep")
+
+
+def sell_matches(rules, facts_by_id: dict):
+    return match_rules(rules, facts_by_id, "sell")
+
+
+def salvage_matches(rules, facts_by_id: dict, residual: bool = False):
+    return match_rules(rules, facts_by_id, "salvage", residual=residual)
 
 
 # ---------------------------------------------------------------- bags
@@ -657,16 +932,6 @@ def unidentified_candidates() -> list[int]:
         item_id
         for item_id in live_bag_items()
         if not GLOBAL_CACHE.Item.Usage.IsIdentified(item_id) and rarity_name(item_id) in IDENTIFY_RARITIES
-    ]
-
-
-def salvage_candidates() -> list[int]:
-    return [
-        item_id
-        for item_id in live_bag_items()
-        if GLOBAL_CACHE.Item.Usage.IsSalvageable(item_id)
-        and GLOBAL_CACHE.Item.Usage.IsIdentified(item_id)
-        and rarity_name(item_id) in SALVAGE_RARITIES
     ]
 
 
@@ -818,8 +1083,11 @@ def storage_deposit_target(model_id: int, quantity: int, stackable: bool, dye: i
     return first_empty
 
 
-def wait_for_deposit(item_id: int, quantity_before: int):
-    """One live walk answers both outcomes: the stack left the bags, or its quantity dropped."""
+def wait_for_item_to_leave(item_id: int, quantity_before: int):
+    """One live walk answers both outcomes: the stack left the bags, or its quantity dropped.
+
+    The same question for a deposit and for a sale -- both end with the item no longer in the bags.
+    """
     waited = 0
     while waited < DEPOSIT_CONFIRM_TIMEOUT_MS:
         yield from Routines.Yield.wait(POLL_MS)
@@ -852,7 +1120,7 @@ def deposit_item(item_id: int):
             return DEPOSIT_FULL
         bag_id, slot, amount = target
         Inventory.MoveItem(item_id, bag_id, slot, amount)
-        moved = yield from wait_for_deposit(item_id, quantity)
+        moved = yield from wait_for_item_to_leave(item_id, quantity)
         if not moved:
             still = live_bag_items().get(item_id)
             ConsoleLog(
@@ -866,6 +1134,124 @@ def deposit_item(item_id: int):
     return DEPOSIT_UNCONFIRMED
 
 
+# ---------------------------------------------------------------- merchant
+
+
+def agent_name(agent_id: int) -> str:
+    """An agent's lowercase name, or "" when the client cannot supply one yet.
+
+    Empty is the NORMAL case, not an error. Agent.GetNameByID decodes through
+    `Core.native_src.internals.string_table`, whose table is loaded lazily from gw.dat -- the same
+    ~100K-entry load the item naming path stopped waiting on. Until it is populated every NPC is
+    nameless, so nothing here may treat a name as required.
+    """
+    try:
+        return Agent.GetNameByID(agent_id).strip().lower()
+    except Exception:
+        return ""
+
+
+def merchant_candidates() -> list[int]:
+    """NPCs worth trying, best first.
+
+    Distance does the real work; a name only refines the order when one happens to be available. The
+    NPC array is the framework's own pre-filtered one, so players, pets and gadgets never appear.
+    """
+    px, py = Player.GetXY()
+    ranked: list[tuple[int, float, int]] = []
+    for agent_id in AgentArray.GetNPCMinipetArray():
+        try:
+            x, y = Agent.GetXY(agent_id)
+        except Exception:
+            continue
+        distance = Utils.Distance((px, py), (x, y))
+        if distance > MERCHANT_SEARCH_RANGE:
+            continue
+        name = agent_name(agent_id)
+        rank = 0 if name == MERCHANT_NAME else 1 if MERCHANT_NAME in name else 2
+        ranked.append((rank, distance, agent_id))
+    ranked.sort()
+    return [agent_id for _rank, _distance, agent_id in ranked]
+
+
+def merchant_stocks_kits(offered) -> bool:
+    """Whether the open window is a general merchant rather than a trader.
+
+    Asked of the window rather than of the NPC, because what the window sells is the only thing that
+    actually decides whether the trip was worth taking.
+    """
+    for item_id in offered:
+        try:
+            if int(GLOBAL_CACHE.Item.GetModelID(item_id)) in KIT_MODELS:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def wait_for_merchant_window():
+    """The merchant's stock, or [] when it never arrived."""
+    waited = 0
+    while waited < MERCHANT_WINDOW_TIMEOUT_MS:
+        yield from Routines.Yield.wait(POLL_MS)
+        waited += POLL_MS
+        try:
+            offered = list(GLOBAL_CACHE.Trading.Merchant.GetOfferedItems())
+        except Exception:
+            offered = []
+        if offered:
+            return offered
+    return []
+
+
+def open_merchant():
+    """Get a merchant window open. Its stock on success, [] otherwise.
+
+    Identity is decided by what the window turns out to sell, never by the NPC we walked to -- names
+    are usually unavailable (see agent_name) so a candidate is a guess until its stock proves it.
+    A guess that turns out to be a trader costs a walk and is retried, not treated as failure.
+
+    Expiry IS load-bearing here, unlike the item confirms: with no stock list there is nothing to sell
+    into, so giving up is the correct reading of a timeout rather than a guess about one.
+    """
+    already_open = list(GLOBAL_CACHE.Trading.Merchant.GetOfferedItems())
+    if already_open and merchant_stocks_kits(already_open):
+        return already_open
+
+    candidates = merchant_candidates()
+    if not candidates:
+        ConsoleLog(MODULE_NAME, "No NPC within range to try.", Console.MessageType.Warning)
+        return []
+
+    tried = 0
+    for agent_id in candidates[:MERCHANT_TRY_LIMIT]:
+        tried += 1
+        x, y = Agent.GetXY(agent_id)
+        yield from Routines.Yield.Movement.FollowPath([(x, y)], timeout=MERCHANT_WALK_TIMEOUT_MS)
+        # Interact does not set the target on its own, so the target has to be changed first or the
+        # framework's interact resolves against whatever was selected before.
+        yield from Routines.Yield.Agents.ChangeTarget(agent_id)
+        yield from Routines.Yield.Agents.InteractAgent(agent_id)
+
+        offered = yield from wait_for_merchant_window()
+        if offered and merchant_stocks_kits(offered):
+            return offered
+
+    ConsoleLog(
+        MODULE_NAME,
+        f"Tried {tried} of {len(candidates)} nearby NPC(s); none opened a merchant window that " "stocks kits.",
+        Console.MessageType.Warning,
+    )
+    return []
+
+
+def sell_item(item_id: int, quantity: int):
+    """True when the item was observed leaving the bags."""
+    value = int(GLOBAL_CACHE.Item.Properties.GetValue(item_id) or 0)
+    GLOBAL_CACHE.Trading.Merchant.SellItem(item_id, value * max(1, quantity))
+    return (yield from wait_for_item_to_leave(item_id, quantity))
+
+
 # ---------------------------------------------------------------- widget
 
 
@@ -876,6 +1262,11 @@ class InventoryLite:
         self.active_label = ""
         self.active_since = 0.0
         self.auto_identify = True
+        self.id_kit_target = 1
+        self.salvage_kit_target = 1
+        self.salvage_residual = False
+        self.rules_tab = ACTIONS[0]
+        self.config_was_open = False
         self.show_config = False
         self.bar_size: tuple[float, float] = (0.0, 0.0)
         self.last_identify_check = 0.0
@@ -897,7 +1288,13 @@ class InventoryLite:
         ConsoleLog(MODULE_NAME, message, Console.MessageType.Error)
 
     def settings_handler(self):
-        handler = Settings(MODULE_NAME, scope="account")
+        """Global, matching the rules document.
+
+        Every setting here changes what a rule DOES -- whether the residual salvages, how many kits a
+        merchant run buys back. Splitting those per account would mean the same shared rule produced
+        different outcomes on different characters, which is the one thing shared rules exist to stop.
+        """
+        handler = Settings(MODULE_NAME, scope="global")
         return handler if handler.is_ready() else None
 
     def load_settings(self):
@@ -905,13 +1302,26 @@ class InventoryLite:
         if handler is None:
             return False
         self.auto_identify = handler.get_bool(SETTINGS_SECTION, "AutoIdentify", True)
+        self.id_kit_target = max(0, handler.get_int(SETTINGS_SECTION, "IDKitTarget", 1))
+        self.salvage_kit_target = max(0, handler.get_int(SETTINGS_SECTION, "SalvageKitTarget", 1))
+        # Off by default and staying that way: salvaging is the one action that destroys the item, so
+        # the residual has to be something you turned on rather than something you inherited.
+        self.salvage_residual = handler.get_bool(SETTINGS_SECTION, "SalvageResidual", False)
         self.rules = load_rules()
-        if seed_unnamed_rule(self.rules):
+        seeded = [
+            name
+            for name, added in (
+                (UNNAMED_RULE_NAME, seed_unnamed_rule(self.rules)),
+                (SALVAGE_RULE_NAME, seed_salvage_rule(self.rules)),
+            )
+            if added
+        ]
+        if seeded:
             save_rules(self.rules)
             ConsoleLog(
                 MODULE_NAME,
-                f"Added the '{UNNAMED_RULE_NAME}' rule. Nothing moves until you press Deposit; "
-                "Preview matches shows what it would take.",
+                "Added the %s rule(s). Nothing moves until you press a button; each tab has its own "
+                "preview." % ", ".join("'%s'" % n for n in seeded),
                 Console.MessageType.Info,
             )
         return True
@@ -921,6 +1331,9 @@ class InventoryLite:
         if handler is None:
             return
         handler.set_bool(SETTINGS_SECTION, "AutoIdentify", self.auto_identify)
+        handler.set_int(SETTINGS_SECTION, "IDKitTarget", self.id_kit_target)
+        handler.set_int(SETTINGS_SECTION, "SalvageKitTarget", self.salvage_kit_target)
+        handler.set_bool(SETTINGS_SECTION, "SalvageResidual", self.salvage_residual)
 
     def run(self, routine, label: str):
         if self.busy:
@@ -985,43 +1398,71 @@ class InventoryLite:
         self.run(Routines.Yield.Items.IdentifyItemsAndVerify(candidates), "Identify")
 
     def start_salvage(self):
-        candidates = salvage_candidates()
-        if not candidates:
-            ConsoleLog(MODULE_NAME, "Nothing to salvage.", Console.MessageType.Info)
+        self.run(self.salvage(), "Salvage")
+
+    def salvage(self):
+        """Salvage what the salvage rules claim. Irreversible, so the report is written first."""
+        facts_by_id = yield from self.gather()
+        matched, rows = salvage_matches(self.rules, facts_by_id, residual=self.salvage_residual)
+        self.report_title = "%d of %d item(s) matched a salvage rule" % (len(matched), len(facts_by_id))
+        self.report_columns = PREVIEW_COLUMNS
+        self.report_rows = rows
+
+        if not matched:
+            ConsoleLog(MODULE_NAME, "Nothing matches the salvage rules.", Console.MessageType.Info)
             return
         if GLOBAL_CACHE.Inventory.GetFirstSalvageKit() == 0:
             ConsoleLog(MODULE_NAME, "Out of salvage kits.", Console.MessageType.Warning)
             return
-        self.run(Routines.Yield.Items.SalvageItemsAndVerify(candidates), "Salvage")
+        yield from Routines.Yield.Items.SalvageItemsAndVerify(matched)
+
+    def gather(self):
+        """Bag facts, with the shared rules re-read first.
+
+        Every action goes through here, so no run can act on a rule set another account has already
+        replaced -- including a run a peer asked for over ShMem, where the rules almost certainly
+        changed on the sender rather than here.
+        """
+        self.rules = reload_rules(self.rules)
+        return (yield from gather_facts())
 
     def start_scan(self):
         self.run(self.scan(), "Scan")
 
     def scan(self):
         """Read every bag item's facts and show them -- exactly what the rules will see."""
-        facts_by_id = yield from gather_facts()
+        facts_by_id = yield from self.gather()
         self.report_title = "%d item(s) read" % len(facts_by_id)
         self.report_columns = SCAN_COLUMNS
         self.report_rows = [facts_row(f) for f in facts_by_id.values()]
 
-    def start_preview(self):
-        self.run(self.preview(), "Preview")
+    def start_preview(self, action: str):
+        self.run(self.preview(action), "Preview %s" % ACTION_TABS[action])
 
-    def preview(self):
-        facts_by_id = yield from gather_facts()
-        matched, rows = deposit_matches(self.rules, facts_by_id)
-        self.report_title = "%d of %d item(s) would be deposited" % (len(matched), len(facts_by_id))
+    def preview(self, action: str):
+        facts_by_id = yield from self.gather()
+        matched, rows = match_rules(
+            self.rules,
+            facts_by_id,
+            action,
+            residual=action == "salvage" and self.salvage_residual,
+        )
+        self.report_title = "%d of %d item(s) would be %sed" % (
+            len(matched),
+            len(facts_by_id),
+            ACTION_VERBS[action].lower(),
+        )
         self.report_columns = PREVIEW_COLUMNS
         self.report_rows = rows
 
     def start_deposit(self):
-        if not [r for r in self.rules if r.enabled and not r.keep]:
-            ConsoleLog(MODULE_NAME, "No deposit rule is enabled.", Console.MessageType.Info)
+        if not [r for r in self.rules if r.enabled and r.action == "keep"]:
+            ConsoleLog(MODULE_NAME, "No Keep rule is enabled.", Console.MessageType.Info)
             return
         self.run(self.deposit(), "Deposit")
 
     def deposit(self):
-        facts_by_id = yield from gather_facts()
+        facts_by_id = yield from self.gather()
         matched, rows = deposit_matches(self.rules, facts_by_id)
         self.report_title = "%d of %d item(s) matched" % (len(matched), len(facts_by_id))
         self.report_columns = PREVIEW_COLUMNS
@@ -1052,28 +1493,105 @@ class InventoryLite:
             Console.MessageType.Success if deposited == len(matched) else Console.MessageType.Warning,
         )
 
-    def deposit_and_organize(self):
-        """Deposit what the rules claim, then tidy both ends -- storage first, then the freed bags."""
+    def start_merchant(self):
+        self.run(self.merchant_run(), "Merchant")
+
+    def merchant_run(self):
+        """Walk to the nearest merchant, sell what the sell rules claim, then top the kits back up.
+
+        The facts are gathered BEFORE the walk so the report exists even when the trip fails, and so a
+        rule that cannot be satisfied never sends you across an outpost for nothing.
+        """
+        facts_by_id = yield from self.gather()
+        matched, rows = sell_matches(self.rules, facts_by_id)
+        self.report_title = "%d of %d item(s) matched a sell rule" % (len(matched), len(facts_by_id))
+        self.report_columns = PREVIEW_COLUMNS
+        self.report_rows = rows
+
+        restocking = self.id_kit_target > 0 or self.salvage_kit_target > 0
+        if not matched and not restocking:
+            ConsoleLog(
+                MODULE_NAME,
+                "Nothing matches the sell rules and both kit targets are 0 - staying put.",
+                Console.MessageType.Info,
+            )
+            return
+
+        offered = yield from open_merchant()
+        if not offered:
+            return
+
+        sold = 0
+        unconfirmed = 0
+        for item_id in matched:
+            live = live_bag_items()
+            if item_id not in live:
+                continue
+            quantity = live[item_id][1]
+            if (yield from sell_item(item_id, quantity)):
+                sold += 1
+            else:
+                unconfirmed += 1
+                ConsoleLog(
+                    MODULE_NAME,
+                    f"Could not observe item {item_id} leaving the bags within {DEPOSIT_CONFIRM_TIMEOUT_MS} ms "
+                    f"after selling it - moving on.",
+                    Console.MessageType.Warning,
+                )
+            yield from Routines.Yield.wait(MOVE_DELAY_MS)
+
+        if matched:
+            tail = f" ({unconfirmed} unconfirmed)" if unconfirmed else ""
+            ConsoleLog(
+                MODULE_NAME,
+                f"Sold {sold} of {len(matched)} item(s){tail}.",
+                Console.MessageType.Success if sold == len(matched) else Console.MessageType.Warning,
+            )
+
+        if restocking:
+            yield from Routines.Yield.Merchant.RestockKitsToTarget(self.id_kit_target, self.salvage_kit_target)
+            ConsoleLog(
+                MODULE_NAME,
+                f"Kits topped up to {self.id_kit_target} ID / {self.salvage_kit_target} salvage.",
+                Console.MessageType.Info,
+            )
+
+    def full_pass(self):
+        """Deposit, sell, then tidy both ends. Identical work whether asked for here or by a peer.
+
+        Deposit runs first so the Keep rules have claimed everything they want before anything is
+        offered to a merchant, and organising runs last so it sorts what is actually left.
+        """
         yield from self.deposit()
+        yield from self.merchant_run()
         yield from self.organize_storage()
         yield from organize(inventory_bags)
 
-    def remote_deposit_and_organize(self, index: int, account_email: str):
+    def start_full_pass(self):
+        """The multi-account button: ask the peers, then do the same work here.
+
+        The messages go out BEFORE the local run so every account works at once. Running locally
+        first would leave the peers idle for the length of a merchant trip.
+        """
+        send_full_pass()
+        self.run(self.full_pass(), "Full pass")
+
+    def remote_full_pass(self, index: int, account_email: str):
         """Run the chain for a peer's request, then release the message however it ends."""
         try:
             if not Routines.Checks.Map.IsOutpost():
                 ConsoleLog(
                     MODULE_NAME,
-                    "Ignoring a deposit request: storage is only reachable from an outpost.",
+                    "Ignoring the request: storage and merchants are only reachable from an outpost.",
                     Console.MessageType.Warning,
                 )
                 return
-            yield from self.deposit_and_organize()
+            yield from self.full_pass()
         finally:
             GLOBAL_CACHE.ShMem.MarkMessageAsFinished(account_email, index)
 
-    def poll_deposit_requests(self):
-        """Claim a peer's deposit request. One at a time: a second would fight the first for storage."""
+    def poll_full_pass_requests(self):
+        """Claim a peer's request. One at a time: a second would fight the first for storage."""
         if self.busy:
             return
         account_email = Player.GetAccountEmail()
@@ -1090,8 +1608,8 @@ class InventoryLite:
         # Claim it before running: GetNextMessage skips Running messages, so this is what stops both
         # the Messaging panel and the next frame of this poll from picking it up again.
         GLOBAL_CACHE.ShMem.MarkMessageAsRunning(account_email, index)
-        ConsoleLog(MODULE_NAME, f"Deposit and organize requested by {message.SenderEmail}.", Console.MessageType.Info)
-        self.run(self.remote_deposit_and_organize(index, account_email), "Remote deposit")
+        ConsoleLog(MODULE_NAME, f"Full pass requested by {message.SenderEmail}.", Console.MessageType.Info)
+        self.run(self.remote_full_pass(index, account_email), "Remote full pass")
 
     def start_organize(self):
         self.run(organize(inventory_bags), "Organize")
@@ -1117,14 +1635,14 @@ class InventoryLite:
         if right <= left:
             return
 
-        # An auto-sized window only knows its extent after it has drawn, so centring uses last frame's
-        # measurement. Frame one lands flush left and every frame after is centred.
-        width, height = self.bar_size
-        x = left + ((right - left) - width) / 2.0
-        y = top - height - BAR_GAP
-        if y < 0.0:
-            y = bottom + BAR_GAP
-        PyImGui.set_next_window_pos(x, y)
+        # An auto-sized window only knows its extent after it has drawn, so the left edge is placed
+        # from last frame's measurement. Frame one lands flush against the bags and every frame after
+        # sits beside them.
+        width, _height = self.bar_size
+        x = left - width - BAR_GAP
+        if x < 0.0:
+            x = right + BAR_GAP
+        PyImGui.set_next_window_pos(x, top)
         flags = (
             PyImGui.WindowFlags.AlwaysAutoResize
             | PyImGui.WindowFlags.NoTitleBar
@@ -1143,52 +1661,61 @@ class InventoryLite:
         finally:
             PyImGui.end()
 
+    def bar_actions(self):
+        """(icon, palette, tooltip, callable) for every button that can do something right now.
+
+        Outpost-only buttons are absent outside one rather than greyed: the chest is unreachable, so
+        the column shrinks to the two things that still work anywhere plus the gear.
+        """
+        anywhere = (
+            (ICON_SALVAGE, BUTTON_SALVAGE, "Salvage everything the Salvage rules claim", self.start_salvage),
+            (ICON_ORGANIZE_BAGS, BUTTON_ORGANIZE, "Sort and condense the carry bags", self.start_organize),
+        )
+        if not Routines.Checks.Map.IsOutpost():
+            return anywhere
+
+        return (
+            anywhere[0],
+            (ICON_DEPOSIT, BUTTON_DEPOSIT, "Deposit everything the Keep rules claim", self.start_deposit),
+            (
+                ICON_MERCHANT,
+                BUTTON_MERCHANT,
+                "Walk to the nearest merchant, sell what the Sell rules claim, restock kits",
+                self.start_merchant,
+            ),
+            (ICON_XUNLAI, BUTTON_XUNLAI, "Open storage", Inventory.OpenXunlaiWindow),
+            anywhere[1],
+            (ICON_ORGANIZE_STORAGE, BUTTON_ORGANIZE, "Sort and condense storage", self.start_organize_storage),
+            (
+                ICON_BROADCAST,
+                BUTTON_BROADCAST,
+                "EVERY account, this one included: deposit, sell at the merchant, organize both ends",
+                self.start_full_pass,
+            ),
+        )
+
     def draw_bar_body(self):
+        """A vertical column. Nothing calls same_line, so every button lands on its own row."""
         if self.busy:
-            PyImGui.text_disabled(f"{self.active_label.lower()}...")
-            PyImGui.same_line(0, 6)
-            if bar_button("Cancel", BUTTON_CANCEL, "Stop the running routine"):
+            if bar_button(ICON_CANCEL, BUTTON_CANCEL, f"Stop {self.active_label.lower()}"):
                 self.cancel()
             return
 
-        # The chest is an outpost fixture, so every button that reaches for it greys out elsewhere --
-        # the broadcast included, since the peers it asks are in the map you are standing in.
-        outpost_only = "" if Routines.Checks.Map.IsOutpost() else OUTPOST_ONLY_REASON
-
-        actions = (
-            ("Salvage", BUTTON_SALVAGE, f"Salvage {', '.join(SALVAGE_RARITIES)} items", self.start_salvage, ""),
-            ("Deposit", BUTTON_DEPOSIT, "Deposit everything the rules claim", self.start_deposit, outpost_only),
-            ("Xunlai", BUTTON_XUNLAI, "Open storage", Inventory.OpenXunlaiWindow, outpost_only),
-            ("Organize bags", BUTTON_ORGANIZE, "Sort and condense the carry bags", self.start_organize, ""),
-            (
-                "Organize storage",
-                BUTTON_ORGANIZE,
-                "Sort and condense storage",
-                self.start_organize_storage,
-                outpost_only,
-            ),
-        )
-        for label, palette, tip, action, blocked in actions:
-            if bar_button(label, palette, tip, disabled_reason=blocked):
+        for icon, palette, tooltip, action in self.bar_actions():
+            if bar_button(icon, palette, tooltip):
                 action()
-            PyImGui.same_line(0, BAR_SPACING)
 
-        if bar_button(
-            IconsFontAwesome5.ICON_USERS,
-            BUTTON_BROADCAST,
-            "Deposit and organize on every OTHER account (they run their own rules)",
-            icon=True,
-            disabled_reason=outpost_only,
-        ):
-            send_deposit_and_organize()
-        PyImGui.same_line(0, BAR_SPACING)
-
-        if bar_button(IconsFontAwesome5.ICON_COG, BUTTON_CONFIG, "Rules, report and settings", icon=True):
+        if bar_button(ICON_CONFIG, BUTTON_CONFIG, "Rules, report and settings"):
             self.show_config = not self.show_config
 
     def draw_config(self):
         if not self.show_config:
+            self.config_was_open = False
             return
+        # On opening, not every frame: a per-frame disk read to catch an edit nobody is making.
+        if not self.config_was_open:
+            self.config_was_open = True
+            self.rules = reload_rules(self.rules)
         visible, still_open = PyImGui.begin(
             f"{MODULE_NAME} Config", self.show_config, PyImGui.WindowFlags.AlwaysAutoResize
         )
@@ -1207,14 +1734,24 @@ class InventoryLite:
         if auto_identify != self.auto_identify:
             self.auto_identify = auto_identify
             self.save_settings()
-        PyImGui.text_disabled(f"Salvage button: {', '.join(SALVAGE_RARITIES)} only.")
+        PyImGui.text_disabled("Every button runs its own tab's rules. Keep wins over Sell, Sell over Salvage.")
+
+        PyImGui.push_item_width(110)
+        id_target = PyImGui.slider_int("ID kits to keep##idkit", int(self.id_kit_target), 0, 5)
+        salvage_target = PyImGui.slider_int("Salvage kits to keep##salvkit", int(self.salvage_kit_target), 0, 5)
+        PyImGui.pop_item_width()
+        if (id_target, salvage_target) != (self.id_kit_target, self.salvage_kit_target):
+            self.id_kit_target, self.salvage_kit_target = id_target, salvage_target
+            self.save_settings()
+        PyImGui.text_disabled("The Merchant button buys only the shortfall. 0 disables restocking.")
+
         PyImGui.separator()
         self.draw_rules()
         PyImGui.separator()
         self.draw_report()
 
     def draw_rules(self):
-        PyImGui.text("Deposit rules")
+        PyImGui.text("Rules")
         if mod_database() is None:
             PyImGui.text_colored("Mod database failed to load - prefix/suffix criteria cannot match.", WARN)
         else:
@@ -1225,24 +1762,58 @@ class InventoryLite:
             )
         if self.busy:
             PyImGui.text_colored(f"{self.active_label.lower()} running", GRAY)
-        else:
-            if PyImGui.small_button("Scan items"):
-                self.start_scan()
+        elif PyImGui.small_button("Scan items"):
+            self.start_scan()
+        PyImGui.separator()
+
+        # begin_tab_bar sits outside the guard for the same reason begin() does: end_tab_bar must run
+        # once per successful begin and never for one that failed.
+        if not PyImGui.begin_tab_bar("##%sRuleTabs" % MODULE_NAME):
+            return
+        try:
+            for action in ACTIONS:
+                if not PyImGui.begin_tab_item(ACTION_TABS[action]):
+                    continue
+                try:
+                    self.rules_tab = action
+                    self.draw_rules_tab(action)
+                finally:
+                    PyImGui.end_tab_item()
+        finally:
+            PyImGui.end_tab_bar()
+
+    def draw_rules_tab(self, action: str):
+        PyImGui.text_colored(ACTION_BLURBS[action], WARN if action == "salvage" else GRAY)
+
+        if action == "salvage":
+            residual = PyImGui.checkbox("Salvage anything no rule claimed##residual", self.salvage_residual)
+            if residual != self.salvage_residual:
+                self.salvage_residual = residual
+                self.save_settings()
+            if self.salvage_residual:
+                PyImGui.text_colored(
+                    "ON: every identified, salvageable item not claimed by a Keep, Sell or Salvage "
+                    "rule WILL be salvaged. Preview before pressing Salvage.",
+                    WARN,
+                )
+
+        if not self.busy:
+            if PyImGui.small_button("Preview##prev_%s" % action):
+                self.start_preview(action)
             PyImGui.same_line(0, 6)
-            if PyImGui.small_button("Preview matches"):
-                self.start_preview()
-            PyImGui.same_line(0, 6)
-            if PyImGui.small_button("New rule"):
-                self.rules.append(Rule(name="Rule %d" % (len(self.rules) + 1)))
+            if PyImGui.small_button("New rule##new_%s" % action):
+                self.rules.append(Rule(name="Rule %d" % (len(self.rules) + 1), action=action))
                 save_rules(self.rules)
         PyImGui.separator()
 
-        if not self.rules:
-            PyImGui.text_colored("No rules yet.", GRAY)
-            return
-
+        # Enumerated over the whole list so the index stays the real position: draw_rule pops by it.
+        shown = 0
         for index, rule in enumerate(list(self.rules)):
-            self.draw_rule(index, rule)
+            if rule.action == action:
+                self.draw_rule(index, rule)
+                shown += 1
+        if not shown:
+            PyImGui.text_colored("No %s rules yet." % ACTION_TABS[action].lower(), GRAY)
 
     def draw_rule(self, index: int, rule: Rule):
         tag = str(index)
@@ -1251,12 +1822,7 @@ class InventoryLite:
             rule.enabled = enabled
             save_rules(self.rules)
         PyImGui.same_line(0, 6)
-        header = "%s%s  (%d criteria)###hdr_%s" % (
-            "KEEP " if rule.keep else "",
-            rule.name,
-            rule.criteria_count(),
-            tag,
-        )
+        header = "%s  (%d criteria)###hdr_%s" % (rule.name, rule.criteria_count(), tag)
         if not PyImGui.collapsing_header(header):
             return
 
@@ -1265,15 +1831,17 @@ class InventoryLite:
             rule.name = typed.strip()
             save_rules(self.rules)
 
-        keep = PyImGui.checkbox("Keep (never deposit)##keep_%s" % tag, rule.keep)
-        if keep != rule.keep:
-            rule.keep = keep
-            save_rules(self.rules)
-        PyImGui.same_line(0, 10)
         match_all = PyImGui.checkbox("Match ALL##all_%s" % tag, rule.match_all)
         if match_all != rule.match_all:
             rule.match_all = match_all
             save_rules(self.rules)
+        for other in ACTIONS:
+            if other == rule.action:
+                continue
+            PyImGui.same_line(0, 6)
+            if PyImGui.small_button("move to %s##mv_%s_%s" % (ACTION_TABS[other], tag, other)):
+                rule.action = other
+                save_rules(self.rules)
         if not rule.match_all:
             PyImGui.text_colored("ANY: one criterion passing is the whole verdict.", WARN)
 
@@ -1330,6 +1898,33 @@ class InventoryLite:
                 save_rules(self.rules)
             PyImGui.same_line(0, 6)
         PyImGui.new_line()
+
+        PyImGui.text_colored("Kind", GRAY)
+        for position, name in enumerate(ITEM_GROUPS):
+            on = name in rule.item_groups
+            if PyImGui.checkbox("%s##grp_%s_%s" % (name, tag, name), on) != on:
+                rule.item_groups = tuple(g for g in rule.item_groups if g != name) if on else rule.item_groups + (name,)
+                save_rules(self.rules)
+            # No same_line at a row boundary or on the last one: the next widget then starts its own
+            # line by itself, so nothing here has to close the row.
+            if (position + 1) % GROUPS_PER_ROW and position + 1 < len(ITEM_GROUPS):
+                PyImGui.same_line(0, 6)
+
+        if PyImGui.collapsing_header("Specific types##types_%s" % tag):
+            PyImGui.text_colored("Widens Kind rather than narrowing it: groups and types are ORed.", GRAY)
+            for position, name in enumerate(ITEM_TYPES):
+                on = name in rule.item_types
+                if PyImGui.checkbox("%s##typ_%s_%s" % (name, tag, name), on) != on:
+                    rule.item_types = (
+                        tuple(t for t in rule.item_types if t != name) if on else rule.item_types + (name,)
+                    )
+                    save_rules(self.rules)
+                if (position + 1) % TYPES_PER_ROW and position + 1 < len(ITEM_TYPES):
+                    PyImGui.same_line(0, 6)
+
+        picked = rule.item_groups + rule.item_types
+        if picked:
+            PyImGui.text_colored("    kind is any of: %s" % display_safe(", ".join(picked)), GRAY)
 
         has_req = rule.max_requirement is not None
         want_req = PyImGui.checkbox("Requirement at most##rq_%s" % tag, has_req)
@@ -1414,8 +2009,11 @@ def reap_stale_deposit_requests():
         )
 
 
-def send_deposit_and_organize():
-    """Ask every OTHER account to deposit and tidy.
+def send_full_pass():
+    """Ask every OTHER account to run the full pass. This account is not messaged.
+
+    A client cannot claim its own ShMem message -- the sender is skipped here and start_full_pass
+    runs the same chain locally instead, so "every account" really does mean every account.
 
     Fire and forget: each client runs the chain against its own bags, so nothing here waits on them.
     Peers not in an outpost decline the request rather than queueing it.
@@ -1436,13 +2034,13 @@ def send_deposit_and_organize():
         if GLOBAL_CACHE.ShMem.SendMessage(sender, email, SharedCommandType.DepositAndOrganize) >= 0:
             sent += 1
         else:
-            ConsoleLog(MODULE_NAME, f"Could not queue a deposit request for {email}.", Console.MessageType.Warning)
+            ConsoleLog(MODULE_NAME, f"Could not queue a request for {email}.", Console.MessageType.Warning)
     ConsoleLog(
         MODULE_NAME,
         (
-            f"Asked {sent} other account(s) to deposit and organize."
+            f"Asked {sent} other account(s) to deposit, sell and organize; running here too."
             if sent
-            else "No other accounts are available to ask."
+            else "No other accounts to ask; running here only."
         ),
         Console.MessageType.Success if sent else Console.MessageType.Info,
     )
@@ -1459,7 +2057,7 @@ def main():
         widget.initialized = True
 
     widget.pump()
-    widget.poll_deposit_requests()
+    widget.poll_full_pass_requests()
     widget.tick_auto_identify()
     widget.draw_buttons()
     widget.draw_config()
