@@ -36,7 +36,6 @@ from Core.Py4GWcorelib import ConsoleLog
 from Core.Py4GWcorelib import Utils
 from Core.py4gwcorelib_src.Settings import Settings
 from Core.Routines import Routines
-from Core.UIManager import UIManager
 from Sources.marks_sources.item_naming import NAME_CACHE
 from Sources.marks_sources.item_naming import fetch_base_name
 from Sources.marks_sources.item_naming import known_base_name
@@ -1636,10 +1635,7 @@ class InventoryLite:
         frame = Frame(FrameId.InventoryBagsWindow)
         if not frame.exists:
             return
-        frame_id = frame.frame_id
-        if not frame_id:
-            return
-        left, top, right, bottom = UIManager.GetFrameCoords(frame_id)
+        left, top, right, bottom = frame.coords()
         if right <= left:
             return
 
