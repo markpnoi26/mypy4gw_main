@@ -17,6 +17,7 @@ they name *this* tree.
 - `repo-navigation` — LINE_INDEX symbol lookup, tree ownership, docs hierarchy, entry points
 - `pr-workflow` — origin/upstream fork split, branch scratchpads, files never to commit
 - `python-naming-conventions` — snake_case vs the framework APIs we don't own
+- `test-harness` — qa/ native stubs, the three-part gate, known reds, proving a test can fail
 
 **Subsystems**
 
