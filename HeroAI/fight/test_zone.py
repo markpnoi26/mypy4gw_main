@@ -135,6 +135,30 @@ def test_frontline_floor_lands_on_the_mid_rank():
     assert abs((front.centre - front.fwd) + inp.midline_depth) < 0.5
 
 
+def test_tuning_the_reach_does_not_move_the_floor():
+    """The reason the frontline ring is authored as two edges.
+
+    As centre plus radius the edges cannot move independently, so turning the
+    reach down to close on a camped mob lifted the floor with it — the floor sat
+    at 436 - tip, so any tip under 436 put it in FRONT of the party's own front
+    rank. A pack that had slipped just behind the front line then read as outside
+    the ring, so the party advanced into it. Measured at the authored 300 tip
+    against a mob 900u out: it never settles, oscillating between 147u and 397u
+    past the pack.
+    """
+    saved = CFG.frontline_ring_tip
+    try:
+        floors = []
+        for tip in (150.0, 300.0, 600.0, 900.0):
+            CFG.frontline_ring_tip = tip
+            ring = zone.frontline_ring(CFG)
+            assert abs(ring.tip() - tip) < 0.5, tip
+            floors.append(round(ring.centre - ring.fwd, 3))
+        assert len(set(floors)) == 1, "floor moved with the reach: %s" % floors
+    finally:
+        CFG.frontline_ring_tip = saved
+
+
 def test_escalation_is_ordered_on_the_default_formation():
     inp = inputs([])
     assert zone.midline_ring(CFG, inp).tip() > zone.backline_ring(CFG, inp).tip()

@@ -75,15 +75,19 @@ OVERLAY_FULL = 0
 OVERLAY_CIRCLES = 1
 OVERLAY_MINIMAL = 2
 OVERLAY_DETAIL_NAMES = ("Full", "Armed circles", "Minimal")
+# Drives the frontline ring's TIP: how far ahead the party will still walk to
+# find a fight. A new key because the meaning changed — the old one stored the
+# ring's forward semi-axis measured from a fixed centre of 218, so reading a
+# saved value straight into the tip would quietly shorten everyone's reach by
+# that 218. LEGACY_RING_CENTRE converts instead, and is frozen at the historical
+# value on purpose: it must not follow the config.
 ENGAGE_DEPTH_KEY = "engage_depth_u"
-# Drives the frontline ring's forward semi-axis: how far ahead the formation
-# looks before deciding there is nothing to fight. Key and range are unchanged
-# from the flat engage line this replaced, whose default sat at 708 — close
-# enough to the ring's 730 that an existing saved value carries over meaning
-# rather than needing a migration. Ceiling keeps the ring inside the scan
-# radius (218 + 900 < 1248).
-ENGAGE_DEPTH_MIN = 250.0
-ENGAGE_DEPTH_MAX = 900.0
+ENGAGE_REACH_KEY = "engage_reach_u"
+LEGACY_RING_CENTRE = 218.0
+# Floor is below the authored 300 so the reach can be tuned down as well as up.
+# Ceiling keeps the ring inside the scan radius.
+ENGAGE_REACH_MIN = 150.0
+ENGAGE_REACH_MAX = 900.0
 RUNTIME_RELOAD_MS = 1000
 
 # --- Fight Lines tuning sliders ---------------------------------------------
@@ -111,6 +115,15 @@ AUTHORED_ZONE_CFG = ZoneConfig()
 
 def clamp(value, low, high):
     return min(high, max(low, value))
+
+
+def read_engage_reach(cfg: Settings) -> float:
+    """Frontline reach, converting a value saved under the old key."""
+    reach = float(cfg.get_float(RUNTIME_SECTION, ENGAGE_REACH_KEY, 0.0))
+    if reach <= 0.0:
+        legacy = float(cfg.get_float(RUNTIME_SECTION, ENGAGE_DEPTH_KEY, 0.0))
+        reach = (LEGACY_RING_CENTRE + legacy) if legacy > 0.0 else AUTHORED_ZONE_CFG.frontline_ring_tip
+    return clamp(reach, ENGAGE_REACH_MIN, ENGAGE_REACH_MAX)
 
 
 def read_overlay_detail(cfg: Settings) -> int:
@@ -143,6 +156,10 @@ def apply_tuning(cfg: Settings) -> None:
     """
     standoff = float(cfg.get_float(RUNTIME_SECTION, STANDOFF_KEY, AUTHORED_ZONE_CFG.engagement_standoff))
     ZONE_CFG.engagement_standoff = clamp(standoff, STANDOFF_MIN, STANDOFF_MAX)
+
+    # Applied onto the shared config so the whole controller — triggers,
+    # snapshot, drawn ring — reads the tuned value with no plumbing.
+    ZONE_CFG.frontline_ring_tip = read_engage_reach(cfg)
 
     advance = int(cfg.get_int(RUNTIME_SECTION, ADVANCE_HOLD_KEY, AUTHORED_ZONE_CFG.advance_hold_ms))
     ZONE_CFG.advance_hold_ms = int(clamp(advance, ADVANCE_HOLD_MIN, ADVANCE_HOLD_MAX))
@@ -265,10 +282,6 @@ class FightZonePublisher:
             self.runtime.enabled = bool(cfg.get_bool(RUNTIME_SECTION, ENABLED_KEY, False))
             self.runtime.show_overlay = bool(cfg.get_bool(RUNTIME_SECTION, OVERLAY_KEY, False))
             self.runtime.overlay_detail = read_overlay_detail(cfg)
-            # Applied onto the shared config so the whole controller — triggers,
-            # snapshot, drawn bar — reads the tuned value with no plumbing.
-            depth = float(cfg.get_float(RUNTIME_SECTION, ENGAGE_DEPTH_KEY, float(ZONE_CFG.frontline_ring_fwd)))
-            ZONE_CFG.frontline_ring_fwd = min(ENGAGE_DEPTH_MAX, max(ENGAGE_DEPTH_MIN, depth))
             apply_tuning(cfg)
             hero_globals.show_fight_zone_overlay = self.runtime.show_overlay
             hero_globals.fight_zone_overlay_detail = self.runtime.overlay_detail

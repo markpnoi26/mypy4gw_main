@@ -1867,15 +1867,23 @@ class HeroAI_BaseUI:
                     )
                 )
             )
-        engage_default = 730.0
-        engage_setting = float(cfg.get_float("FightRuntime", "engage_depth_u", engage_default))
-        new_engage = PyImGui.slider_float("Engage reach##fight_engage_depth", engage_setting, 250.0, 900.0)
+        from HeroAI.fight import publisher as fight_runtime
+
+        engage_setting = fight_runtime.read_engage_reach(cfg)
+        new_engage = PyImGui.slider_float(
+            "Engage reach##fight_engage_reach",
+            engage_setting,
+            fight_runtime.ENGAGE_REACH_MIN,
+            fight_runtime.ENGAGE_REACH_MAX,
+            "%.0fu",
+        )
         if abs(new_engage - engage_setting) > 0.5:
-            cfg.set_float("FightRuntime", "engage_depth_u", float(new_engage))
+            cfg.set_float("FightRuntime", fight_runtime.ENGAGE_REACH_KEY, float(new_engage))
             cfg.save()
         PyImGui.text_disabled(
-            f"How far the frontline ring looks for a fight. Close only when NOTHING is inside it —"
-            f" reaching {218.0 + new_engage:.0f}u ahead and {218.0 - new_engage:.0f}u behind the pin."
+            f"How far ahead of the front rank the party will still walk to reach a fight."
+            f" Lower closes harder on a camped mob; the rear edge stays on the mid rank at"
+            f" {fight_runtime.AUTHORED_ZONE_CFG.frontline_ring_floor:.0f}u either way."
         )
         PyImGui.text_disabled("Overlay works with the zone disabled — watch where lines form before switching it on.")
         if PyImGui.collapsing_header("Tuning"):

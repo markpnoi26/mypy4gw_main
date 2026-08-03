@@ -213,24 +213,36 @@ class ZoneConfig:
     # Frontline: where the party can still find a fight. Static rather than
     # derived, because it describes REACH, not formation shape.
     #
-    # `fwd` is set so the floor lands on the mid rank (218 - 538 = -320): behind
-    # that is the midline ring's business, and anything level with or behind the
-    # casters should not be deciding whether the party advances. The ceiling
-    # follows at +756. Deliberately flat rather than small — `lat` stays at
-    # Earshot, because narrowing it is what stops a mob wrapping the flank from
-    # registering, and that is the failure worth avoiding. The furthest point
-    # from the pin is 1044u against a 1248 scan, so no part of the ring tests
-    # ground where an enemy could never be detected.
+    # Authored as its two EDGES rather than as centre plus radius, because they
+    # do unrelated jobs and only one of them is tunable. Expressed as centre+fwd
+    # they cannot move independently, and turning the reach down to close on a
+    # camped mob dragged the floor up with it: the floor sat at 436 - tip, so any
+    # tip under 436 put it in FRONT of the party's own front rank. A pack that
+    # had slipped just behind the front line then read as OUTSIDE the ring and
+    # the party advanced into it. Measured at the 300 tip below, against a mob
+    # 900u out: it never settles at all, oscillating between 147u and 397u PAST
+    # the pack as it walks through, trips the midline ring, gives ground, and
+    # does it again.
     #
-    # The cost is early warning: the party now looks 756u ahead rather than 948
-    # before concluding there is nothing to fight, so a pack camped beyond that
-    # reads as empty ground and gets walked at.
+    # The floor sits on the mid rank. Behind that is the midline ring's
+    # business, and nothing level with or behind the casters should be deciding
+    # whether the party advances.
     #
-    # `fwd` is tunable live from the Fight Lines tab; the publisher clamps and
-    # applies engage_depth_u from FightRuntime.ini on its reload timer, and a
+    # The tip is how far ahead the party will still walk to find a fight. 300
+    # rather than the 756 it was: with the pin now planted ON the blob, the
+    # 600u clamp to the party's centre of mass is what stops the pin short of a
+    # camped mob, and a tip beyond that gap made the party call it close enough
+    # and stand there. At 756 a mob 1200u out was left 653u short; at 300 the
+    # worst case across that band is 203u.
+    #
+    # `lat` stays at Earshot — narrowing it is what stops a mob wrapping the
+    # flank from registering, and that is the failure worth avoiding.
+    #
+    # The tip is tunable live from the Fight Lines tab; the publisher clamps and
+    # applies engage_reach_u from FightRuntime.ini on its reload timer, and a
     # saved value there WINS over this default.
-    frontline_ring_centre: float = 218.0
-    frontline_ring_fwd: float = 538.0
+    frontline_ring_floor: float = -320.0
+    frontline_ring_tip: float = 300.0
     frontline_ring_lat: float = float(Range.Earshot.value)
     # A backline breach bypasses the recover dwell — waiting out 18s with a mob
     # standing on the monks is what the ring exists to prevent — but it must not
@@ -789,7 +801,9 @@ def backline_ring(cfg: ZoneConfig, inputs: "ZoneInputs") -> TriggerRing:
 
 
 def frontline_ring(cfg: ZoneConfig) -> TriggerRing:
-    return TriggerRing(cfg.frontline_ring_centre, cfg.frontline_ring_fwd, cfg.frontline_ring_lat)
+    """Built from its two edges, so tuning the reach cannot move the floor."""
+    centre = (cfg.frontline_ring_tip + cfg.frontline_ring_floor) / 2.0
+    return TriggerRing(centre, max(0.0, cfg.frontline_ring_tip - centre), cfg.frontline_ring_lat)
 
 
 def blob_centre(cfg: ZoneConfig, inputs: "ZoneInputs") -> tuple[float, float] | None:
