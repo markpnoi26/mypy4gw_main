@@ -145,14 +145,15 @@ def type_label(item_type: int, fallback: str = "") -> str:
     return TYPE_NAMES.get(item_type) or group_of(item_type) or fallback or str(item_type)
 
 
-def cluster_key(item_type: int, name: str) -> tuple:
+def cluster_key(item_type: int, name: str, rarity: int = -1) -> tuple:
     """Sort key that puts like with like: kits before weapons before armour before bulk.
 
     Ranked by SORT_TYPE_ORDER so the view matches the order Organize lays the bags out in, with
-    anything unlisted after everything else. Leading stack counts are ignored so "10 Iron Ingots"
-    files under I, not 1.
+    anything unlisted after everything else. Rarity bands inside a type -- greens, then golds,
+    purples, blues -- the way InventoryLite's organize does it, because that is how you look for
+    things. Leading stack counts are ignored so "10 Iron Ingots" files under I, not 1.
     """
     import re
 
     rank = TYPE_RANK.get(int(item_type or 0), len(SORT_TYPE_ORDER))
-    return (rank, group_of(item_type), re.sub(r"^\d+\s*", "", name or "").lower())
+    return (rank, group_of(item_type), -int(rarity), re.sub(r"^\d+\s*", "", name or "").lower())

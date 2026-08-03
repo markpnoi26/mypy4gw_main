@@ -19,6 +19,8 @@ from Core import get_texture_for_model
 from Core.enums import Bags
 from Core.enums_src.Item_enums import Rarity
 from Core.Item import Item
+from Sources.marks_sources.item_kinds import cluster_key
+from Sources.marks_sources.item_kinds import type_label
 from Sources.marks_sources.item_naming import NAME_CACHE
 from Sources.marks_sources.item_naming import display_name
 from Sources.marks_sources.item_naming import learn_base_name
@@ -75,6 +77,18 @@ STORAGE_BAGS = {
 # region JSONStore
 
 
+# Not 0 and not ItemType.Unknown: 0 is ItemType.Salvage, so a record written before types were
+# recorded would file itself under Salvage and sort there, which is worse than admitting ignorance.
+UNKNOWN_ITEM_TYPE = -1
+
+
+def to_int(value, default=0):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 class ItemFileIDJSONStore:
     """Shared {encoded singular name: file_id} lookup so any character can render icons straight
     from GW.dat, even for items they've never held themselves.
@@ -96,6 +110,33 @@ class ItemFileIDJSONStore:
         self.file.set(str(key), int(file_id))
 
     def get(self, key, default=0):
+        if not key:
+            return default
+        return self.file.get_int(str(key), default)
+
+
+class ItemTypeJSONStore:
+    """Shared {encoded singular name: ItemType} lookup so the Type column and the clustered sort work
+    on records written by a character who is not logged in.
+
+    Item type is a property of the skin, not of the instance, so one character seeing an item types
+    that item for every account. Without this the whole view reads "Unknown" until each character has
+    been visited in turn, which is exactly the situation a team viewer exists to avoid.
+
+    Global scope; same multibox-safe merge semantics as the shared name cache.
+    """
+
+    FILE = "TeamInventoryViewer/item_types.json"
+
+    def __init__(self):
+        self.file = JsonFactory(self.FILE, "global")
+
+    def save_item_type(self, key, item_type):
+        if not key or item_type is None or item_type < 0:
+            return
+        self.file.set(str(key), int(item_type))
+
+    def get(self, key, default=UNKNOWN_ITEM_TYPE):
         if not key:
             return default
         return self.file.get_int(str(key), default)
@@ -251,10 +292,13 @@ class MultiAccountInventoryStore:
 multi_store = MultiAccountInventoryStore()
 inventory_mod_hash_store = ModHashJSONStore()
 inventory_file_ids_store = ItemFileIDJSONStore()
+inventory_item_types_store = ItemTypeJSONStore()
 
 
 ROW_ICON_SIZE = 36.0
 ROW_HEIGHT = 40.0
+# Sized for "Consumables", the longest label type_label returns.
+TYPE_COLUMN_WIDTH = 95.0
 
 # ImGuiTableBgTarget values (RowBg targets paint the whole row's background slot;
 # TableFlags.RowBg alternates between RowBg0 and RowBg1 for zebra striping, so we
@@ -315,6 +359,27 @@ def _icon_texture_for(info):
     if file_id > 0:
         return f"gwdat://{file_id}"
     return get_texture_for_model(0)
+
+
+def item_type_of(info):
+    """The same ladder as ``_icon_texture_for``: the item's own recorded type first, then the shared
+    encoded-name cache, then unknown."""
+    stored = to_int(info.get("item_type"), UNKNOWN_ITEM_TYPE)
+    if stored >= 0:
+        return stored
+    return inventory_item_types_store.get(info.get("name_key", ""), UNKNOWN_ITEM_TYPE)
+
+
+def clustered_rows(items, item_names):
+    """``(name, info, item_type)`` in organize order: type, then rarity band, then name."""
+    rows = [(name, items[name], item_type_of(items[name])) for name in item_names if name in items]
+    rows.sort(key=lambda row: cluster_key(row[2], row[0], to_int(row[1].get("rarity"), -1)))
+    return rows
+
+
+def draw_type_cell(item_type):
+    _center_cell_y(1)
+    PyImGui.text(type_label(item_type, "Unknown"))
 
 
 # region Generators
@@ -422,12 +487,22 @@ def _collect_bag_items(bag):
         except Exception:
             rarity_val = -1
 
+        # Type drives both the Type column and the clustered sort. A property of the skin, so it also
+        # feeds the shared name-keyed cache for the characters that are not logged in to record it.
+        try:
+            item_type_val = int(GLOBAL_CACHE.Item.GetItemType(item_id)[0])
+        except Exception:
+            item_type_val = UNKNOWN_ITEM_TYPE
+        if item_type_val >= 0:
+            inventory_item_types_store.save_item_type(key, item_type_val)
+
         # Always insert or update using the unique name
         if unique_name not in bag_items:
             bag_items[unique_name] = OrderedDict(
                 {
                     "name_key": key,
                     "model_file_id": model_file_id,
+                    "item_type": item_type_val,
                     "rarity": rarity_val,
                     "slot": OrderedDict(),
                 }
@@ -437,6 +512,8 @@ def _collect_bag_items(bag):
                 bag_items[unique_name]["model_file_id"] = model_file_id
             if rarity_val >= 0 and bag_items[unique_name].get("rarity", -1) < 0:
                 bag_items[unique_name]["rarity"] = rarity_val
+            if item_type_val >= 0 and to_int(bag_items[unique_name].get("item_type"), -1) < 0:
+                bag_items[unique_name]["item_type"] = item_type_val
 
         bag_items[unique_name]["slot"][str(slot)] = quantity
 
@@ -574,6 +651,7 @@ def draw_widget():
                                                         "name_key": info.get("name_key", ""),
                                                         "model_file_id": info.get("model_file_id", 0),
                                                         "rarity": info.get("rarity", -1),
+                                                        "item_type": item_type_of(info),
                                                         "count": count or str(info.get('count', 0)),
                                                         "location_type": "Character",
                                                     }
@@ -597,6 +675,7 @@ def draw_widget():
                                                     "name_key": info.get("name_key", ""),
                                                     "model_file_id": info.get("model_file_id", 0),
                                                     "rarity": info.get("rarity", -1),
+                                                    "item_type": item_type_of(info),
                                                     "count": count or str(info.get('count', 0)),
                                                     "location_type": "Storage",
                                                 }
@@ -604,15 +683,21 @@ def draw_widget():
 
                         # === Display results ===
                         if search_results:
-                            # Sort alphabetically ignoring leading numbers
-                            search_results.sort(key=lambda entry: re.sub(r'^\d+\s*', '', entry["item_name"]).lower())
+                            search_results.sort(
+                                key=lambda entry: cluster_key(
+                                    entry["item_type"], entry["item_name"], to_int(entry.get("rarity"), -1)
+                                )
+                            )
                             if PyImGui.begin_table(
                                 "SearchResultsTable",
-                                5,
+                                6,
                                 PyImGui.TableFlags.Borders | PyImGui.TableFlags.RowBg | PyImGui.TableFlags.ScrollY,
                             ):
                                 PyImGui.table_setup_column("Icon", PyImGui.TableColumnFlags.WidthFixed, 40.0)
                                 PyImGui.table_setup_column("Item Name", PyImGui.TableColumnFlags.WidthStretch, 1.0)
+                                PyImGui.table_setup_column(
+                                    "Type", PyImGui.TableColumnFlags.WidthFixed, TYPE_COLUMN_WIDTH
+                                )
                                 PyImGui.table_setup_column("Count", PyImGui.TableColumnFlags.WidthFixed, 40.0)
                                 PyImGui.table_setup_column("Location", PyImGui.TableColumnFlags.WidthFixed, 150.0)
                                 PyImGui.table_setup_column("Account", PyImGui.TableColumnFlags.WidthFixed, 150.0)
@@ -637,13 +722,14 @@ def draw_widget():
                                     _center_cell_y(1)
                                     PyImGui.text(re.sub(r'^\d+\s*', '', entry["item_name"]))
 
+                                    # === TYPE ===
+                                    PyImGui.table_next_column()
+                                    draw_type_cell(entry["item_type"])
+
                                     # === COUNT ===
                                     PyImGui.table_next_column()
                                     _center_cell_y(1)
-                                    count = 0
-                                    for slot_count in entry.get("slot", {}).values():
-                                        count += slot_count
-                                    PyImGui.text(str(count) if count else str(entry.get('count', 0)))
+                                    PyImGui.text(str(entry.get("count", 0)))
 
                                     # === LOCATION ===
                                     PyImGui.table_next_column()
@@ -705,7 +791,7 @@ def draw_widget():
                                         PyImGui.text(bag_name)
                                         if PyImGui.begin_table(
                                             f"InvTable_{email}_{char_name}_{bag_name}",
-                                            3,
+                                            4,
                                             PyImGui.TableFlags.Borders | PyImGui.TableFlags.RowBg,
                                         ):
                                             PyImGui.table_setup_column(
@@ -715,12 +801,14 @@ def draw_widget():
                                                 "Item Name", PyImGui.TableColumnFlags.WidthStretch, 1.0
                                             )
                                             PyImGui.table_setup_column(
+                                                "Type", PyImGui.TableColumnFlags.WidthFixed, TYPE_COLUMN_WIDTH
+                                            )
+                                            PyImGui.table_setup_column(
                                                 "Count", PyImGui.TableColumnFlags.WidthFixed, 40.0
                                             )
                                             PyImGui.table_headers_row()
 
-                                            for item_name in filtered_items:
-                                                info = items[item_name]
+                                            for item_name, info, item_type in clustered_rows(items, filtered_items):
                                                 texture = _icon_texture_for(info)
 
                                                 PyImGui.table_next_row(0, ROW_HEIGHT)
@@ -738,6 +826,10 @@ def draw_widget():
                                                 PyImGui.table_next_column()
                                                 _center_cell_y(1)
                                                 PyImGui.text(re.sub(r'^\d+\s*', '', item_name))
+
+                                                # === TYPE COLUMN ===
+                                                PyImGui.table_next_column()
+                                                draw_type_cell(item_type)
 
                                                 # === COUNT COLUMN ===
                                                 PyImGui.table_next_column()
@@ -772,18 +864,20 @@ def draw_widget():
                                     PyImGui.text(storage_name)
                                     if PyImGui.begin_table(
                                         f"StorageTable_{email}_{storage_name}",
-                                        3,
+                                        4,
                                         PyImGui.TableFlags.Borders | PyImGui.TableFlags.RowBg,
                                     ):
                                         PyImGui.table_setup_column("Icon", PyImGui.TableColumnFlags.WidthFixed, 40.0)
                                         PyImGui.table_setup_column(
                                             "Item Name", PyImGui.TableColumnFlags.WidthStretch, 1.0
                                         )
+                                        PyImGui.table_setup_column(
+                                            "Type", PyImGui.TableColumnFlags.WidthFixed, TYPE_COLUMN_WIDTH
+                                        )
                                         PyImGui.table_setup_column("Count", PyImGui.TableColumnFlags.WidthFixed, 40.0)
                                         PyImGui.table_headers_row()
 
-                                        for item_name in filtered_items:
-                                            info = items[item_name]
+                                        for item_name, info, item_type in clustered_rows(items, filtered_items):
                                             texture = _icon_texture_for(info)
 
                                             PyImGui.table_next_row(0, ROW_HEIGHT)
@@ -801,6 +895,10 @@ def draw_widget():
                                             PyImGui.table_next_column()
                                             _center_cell_y(1)
                                             PyImGui.text(re.sub(r'^\d+\s*', '', item_name))
+
+                                            # === TYPE COLUMN ===
+                                            PyImGui.table_next_column()
+                                            draw_type_cell(item_type)
 
                                             # === COUNT COLUMN ===
                                             PyImGui.table_next_column()
