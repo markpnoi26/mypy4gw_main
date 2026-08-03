@@ -237,19 +237,23 @@ GRAY = (0.66, 0.67, 0.70, 1.0)
 WARN = (0.79, 0.63, 0.29, 1.0)
 
 BAR_GAP = 2.0
-BAR_ICON_SIZE = 34.0
+BAR_ICON_SIZE = 46.0
 #: One of ImGui.push_font's exact atlas sizes (14/22/30/46/62/124). An in-between number renders
-#: through push_font_scaled, which is both softer and the branch that makes nesting unsafe.
-BAR_GLYPH_SIZE = 22
+#: through push_font_scaled, which is both softer and the branch that makes nesting unsafe. 46 is the
+#: next size up and is far too big for a bar this tall, so BAR_ICON_SIZE carries the growth instead,
+#: keeping the glyph-to-padding proportion the 34/22 pair had.
+BAR_GLYPH_SIZE = 30
+#: Vertical break between button groups, so the chest reads as its own thing rather than as the first
+#: item of the list below it.
+BAR_GROUP_GAP = 12.0
 
 # Icon-only, so each one has to read as its target at a glance rather than as its verb: a hammer
-# breaks things down, a shop sells, an archive box swallows, a crate opens, a grid and a stack tidy.
+# breaks things down, a shop sells, an archive box swallows, a crate opens, a grid tidies.
 ICON_SALVAGE = IconsFontAwesome5.ICON_HAMMER
 ICON_DEPOSIT = IconsFontAwesome5.ICON_ARCHIVE
 ICON_MERCHANT = IconsFontAwesome5.ICON_STORE
 ICON_XUNLAI = IconsFontAwesome5.ICON_BOX_OPEN
-ICON_ORGANIZE_BAGS = IconsFontAwesome5.ICON_TH
-ICON_ORGANIZE_STORAGE = IconsFontAwesome5.ICON_LAYER_GROUP
+ICON_ORGANIZE = IconsFontAwesome5.ICON_TH
 ICON_BROADCAST = IconsFontAwesome5.ICON_USERS
 ICON_CONFIG = IconsFontAwesome5.ICON_COG
 ICON_CANCEL = IconsFontAwesome5.ICON_TIMES
@@ -1571,8 +1575,7 @@ class InventoryLite:
         """
         yield from self.deposit()
         yield from self.merchant_run()
-        yield from self.organize_storage()
-        yield from organize(inventory_bags)
+        yield from self.organize_all()
 
     def start_full_pass(self):
         """The multi-account button: ask the peers, then do the same work here.
@@ -1619,10 +1622,18 @@ class InventoryLite:
         self.run(self.remote_full_pass(index, account_email), "Remote full pass")
 
     def start_organize(self):
-        self.run(organize(inventory_bags), "Organize")
+        self.run(self.organize_all(), "Organize")
 
-    def start_organize_storage(self):
-        self.run(self.organize_storage(), "Organize storage")
+    def organize_all(self):
+        """Both ends where both exist.
+
+        Outside an outpost the chest is simply not there, so the carry bags are the whole job rather
+        than a failed reach for storage. Storage goes first so the chest window opens once, up front,
+        instead of landing on top of a bag sort already in progress.
+        """
+        if Routines.Checks.Map.IsOutpost():
+            yield from self.organize_storage()
+        yield from organize(inventory_bags)
 
     def organize_storage(self):
         if not (yield from ensure_storage_open()):
@@ -1666,35 +1677,46 @@ class InventoryLite:
             PyImGui.end()
 
     def bar_actions(self):
-        """(icon, palette, tooltip, callable) for every button that can do something right now.
+        """Groups of (icon, palette, tooltip, callable), drawn top to bottom with a gap between groups.
 
         Outpost-only buttons are absent outside one rather than greyed: the chest is unreachable, so
         the column shrinks to the two things that still work anywhere plus the gear.
+
+        Opening the chest is its own group because it is the only button that does nothing to your
+        items -- it just puts a window on screen. Everything below it acts, in escalating order.
         """
-        anywhere = (
-            (ICON_SALVAGE, BUTTON_SALVAGE, "Salvage everything the Salvage rules claim", self.start_salvage),
-            (ICON_ORGANIZE_BAGS, BUTTON_ORGANIZE, "Sort and condense the carry bags", self.start_organize),
-        )
+        salvage = (ICON_SALVAGE, BUTTON_SALVAGE, "Salvage everything the Salvage rules claim", self.start_salvage)
         if not Routines.Checks.Map.IsOutpost():
-            return anywhere
+            return (
+                (
+                    (ICON_ORGANIZE, BUTTON_ORGANIZE, "Sort and condense the carry bags", self.start_organize),
+                    salvage,
+                ),
+            )
 
         return (
-            anywhere[0],
-            (ICON_DEPOSIT, BUTTON_DEPOSIT, "Deposit everything the Keep rules claim", self.start_deposit),
+            ((ICON_XUNLAI, BUTTON_XUNLAI, "Open storage", Inventory.OpenXunlaiWindow),),
             (
-                ICON_MERCHANT,
-                BUTTON_MERCHANT,
-                "Walk to the nearest merchant, sell what the Sell rules claim, restock kits",
-                self.start_merchant,
-            ),
-            (ICON_XUNLAI, BUTTON_XUNLAI, "Open storage", Inventory.OpenXunlaiWindow),
-            anywhere[1],
-            (ICON_ORGANIZE_STORAGE, BUTTON_ORGANIZE, "Sort and condense storage", self.start_organize_storage),
-            (
-                ICON_BROADCAST,
-                BUTTON_BROADCAST,
-                "EVERY account, this one included: deposit, sell at the merchant, organize both ends",
-                self.start_full_pass,
+                (
+                    ICON_ORGANIZE,
+                    BUTTON_ORGANIZE,
+                    "Sort and condense storage and the carry bags",
+                    self.start_organize,
+                ),
+                (ICON_DEPOSIT, BUTTON_DEPOSIT, "Deposit everything the Keep rules claim", self.start_deposit),
+                (
+                    ICON_MERCHANT,
+                    BUTTON_MERCHANT,
+                    "Walk to the nearest merchant, sell what the Sell rules claim, restock kits",
+                    self.start_merchant,
+                ),
+                salvage,
+                (
+                    ICON_BROADCAST,
+                    BUTTON_BROADCAST,
+                    "EVERY account, this one included: deposit, sell at the merchant, organize both ends",
+                    self.start_full_pass,
+                ),
             ),
         )
 
@@ -1705,9 +1727,12 @@ class InventoryLite:
                 self.cancel()
             return
 
-        for icon, palette, tooltip, action in self.bar_actions():
-            if bar_button(icon, palette, tooltip):
-                action()
+        for index, group in enumerate(self.bar_actions()):
+            if index:
+                PyImGui.dummy((1.0, BAR_GROUP_GAP))
+            for icon, palette, tooltip, action in group:
+                if bar_button(icon, palette, tooltip):
+                    action()
 
         if bar_button(ICON_CONFIG, BUTTON_CONFIG, "Rules, report and settings"):
             self.show_config = not self.show_config
