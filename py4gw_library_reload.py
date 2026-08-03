@@ -126,15 +126,24 @@ def drain_game_thread() -> None:
         pass
 
 
-def detach_shared_memory():
-    """Take a reference to the multibox mapping so it can be closed after the purge.
+# Mappings that refused to close on a previous reload. Held deliberately: a strong reference
+# keeps SharedMemory.__del__ from firing at some random later frame and printing a BufferError
+# traceback nobody can act on. Retried on each reload, so this drains rather than grows.
+SHARED_MEMORY_GRAVEYARD: list = []
 
-    Deliberately leaves ``manager.shm`` in place. GetAllAccounts re-attaches whenever it finds
-    the slot empty (SharedMemory.py:104), so clearing it here just spawns a second mapping that
-    nothing ever closes.
+
+def detach_shared_memory() -> list:
+    """Collect every live shared-memory mapping so they can be closed after the purge.
+
+    Swept generically rather than by name: there are at least three independent mappings
+    (multibox in Core/GlobalCache/SharedMemory.py, system in native_src/ShMem/SysShaMem.py,
+    team viewer in HeroAI/team_viewer_broadcast.py), and hardcoding them means every new one
+    silently leaks. Leaves each owner's ``shm`` attribute alone -- the multibox manager
+    re-attaches whenever it finds that slot empty (SharedMemory.py:104), which would just spawn
+    a replacement mapping nothing ever closes.
     """
     try:
-        from Core.GlobalCache.GlobalCache import GLOBAL_CACHE
+        from Core.GlobalCache import GLOBAL_CACHE
 
         try:
             GLOBAL_CACHE.Coroutines.clear()
@@ -146,35 +155,46 @@ def detach_shared_memory():
             FRAME_CACHE.clear()
         except Exception:
             pass
+    except Exception as exc:
+        log("could not clear caches before reload: %s" % exc, error=True)
 
-        manager = getattr(GLOBAL_CACHE, "ShMem", None)
-        return getattr(manager, "shm", None) if manager is not None else None
-    except Exception:
-        return None
+    try:
+        import gc
+        from multiprocessing import shared_memory
+
+        return [obj for obj in gc.get_objects() if isinstance(obj, shared_memory.SharedMemory)]
+    except Exception as exc:
+        log("could not enumerate shared memory (mappings will leak): %s" % exc, error=True)
+        return []
 
 
-def close_shared_memory(holder) -> None:
-    """Close the old mapping. Must run AFTER the purge.
+def close_shared_memory(holders: list) -> None:
+    """Close the old mappings. Must run AFTER the purge.
 
-    GetAllAccounts hands out ``AllAccounts.from_buffer(shm.buf)``, a ctypes view holding a
-    buffer export on the mmap, and those views outlive the call: HeroAI's PartyCache keeps a
-    dict of AccountStruct harvested from them. They only become unreachable once the purge
-    drops the modules holding them, so closing any earlier hits
-    ``BufferError: cannot close exported pointers exist``, which Python swallows inside
-    __del__ -- leaking one OS handle per reload.
+    Readers hand out ctypes views over the mapping (``AllAccounts.from_buffer(shm.buf)``,
+    ``HeroAITeamViewerStruct.from_buffer``), and those views outlive the call -- HeroAI's
+    PartyCache keeps a dict of AccountStruct harvested from them. They only become unreachable
+    once the purge drops the modules holding them, so closing any earlier raises
+    ``BufferError: cannot close exported pointers exist``.
 
-    The region is owned and kept alive by the C++ side, so closing this process's view is safe;
-    the rebuilt manager re-attaches to the same region.
+    Anything that still will not close is parked in the graveyard and retried next reload, by
+    which point its holders are a full generation gone. The regions themselves are owned by the
+    C++ side, so closing this process's view is safe; the rebuilt readers re-attach.
     """
-    if holder is None:
-        return
-
     import gc
 
+    SHARED_MEMORY_GRAVEYARD.extend(h for h in holders if h is not None)
     gc.collect()
-    try:
-        holder.close()
-    except BufferError as exc:
-        log("shared memory still had live views at reload: %s" % exc, error=True)
-    except Exception:
-        pass
+
+    pinned = []
+    for holder in SHARED_MEMORY_GRAVEYARD:
+        try:
+            holder.close()
+        except BufferError:
+            pinned.append(holder)
+        except Exception:
+            pass
+
+    SHARED_MEMORY_GRAVEYARD[:] = pinned
+    if pinned:
+        log("%d shared memory mapping(s) still pinned; retrying next reload" % len(pinned))
