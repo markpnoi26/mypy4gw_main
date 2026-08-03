@@ -37,11 +37,19 @@ def inputs(enemies, **kw):
 
 
 def zone_at(anchor=(0.0, 0.0), facing=0.0):
+    """A zone already at rest on `anchor`, i.e. with no ground given or taken.
+
+    The contact point is derived from the configured standoff rather than
+    written down, so positioned_anchor reproduces `anchor` exactly. Hardcoding
+    it silently offsets every ring by the difference the moment the standoff
+    moves, and the ring tests then measure something nobody authored.
+    """
     z = zone.FightZone()
     z.state = zone.ZoneState.HOLDING
     z.anchor_x, z.anchor_y = anchor
     z.facing = facing
-    z.engagement_x, z.engagement_y = anchor[0] + 400.0, anchor[1]
+    z.engagement_x = anchor[0] + (CFG.engagement_standoff * math.cos(facing))
+    z.engagement_y = anchor[1] + (CFG.engagement_standoff * math.sin(facing))
     return z
 
 
@@ -50,6 +58,63 @@ def local_to_world(fwd, lat, anchor=(0.0, 0.0), facing=0.0):
         anchor[0] + (fwd * math.cos(facing)) - (lat * math.sin(facing)),
         anchor[1] + (fwd * math.sin(facing)) + (lat * math.cos(facing)),
     )
+
+
+def test_pin_lands_on_the_blob_centre():
+    """The front rank closes over the pack rather than standing off from it.
+
+    The middle front pin is authored at local (0, 0), so the pin IS the centre
+    of the front line area — asserting the pin lands on the blob centroid is
+    asserting the blob ends up in the middle of that area.
+    """
+    z = zone.FightZone()
+    pack = [(500.0, -80.0), (500.0, 80.0), (620.0, 0.0)]
+    expected = zone.centroid(pack)
+    pin = zone.anchor_and_facing(z, CFG, inputs(pack, party_xy=(0.0, 0.0)))
+    assert math.hypot(pin[0] - expected[0], pin[1] - expected[1]) < 0.5
+
+
+def test_pin_is_clamped_to_the_party_when_the_blob_is_far():
+    z = zone.FightZone()
+    pin = zone.anchor_and_facing(z, CFG, inputs([(2000.0, 0.0)], party_xy=(0.0, 0.0)))
+    assert abs(pin[0] - CFG.max_anchor_offset_from_party) < 0.5
+
+
+def test_reaim_does_not_rebase_over_a_withdrawal():
+    """A blob inside the midline ring belongs to the ground controller.
+
+    Rebasing there plants the front rank on the mob AND clears retreat_steps, so
+    the withdrawal that was answering the push is thrown away every time the
+    re-aim test fires.
+    """
+    z = zone_at()
+    z.last_facing_target = (400.0, 0.0)
+    z.retreat_steps = [(-250.0, 0.0)]
+    inside = local_to_world(-200.0, 0.0)
+    assert zone.overrun(z, CFG, inputs([inside])) is True
+
+    pin = zone.anchor_and_facing(z, CFG, inputs([inside]))
+    assert pin == (z.anchor_x, z.anchor_y)
+    assert z.retreat_steps == [(-250.0, 0.0)]
+
+
+def test_melee_contact_still_refreshes_the_formation():
+    """The guard above must not swallow the ordinary case.
+
+    A blob resting in the front line sits ~340u from the party centre, and the
+    live centroid bunches forward of that as the melee close. The guard this
+    replaced was a flat distance from the party centre pitched at 322 — i.e. at
+    the resting distance of a fight going perfectly well — so a party bunched
+    even slightly forward froze its own pin for the rest of the fight.
+    """
+    z = zone_at()
+    z.last_facing_target = (-400.0, 0.0)
+    party = local_to_world(-250.0, 0.0)
+    blob = local_to_world(40.0, 60.0)
+    assert math.hypot(blob[0] - party[0], blob[1] - party[1]) < 322.0
+
+    pin = zone.anchor_and_facing(z, CFG, inputs([blob], party_xy=party))
+    assert math.hypot(pin[0] - blob[0], pin[1] - blob[1]) < 0.5
 
 
 def test_midline_tip_sits_at_overrun_depth():

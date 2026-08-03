@@ -37,11 +37,13 @@ class ZoneConfig:
     # mass is what the formation is built around, and it moves with the fight.
     max_anchor_offset_from_party: float = 600.0
     # How far BACK along the approach the pin sits from the engagement point.
-    # Anchoring on the enemy centroid itself plants the front line inside the
-    # mob and drags every line forward with it, so the backline ends up doing
-    # its work at midline range. Standing off keeps the whole formation behind
-    # the contact point, where it was authored to be.
-    engagement_standoff: float = 400.0
+    # Zero: the front rank IS the contact point, so the blob's centre of mass
+    # lands in the middle of the front line area rather than a standoff ahead of
+    # it. The old 400 kept the whole formation behind the mob — the front rank
+    # never reached what it was there to hit, and the backline did its work from
+    # ~1020u away, at the very edge of Spellcast. At zero the casters sit 620u
+    # off the blob and the melee are on it.
+    engagement_standoff: float = 0.0
     # Enemies within this of each other are one blob. A mob group is what you
     # fight; the centroid of two separate groups points at empty ground between
     # them.
@@ -60,12 +62,15 @@ class ZoneConfig:
     # backline — a full 620u out along -facing — is thrown bodily through
     # whatever is standing there.
     #
-    # Sized against the default formation: the party centroid sits ~310u behind
-    # the front line, so enemies in honest melee contact are right at this
-    # distance. Holding the last good axis through contact is correct anyway —
-    # the fight is where it already is, and re-deriving a heading from a
-    # centroid standing on top of you is how the spin starts.
-    min_facing_baseline: float = float(Range.Area.value)
+    # Sized against the default formation, whose party centroid sits ~340u
+    # behind the front line. It used to sit at Area, which put honest melee
+    # contact right ON the threshold — fine while the pin stood off 400u and
+    # contact was a transient, and wrong now that contact is the resting state:
+    # a guard parked at the resting distance holds facing permanently and the
+    # formation can no longer turn to face a mob working round the flank.
+    # Pulled in to catch only what it was ever really for, a blob standing on
+    # the party's own centre of mass, where the bearing is undefined.
+    min_facing_baseline: float = float(Range.Nearby.value)
     # Enemies further than this from the leader are not part of this engagement.
     engagement_scan_radius: float = float(Range.Spellcast.value)
     # ENGAGING gives up and holds anyway; a blocked member must not wedge the party.
@@ -89,15 +94,14 @@ class ZoneConfig:
     # elsewhere and drives a full re-aim, interrupting casts.
     #
     # The standing candidate fix — measure from the party centroid instead — is
-    # REJECTED. Measuring from the front is what gives the formation its fallback
-    # under a rush: enemies that close onto the party stay outside this radius,
-    # so they still count as approaching, the engagement point follows them onto
-    # the party, and engagement_standoff then plants the pin behind it. The party
-    # gives ground and the backline gets its range back. Measuring from the party
-    # centroid filters exactly those enemies out and the fallback collapses (413u
-    # of ground given vs 173u, ending in front of the party rather than behind
-    # it). Bounded by construction at max_anchor_offset_from_party +
-    # engagement_standoff from the leader, so it cannot rout.
+    # still REJECTED, though its old reason went with the standoff. A 400u
+    # standoff used to plant the pin behind a rushing mob and give ground for
+    # free; at zero a re-aim would plant the front rank on top of it, so that
+    # fallback is now explicit instead — the overrun guard in anchor_and_facing
+    # refuses the rebase and adjust_ground does the withdrawing. What stands on
+    # its own is that the party centroid sits a rank and a half behind the
+    # contact point, so measuring from there reads arrived enemies as still
+    # approaching and hands the formation straight back to the mob that closed.
     contact_radius: float = float(Range.Area.value)
 
     # Small blobs are unstable by construction: removing one of N shifts the
@@ -164,14 +168,16 @@ class ZoneConfig:
     # slowest dwell of all, at exactly the moment there was nothing left to be
     # careful about. A jittery centroid is also self-correcting forwards in a way
     # it is not backwards — an early step is walked off by the next one, where an
-    # early retreat compounds. 250u every 4s is ~22% of run speed: a deliberate
-    # creep onto a camped mob, not a charge.
-    advance_hold_ms: int = 4000
+    # early retreat compounds. That asymmetry is what pays for the cadence:
+    # 250u every 1.5s is ~58% of run speed, brisk enough to actually arrive at a
+    # camped mob, and a step taken on a bad centroid reading is undone by the
+    # next one 1.5s later rather than sitting there for four seconds.
+    advance_hold_ms: int = 1500
     # Hard ceiling on ground given, in route metres. The route's own length is
-    # the usual limit; this is the backstop. Sized against abandon_distance:
-    # the pin sits at most max_anchor_offset_from_party + engagement_standoff
-    # from the leader before any retreat, so 1400 keeps the worst case inside
-    # 2500 and the zone cannot tear itself down by retreating.
+    # the usual limit; this is the backstop. Sized against abandon_distance: the
+    # pin sits at most max_anchor_offset_from_party from the party before any
+    # retreat, so 1400 keeps the worst case inside 2500 and the zone cannot tear
+    # itself down by retreating.
     max_given_ground: float = 1400.0
     # Never withdraw onto the far end of the route, where the next step would
     # have nowhere to go and a re-plot could leave the pin off the path.
@@ -246,7 +252,8 @@ class FightZone:
     entered_state_ms: int = 0
     last_facing_target: tuple[float, float] | None = None
     last_facing_ms: int = 0
-    # Point of contact. The pin sits engagement_standoff behind this.
+    # Point of contact — the blob's centre of mass, clamped toward the party.
+    # The pin sits engagement_standoff behind it, which is to say on it.
     engagement_x: float = 0.0
     engagement_y: float = 0.0
     # When the re-aim deviation first went over threshold. 0 = not pending.
@@ -435,43 +442,37 @@ def compute_axis(
     return blob_axis
 
 
-def anchor_and_facing(
-    zone: FightZone,
-    cfg: ZoneConfig,
-    leader_xy: tuple[float, float],
-    party_xy: tuple[float, float],
-    approach_xy: tuple[float, float] | None,
-    enemy_positions: list[tuple[float, float]],
-    now_ms: int,
-    retreat_axis: float | None = None,
-) -> tuple[float, float]:
+def anchor_and_facing(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> tuple[float, float]:
     """Blob -> axis -> pin, computed only when the flag is (re)placed.
 
-    The axis is taken from the party toward the nearest enemy blob, so that blob
-    is in front of the pin by construction and front/mid/back project back from
-    it. The approach path then nudges that axis inside a cone — it decides which
-    way the backline leans, not where the front is. Outside the cone the two
-    disagree too much to reconcile (ganked from behind is the obvious case) and
-    the enemies win outright: facing the wrong way is worse than an odd retreat
-    direction.
+    The pin lands ON the blob's centre of mass, so the front rank closes over it
+    and the mid and back ranks project back from there. The axis is taken from
+    the party toward that blob, and the approach path then nudges it inside a
+    cone — it decides which way the backline leans, not where the front is.
+    Outside the cone the two disagree too much to reconcile (ganked from behind
+    is the obvious case) and the enemies win outright: facing the wrong way is
+    worse than an odd retreat direction.
     """
+    now_ms = inputs.now_ms
+    leader_xy = inputs.leader_xy
+    party_xy = inputs.party_xy
+    approach_xy = inputs.approach_xy
+    enemy_positions = inputs.enemy_positions
     # Fresh placements (zone entry, abandon-redrop) clear this first, so it
     # cleanly distinguishes an in-fight re-aim, where the current pin position
     # is meaningful, from a drop where it is stale.
     reaiming = zone.last_facing_target is not None
     blob_centre = centroid(resolve_engagement_blob(cfg, party_xy, enemy_positions))
 
-    # A blob sitting inside the formation gives no usable heading, and
-    # compute_axis holds the last one. Relocating the pin onto it ANYWAY, and
-    # then standing off 400u along that held heading, marches the formation away
-    # from the mob by the standoff on every re-aim — the pin runs backwards
-    # until the enemies are outside the zone and nothing can engage. When there
-    # is no direction to be had, the honest move is not to move.
-    if (
-        blob_centre is not None
-        and zone.last_facing_target is not None
-        and math.hypot(blob_centre[0] - party_xy[0], blob_centre[1] - party_xy[1]) < cfg.min_facing_baseline
-    ):
+    # Ground the controller is actively giving back is not ground to rebase
+    # onto. A re-aim CLEARS retreat_steps, so relocating the pin onto a blob
+    # that has already pushed inside the midline ring plants the front rank on
+    # top of the mob and throws away the withdrawal that was answering it, every
+    # time the test fires. Retreat owns this case; the honest move is not to
+    # move. Tested on the ring rather than on the blob's distance from the party
+    # centre, which under a zero standoff is the resting distance of a fight
+    # going perfectly well.
+    if reaiming and overrun(zone, cfg, inputs):
         zone.reaim_pending_since_ms = 0
         zone.last_facing_ms = now_ms
         return (zone.anchor_x, zone.anchor_y)
@@ -483,7 +484,7 @@ def anchor_and_facing(
     )
 
     if blob_centre is not None:
-        zone.facing = compute_axis(zone, cfg, party_xy, approach_xy, blob_centre, engagement, retreat_axis)
+        zone.facing = compute_axis(zone, cfg, party_xy, approach_xy, blob_centre, engagement, inputs.retreat_axis)
         zone.last_facing_target = blob_centre
         zone.last_facing_ms = now_ms
     else:
@@ -509,11 +510,11 @@ def anchor_and_facing(
     zone.giving_ground = False
     zone.closing = False
     pin = apply_standoff(engagement, zone.facing, cfg.engagement_standoff)
-    # ...and never BACKWARDS. Standing off from a blob that has ARRIVED at the
-    # front line puts the pin behind where the front line already stands, and
-    # the mob follows every step: chase moves the blob centre past the rehome
-    # threshold, that drift fires the next re-aim, and the standoff gives
-    # another 400u — a treadmill that only stops when the mob leashes, parked
+    # ...and never BACKWARDS. A blob that has pushed past the front line without
+    # yet tripping the midline ring would otherwise walk the pin back onto
+    # itself, and the mob follows every step: the chase moves the blob centre
+    # past the rehome threshold, that drift fires the next re-aim, and the pin
+    # gives way again — a treadmill that only stops when the mob leashes, parked
     # at the zone's edge with nothing engaging. Retreat is the ground
     # controller's call alone (midline breach, or hurt and in contact), so the
     # backwards component of a re-aim is banked as held ground instead of
@@ -998,16 +999,7 @@ def tick_zone(zone: FightZone, cfg: ZoneConfig, inputs: ZoneInputs) -> FightZone
             zone.hold_until_ms = 0
             zone.giving_ground = False
             zone.closing = False
-            zone.anchor_x, zone.anchor_y = anchor_and_facing(
-                zone,
-                cfg,
-                inputs.leader_xy,
-                inputs.party_xy,
-                inputs.approach_xy,
-                inputs.enemy_positions,
-                now,
-                inputs.retreat_axis,
-            )
+            zone.anchor_x, zone.anchor_y = anchor_and_facing(zone, cfg, inputs)
             enter_state(zone, ZoneState.ENGAGING, now)
         return zone
 
@@ -1023,16 +1015,7 @@ def tick_zone(zone: FightZone, cfg: ZoneConfig, inputs: ZoneInputs) -> FightZone
         if inputs.party_in_aggro and inputs.leader_local_aggro:
             zone.last_facing_target = None
             zone.last_blob_size = 0
-            zone.anchor_x, zone.anchor_y = anchor_and_facing(
-                zone,
-                cfg,
-                inputs.leader_xy,
-                inputs.party_xy,
-                inputs.approach_xy,
-                inputs.enemy_positions,
-                now,
-                inputs.retreat_axis,
-            )
+            zone.anchor_x, zone.anchor_y = anchor_and_facing(zone, cfg, inputs)
             enter_state(zone, ZoneState.ENGAGING, now)
             return zone
         enter_state(zone, ZoneState.TRAVELING, now)
@@ -1040,16 +1023,7 @@ def tick_zone(zone: FightZone, cfg: ZoneConfig, inputs: ZoneInputs) -> FightZone
 
     if zone.state == ZoneState.ENGAGING:
         if should_reaim(zone, cfg, inputs):
-            zone.anchor_x, zone.anchor_y = anchor_and_facing(
-                zone,
-                cfg,
-                inputs.leader_xy,
-                inputs.party_xy,
-                inputs.approach_xy,
-                inputs.enemy_positions,
-                now,
-                inputs.retreat_axis,
-            )
+            zone.anchor_x, zone.anchor_y = anchor_and_facing(zone, cfg, inputs)
         adjust_ground(zone, cfg, inputs)
         if not inputs.party_in_aggro:
             enter_state(zone, ZoneState.CLEARING, now)
@@ -1060,16 +1034,7 @@ def tick_zone(zone: FightZone, cfg: ZoneConfig, inputs: ZoneInputs) -> FightZone
 
     if zone.state == ZoneState.HOLDING:
         if should_reaim(zone, cfg, inputs):
-            zone.anchor_x, zone.anchor_y = anchor_and_facing(
-                zone,
-                cfg,
-                inputs.leader_xy,
-                inputs.party_xy,
-                inputs.approach_xy,
-                inputs.enemy_positions,
-                now,
-                inputs.retreat_axis,
-            )
+            zone.anchor_x, zone.anchor_y = anchor_and_facing(zone, cfg, inputs)
         adjust_ground(zone, cfg, inputs)
         if not inputs.party_in_aggro:
             enter_state(zone, ZoneState.CLEARING, now)
