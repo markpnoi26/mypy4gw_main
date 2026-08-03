@@ -27,7 +27,7 @@ Generated files say so at the top. **Do not hand-edit them** — change the rule
 that produces them, or the manifest, and regenerate:
 
 ```bash
-python qa/breakage.py --vs-upstream     # BREAKAGE, DEPRECATED, upstream-verdicts
+python test/breakage.py --vs-upstream     # BREAKAGE, DEPRECATED, upstream-verdicts
 python tools/reforge/divergence.py      # DIVERGENCE
 ```
 

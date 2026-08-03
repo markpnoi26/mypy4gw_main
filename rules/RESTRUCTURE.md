@@ -115,8 +115,8 @@ sync is hostage to whether a stranger's 2024 farming script still imports.
 upstream's own copy loads, so "we broke it" never gets quietly filed under
 "community code was already rotten".
 
-*Enforced by.* `PROTECTED` in `qa/breakage.py` derives the ledger;
-`qa/test_imports.py` reads it and skips. To protect a pack, add its prefix to
+*Enforced by.* `PROTECTED` in `test/breakage.py` derives the ledger;
+`test/test_imports.py` reads it and skips. To protect a pack, add its prefix to
 `PROTECTED` — one place, not two.
 
 ## RS-005 — OPEN

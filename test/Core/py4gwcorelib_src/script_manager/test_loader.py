@@ -1,24 +1,21 @@
 """Unit tests for script_manager/loader.py.
 
-Run (-t must be the module's own folder, or discovery walks up into Core/__init__.py):
-    .venv\\Scripts\\python.exe -m unittest discover
-        -s Core/py4gwcorelib_src/script_manager
-        -t Core/py4gwcorelib_src/script_manager
+Loaded by file path rather than package import: loader.py is deliberately
+stdlib-only so it runs outside the game, and a package import would pull in
+Core/__init__.py and its eager Py4GW import.
 """
 
-import importlib.util
 import os
 import shutil
 import sys
 import tempfile
 import unittest
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-spec = importlib.util.spec_from_file_location("loader", os.path.join(HERE, "loader.py"))
-loader_mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(loader_mod)
+import pathload
 
-REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
+loader_mod = pathload.load("Core/py4gwcorelib_src/script_manager/loader.py")
+
+REPO = str(pathload.REPO)
 
 
 class Sandbox(unittest.TestCase):

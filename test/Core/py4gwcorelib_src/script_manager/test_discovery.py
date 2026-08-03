@@ -3,23 +3,16 @@
 Loaded by file path rather than package import: discovery.py is deliberately
 stdlib-only so it runs outside the game, but importing it through Core
 would pull in PySystem, which only exists in-process.
-
-Run (-t must be the module's own folder, or discovery walks up into Core/__init__.py):
-    .venv\\Scripts\\python.exe -m unittest discover
-        -s Core/py4gwcorelib_src/script_manager
-        -t Core/py4gwcorelib_src/script_manager
 """
 
-import importlib.util
 import os
 import tempfile
 import time
 import unittest
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-spec = importlib.util.spec_from_file_location("discovery", os.path.join(HERE, "discovery.py"))
-discovery = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(discovery)
+import pathload
+
+discovery = pathload.load("Core/py4gwcorelib_src/script_manager/discovery.py")
 
 
 def write_script(directory, name, function="tool", claims=(), tags=(), lead=""):
@@ -174,7 +167,7 @@ class RealScriptsTests(unittest.TestCase):
     """Runs against the repo's actual Scripts/ folder when it holds scripts."""
 
     def setUp(self):
-        self.root = os.path.abspath(os.path.join(HERE, "..", "..", "..", "Scripts"))
+        self.root = str(pathload.REPO / "Scripts")
         # Migration moves scripts in one at a time, so an existing-but-empty
         # Scripts/ is a normal state, not a failure.
         if not discovery.ScriptRegistry(self.root).scan_mtimes():

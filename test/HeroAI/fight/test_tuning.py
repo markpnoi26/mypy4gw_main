@@ -3,14 +3,6 @@
 See .claude/skills/test-harness.md.
 """
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "qa"))
-import nativestub
-
-nativestub.install()
-
 from HeroAI.fight import publisher
 from HeroAI.fight import zone
 

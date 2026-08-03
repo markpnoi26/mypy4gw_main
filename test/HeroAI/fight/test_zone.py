@@ -1,17 +1,11 @@
 """Trigger-ring geometry, escalation order, and the ground-control precedence.
 
-Runs without a client: qa/nativestub.py serves stubs/*.pyi as the native modules.
+Runs without a client: test/nativestub.py serves stubs/*.pyi as the native
+modules, installed by test/conftest.py before collection.
 See .claude/skills/test-harness.md.
 """
 
 import math
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "qa"))
-import nativestub
-
-nativestub.install()
 
 from HeroAI.fight import zone
 

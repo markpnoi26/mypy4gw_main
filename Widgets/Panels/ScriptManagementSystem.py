@@ -21,6 +21,17 @@ search = ""
 function_filter = 0
 launched_id = ""
 last_error = ""
+# Discovery is MANUAL. Nothing in the draw path touches the disk — only the
+# Rescan button does. It used to call changed_on_disk() every frame to badge
+# "changed on disk", which walks seven pack roots and stats all 173 scripts:
+# 11ms per frame, two thirds of the frame budget at 60fps, for a badge.
+last_scan = ""
+# The filtered list, rebuilt only when something it depends on moves. The
+# registry's own revision counter is the invalidation key, so a rescan that
+# finds nothing new costs one tuple compare.
+view_key = None
+view_functions = ["(all)"]
+view_scripts = []
 
 
 def log(message, level=None):
@@ -72,29 +83,53 @@ def stop():
         log("stop failed: %s" % exc, PySystem.Console.MessageType.Error)
 
 
-def function_options():
-    return ["(all)"] + registry.functions()
+def scan():
+    """The only thing in this widget that reads the disk, and it is on a button.
+
+    Reports what the scan actually did, because with no automatic probe there is
+    nothing else to tell you whether pressing it was worth it.
+    """
+    global last_scan
+    before = len(registry.scripts)
+    try:
+        changed = registry.refresh()
+    except Exception as exc:
+        last_scan = "scan failed: %s" % exc
+        log(last_scan, PySystem.Console.MessageType.Error)
+        return
+    delta = len(registry.scripts) - before
+    if not changed:
+        last_scan = "no change"
+    elif delta:
+        last_scan = "%+d script(s)" % delta
+    else:
+        last_scan = "metadata updated"
 
 
-def visible_scripts():
-    options = function_options()
-    chosen = options[function_filter] if 0 <= function_filter < len(options) else "(all)"
-    return registry.query(function="" if chosen == "(all)" else chosen, text=search)
+def rebuild_view():
+    global view_key, view_functions, view_scripts
+    key = (registry.revision, search, function_filter)
+    if key == view_key:
+        return
+    view_key = key
+    view_functions = ["(all)"] + registry.functions()
+    chosen = view_functions[function_filter] if 0 <= function_filter < len(view_functions) else "(all)"
+    view_scripts = registry.query(function="" if chosen == "(all)" else chosen, text=search)
 
 
 def draw_toolbar():
     global search, function_filter
 
-    if PyImGui.button("Refresh##sr"):
-        registry.refresh()
+    if PyImGui.button("Rescan##sr"):
+        scan()
     PyImGui.same_line(0.0, 6.0)
-    if registry.changed_on_disk():
-        PyImGui.text_colored("changed on disk", Color(255, 200, 100, 255).to_tuple_normalized())
-    else:
-        PyImGui.text("%d script(s)" % len(registry.scripts))
+    PyImGui.text("%d script(s)" % len(registry.scripts))
+    if last_scan:
+        PyImGui.same_line(0.0, 6.0)
+        PyImGui.text_disabled(last_scan)
 
     search = PyImGui.input_text("Search##sr", search)
-    function_filter = PyImGui.combo("Function##sr", function_filter, function_options())
+    function_filter = PyImGui.combo("Function##sr", function_filter, view_functions)
 
 
 def draw_row(meta):
@@ -131,10 +166,11 @@ def draw_widget():
         stop()
     PyImGui.separator()
 
+    rebuild_view()
     draw_toolbar()
     PyImGui.separator()
 
-    scripts = visible_scripts()
+    scripts = view_scripts
     if not scripts:
         PyImGui.text("<no scripts>")
     if PyImGui.begin_child("sr_list", (420.0, 260.0), 1, 0):
@@ -159,7 +195,7 @@ def tooltip():
     PyImGui.text_wrapped("Browse and launch scripts from Scripts/ by their declared metadata.")
     PyImGui.bullet_text("Filter by function, search by name.")
     PyImGui.bullet_text("Launches through PySystem.script_control (one script at a time).")
-    PyImGui.bullet_text("Refresh re-reads metadata without importing anything.")
+    PyImGui.bullet_text("Discovery is manual: only Rescan reads the disk, and it imports nothing.")
     PyImGui.end_tooltip()
 
 

@@ -171,6 +171,33 @@ def key_by_path() -> dict[str, str]:
 
 
 # --------------------------------------------------------------------------
+def fold_hierarchy(rows) -> tuple:
+    """Fold native ``(frame_id, parent_id, code, hash)`` rows into the lookup maps.
+
+    Split out of ``FrameTree.rebuild`` so the bookkeeping can be exercised without
+    a client: the native call needs a live UI, folding its output does not.
+    """
+    parent: dict[int, int] = {}
+    code: dict[int, int] = {}
+    fhash: dict[int, int] = {}
+    children: dict[int, dict[int, list[int]]] = {}
+    order: list[int] = []
+    by_hash: dict[int, list[int]] = {}
+
+    for fid, pid, cod, h in rows:
+        order.append(fid)
+        parent[fid] = pid
+        code[fid] = cod
+        fhash[fid] = h
+        # a code is normally unique per parent, but siblings can collide -
+        # keep every one so enumeration does not silently lose frames
+        children.setdefault(pid, {}).setdefault(cod, []).append(fid)
+        if h:
+            by_hash.setdefault(h, []).append(fid)
+
+    return parent, code, fhash, children, order, by_hash
+
+
 def _position_unusable(p: Any) -> bool:
     """True for the zeroed position struct the engine leaves on a missed lookup.
 
@@ -321,31 +348,13 @@ class _FrameTree:
 
     # -- structure snapshot -----------------------------------------------
     def rebuild(self) -> None:
-        parent: dict[int, int] = {}
-        code: dict[int, int] = {}
-        fhash: dict[int, int] = {}
-        children: dict[int, dict[int, list[int]]] = {}
-        order: list[int] = []
-        by_hash: dict[int, list[int]] = {}
-
-        for raw in PyUIManager.UIManager.get_frame_array():
-            fid = int(raw)
-            order.append(fid)
-            try:
-                fr = PyUIManager.UIFrame(fid)
-            except Exception:
-                continue
-            pid = int(getattr(fr, "parent_id", 0) or 0)
-            cod = int(getattr(fr, "child_offset_id", 0) or 0)
-            h = int(getattr(fr, "frame_hash", 0) or 0)
-            parent[fid] = pid
-            code[fid] = cod
-            fhash[fid] = h
-            # a code is normally unique per parent, but siblings can collide -
-            # keep every one so enumeration does not silently lose frames
-            children.setdefault(pid, {}).setdefault(cod, []).append(fid)
-            if h:
-                by_hash.setdefault(h, []).append(fid)
+        # One native call for the whole tree.  Reading it a frame at a time
+        # through UIFrame cost ~370 object constructions and ~1100 getattrs per
+        # tick - measured at 4.4ms of a 5.8ms frame, and billed to whichever
+        # widget happened to touch the tree first that tick.  get_frame_hierarchy
+        # returns exactly the four fields this needs, in the row layout
+        # hierarchy() below documents.
+        parent, code, fhash, children, order, by_hash = fold_hierarchy(PyUIManager.UIManager.get_frame_hierarchy())
 
         # The engine returns an EMPTY array whenever its frame array pointer is
         # null - during map load, UI teardown, or before the UI context exists.
