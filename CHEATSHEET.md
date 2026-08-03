@@ -124,7 +124,7 @@ Resolve it normally. Nothing is thrown away while you think about it.
 |---|---|
 | `STATUS.md` | the last sync: what passed, what broke, what conflicted. Scratch, not committed. |
 | `rules/DIVERGENCE.md` | how far we have drifted, one row per sync. Committed — the trend is the point. |
-| `rules/BREAKAGE.md` | which widgets/scripts do not load, and where the thing they wanted went. Regenerate with `python qa/breakage.py`. |
+| `rules/BREAKAGE.md` | which widgets/scripts do not load, and where the thing they wanted went. Regenerate with `python test/breakage.py`. |
 
 ## When a hook blocks you
 

@@ -1,3 +1,0 @@
-import nativestub
-
-nativestub.install()

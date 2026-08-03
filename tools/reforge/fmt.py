@@ -15,8 +15,8 @@ REPO = Path(__file__).resolve().parents[2]
 # BehaviorTree precisely so BehaviorTree can import Console back out of the
 # half-initialised module. Alphabetising that raises ImportError at load. isort
 # has no "preserve order" mode, so it is scoped to trees we own outright.
-# qa/test_imports.py is the gate that caught this and will catch the next one.
-ISORT_ROOTS = ("tools", "qa", "Scripts/py4gw-marks-corner")
+# test/test_imports.py is the gate that caught this and will catch the next one.
+ISORT_ROOTS = ("tools", "test", "Scripts/py4gw-marks-corner")
 
 
 def formatter_python() -> str:

@@ -15,7 +15,7 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[1]
 
-SKIP_PARTS = {"__pycache__", ".venv", ".git", "dev", "tools", "tests", "qa", "stubs"}
+SKIP_PARTS = {"__pycache__", ".venv", ".git", "dev", "tools", "test", "tests", "stubs"}
 
 # Broken in pristine upstream too — verified by importing them in a `vendor`
 # worktree with this same harness. Not ours, and strict=True so they cannot
@@ -70,7 +70,7 @@ BLOCKING = {
 def deprecated() -> dict[str, str]:
     """RS-004: leaves we have decided not to keep. Skipped, not deleted.
 
-    Read rather than hardcoded so the rule lives in one place — qa/breakage.py
+    Read rather than hardcoded so the rule lives in one place — test/breakage.py
     derives the list, this only honours it. Skipped rather than xfailed because
     several of these do real work at import before they fail.
     """
@@ -97,8 +97,7 @@ def loadable_files(package: str) -> list[Path]:
     return [
         p
         for p in sorted(root.rglob("*.py"))
-        if not (SKIP_PARTS & set(p.relative_to(REPO).parts))
-        and p.relative_to(REPO).as_posix() not in BLOCKING
+        if not (SKIP_PARTS & set(p.relative_to(REPO).parts)) and p.relative_to(REPO).as_posix() not in BLOCKING
     ]
 
 

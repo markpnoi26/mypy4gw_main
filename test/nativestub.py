@@ -12,9 +12,9 @@ import enum
 import importlib.abc
 import importlib.util
 import inspect
-import typing
 import re
 import sys
+import typing
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -194,6 +194,7 @@ def make_permissive(module) -> None:
                 permissive_class(value)
         elif inspect.isfunction(value):
             setattr(module, name, returning(return_type(value)))
+
 
 # @overload bodies raise NotImplementedError when actually called, which turns a
 # module-scope `PyAgent.Profession()` into an import failure. Runtime typing

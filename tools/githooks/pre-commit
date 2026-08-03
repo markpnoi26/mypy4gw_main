@@ -46,7 +46,10 @@ if [ -n "$creds" ]; then
 fi
 
 if [ "$branch" = "main" ]; then
-    tooling="$(printf '%s\n' "$staged" | grep -E '^qa/|^tools/|^pyproject\.toml$|^AGENTS\.md$|^README\.md$|^CLAUDE\.md$|^CHEATSHEET\.md$|^\.claude/|^\.vscode/')"
+    # test/ is split, unlike the qa/ it replaces: the harness at the root is
+    # machine and belongs on base, while test/<Tree>/... mirrors the source and
+    # must travel with the code it covers. Match only the root files.
+    tooling="$(printf '%s\n' "$staged" | grep -E '^test/[^/]+$|^tools/|^pyproject\.toml$|^AGENTS\.md$|^README\.md$|^CLAUDE\.md$|^CHEATSHEET\.md$|^\.claude/|^\.vscode/')"
     if [ -n "$tooling" ]; then
         die "toolchain and identity files belong on 'base', not 'main'." \
             "" \

@@ -15,10 +15,10 @@ tier = "dev"
 note = "the transform itself; promoted out of .claude so it ships with the repo"
 
 [[rule]]
-match = "qa/**"
+match = "test/**"
 dest = "keep"
 tier = "dev"
-note = "our gates. Named qa/ because upstream owns tests/, which moves to dev/tests/imgui/."
+note = "our gates, mirroring the source tree (test/HeroAI/fight/test_zone.py). Singular test/, because upstream owns a plural tests/ that moves to dev/tests/imgui/."
 
 [[rule]]
 match = "rules/**"
@@ -73,7 +73,7 @@ kind = "import_rename"
 old = "Sources"
 new = "dev.reference"
 scope = "**/*.py"
-exclude = ["tools/", "qa/"]
+exclude = ["tools/", "test/"]
 keep = ["Sources.marks_sources", "Sources.ApoSource.InvPlus"]
 note = "RS-002. Completes the Sources demotion: the files moved to dev/reference/ but 21 leaf importers still said `Sources.`. import_rename, not module_rename, for two reasons — the carve-outs stay at the root path and are imported from files that do get rewritten, so the exemption is per-import rather than per-file; and TeamInventoryViewer.py:35 joins the literal directory 'Sources/marks_sources/mods_data', which dots would break."
 

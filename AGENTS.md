@@ -245,14 +245,14 @@ reaches into `dev/reference`. Those are known and tracked in
 `rules/TIER_MAP.md`. Do not silence them; fix or waive with a
 reason in `tier_map.toml`.
 
-`pytest qa` is the only gate that executes module bodies, and the only one that
+`pytest test` is the only gate that executes module bodies, and the only one that
 has caught a regression the shape checks missed. Leaf files — widgets and
 scripts — are deselected by default; run them explicitly:
 
 ```bash
-python -m pytest qa                  # the gate: core + HeroAI
-python -m pytest qa -m leaf          # widgets and scripts
-python qa/breakage.py --vs-upstream  # why they fail, and whose fault it is
+python -m pytest test                  # the gate: core + HeroAI
+python -m pytest test -m leaf          # widgets and scripts
+python test/breakage.py --vs-upstream  # why they fail, and whose fault it is
 ```
 
 Leaf failures outside a protected pack are **deprecations, not bugs** — RS-004.
@@ -307,7 +307,7 @@ eagerly imports 244 modules including 17 from `HeroAI`, and
 `verify.py` reports the same 6 tier violations. These are measured, tracked in
 `rules/TIER_MAP.md`, and **not** to be silenced.
 
-**`pytest qa` opens a socket.** `Core/debug_hatch.py` calls `_start_server_once()`
+**`pytest test` opens a socket.** `Core/debug_hatch.py` calls `_start_server_once()`
 at module scope, so importing it binds `127.0.0.1:9977`. That is by design — the
 point is that `from Core.debug_hatch import snap` just works at a breakpoint
 site. Harmless in the gate: the thread is a daemon, a failed bind is caught into

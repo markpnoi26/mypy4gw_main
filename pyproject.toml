@@ -33,11 +33,19 @@ extend_skip_glob = [
 ]
 
 [tool.pytest.ini_options]
-# qa/ not tests/ — upstream owns a tests/ directory, and the manifest moves it to
-# dev/tests/imgui/. qa/ is ours and collides with nothing upstream ships.
-testpaths = ["qa"]
+# test/ singular, not tests/ — upstream ships a top-level tests/ that the manifest
+# moves to dev/tests/imgui/. Singular collides with nothing upstream ships.
+testpaths = ["test"]
 # leaf is deselected by default: widget and script module bodies do real work at
 # import (one of them blocks indefinitely), so they are opt-in via `-m leaf`.
-addopts = "-q -m 'not leaf'"
-pythonpath = [".", "qa"]
+# --import-mode has no ini key of its own; it only takes effect from here.
+# test/ mirrors the source tree, so basenames repeat (test_frame.py under both
+# Core/FrameTree and HeroAI/fight). prepend mode derives the module name from the
+# basename alone and errors on the second one; importlib derives it from the full
+# path. It also stops each test's folder being spliced into sys.path, where a
+# test/Core/ would sit ahead of the real Core/.
+addopts = "-q -m 'not leaf' --import-mode=importlib"
+# test/ is absent on purpose: it would shadow the stdlib `test` package.
+# test/conftest.py adds itself for nativestub, and breakage.py gets it from sys.path[0].
+pythonpath = ["."]
 markers = ["leaf: tier-4 widgets and scripts; run explicitly with -m leaf"]
