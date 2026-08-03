@@ -1,45 +1,51 @@
 import math
 
-import HeroAI.globals as hero_globals
 import PyImGui
+
+import HeroAI.globals as hero_globals
+from Core import GLOBAL_CACHE
+from Core import Agent
+from Core import Color
+from Core import ColorPalette
+from Core import ConsoleLog
+from Core import IconsFontAwesome5
+from Core import ImGui
+from Core import Key
+from Core import Keystroke
+from Core import Map
+from Core import Overlay
+from Core import Range
+from Core import SharedCommandType
+from Core import ThrottledTimer
+from Core import UIManager
+from Core import Utils
+from Core.FrameTree import Frame
+from Core.FrameTree import FrameId
+from Core.GlobalCache.SharedMemory import AccountStruct
+from Core.GlobalCache.SharedMemory import HeroAIOptionStruct
+from Core.Player import Player
+from Core.py4gwcorelib_src.Settings import Settings
 from HeroAI import enemy_party
 from HeroAI import resurrection_scroll
-
-from Core import (
-    GLOBAL_CACHE,
-    Agent,
-    IconsFontAwesome5,
-    ImGui,
-    Map,
-    Overlay,
-    Range,
-    Utils,
-    Color,
-    ColorPalette,
-    ConsoleLog,
-    SharedCommandType,
-)
-from Core import Key, Keystroke, ThrottledTimer, UIManager
-from Core.FrameTree import Frame, FrameId
-from Core.GlobalCache.SharedMemory import AccountStruct, HeroAIOptionStruct
-from Core.py4gwcorelib_src.Settings import Settings
-from Core.Player import Player
-
 from HeroAI.cache_data import CacheData
+from HeroAI.constants import FOLLOW_DISTANCE_OUT_OF_COMBAT
+from HeroAI.constants import MAX_NUM_PLAYERS
+from HeroAI.constants import MELEE_RANGE_VALUE
 from HeroAI.constants import NUMBER_OF_SKILLS
-from HeroAI.utils import FIGHT_ZONE_FLAG_COLOR, DrawFlagAll, DrawHeroFlag, IsHeroFlagged, is_fight_zone_flag
-from HeroAI.windows import HeroAI_FloatingWindows, HeroAI_Windows
-from .constants import MAX_NUM_PLAYERS, NUMBER_OF_SKILLS
+from HeroAI.constants import PARTY_WINDOW_FRAME_EXPLORABLE_OFFSETS
+from HeroAI.constants import PARTY_WINDOW_FRAME_OUTPOST_OFFSETS
+from HeroAI.constants import PARTY_WINDOW_HASH
+from HeroAI.constants import RANGED_RANGE_VALUE
+from HeroAI.utils import FIGHT_ZONE_FLAG_COLOR
+from HeroAI.utils import DrawFlagAll
+from HeroAI.utils import DrawHeroFlag
+from HeroAI.utils import IsHeroFlagged
+from HeroAI.utils import is_fight_zone_flag
+from HeroAI.windows import HeroAI_FloatingWindows
+from HeroAI.windows import HeroAI_Windows
 
-from HeroAI.constants import (
-    FOLLOW_DISTANCE_OUT_OF_COMBAT,
-    MAX_NUM_PLAYERS,
-    MELEE_RANGE_VALUE,
-    PARTY_WINDOW_FRAME_EXPLORABLE_OFFSETS,
-    PARTY_WINDOW_FRAME_OUTPOST_OFFSETS,
-    PARTY_WINDOW_HASH,
-    RANGED_RANGE_VALUE,
-)
+from .constants import MAX_NUM_PLAYERS
+from .constants import NUMBER_OF_SKILLS
 
 # Segments per trigger-ring polyline. Each one costs a FindZ, which is the
 # expensive call here, so three rings at 20 is ~60 a frame against ~6 for the
@@ -1605,7 +1611,8 @@ class HeroAI_BaseUI:
 
     @staticmethod
     def _format_team_viewer_attributes(attributes: dict) -> str:
-        from Core.enums_src.GameData_enums import Attribute, AttributeNames
+        from Core.enums_src.GameData_enums import Attribute
+        from Core.enums_src.GameData_enums import AttributeNames
 
         if not attributes:
             return "No attributes"
@@ -1735,6 +1742,93 @@ class HeroAI_BaseUI:
             return None
 
     @staticmethod
+    def tuned_float(cfg: Settings, key: str, label: str, low: float, high: float, default: float, fmt: str) -> float:
+        """Slider bound to a FightRuntime key, written back only when it moves."""
+        value = float(cfg.get_float("FightRuntime", key, default))
+        updated = PyImGui.slider_float(f"{label}##fight_{key}", value, low, high, fmt)
+        if abs(updated - value) > 0.001:
+            cfg.set_float("FightRuntime", key, float(updated))
+            cfg.save()
+        return updated
+
+    @staticmethod
+    def draw_fight_tuning(cfg: Settings) -> None:
+        """The four live knobs; everything else about the zone is authored in code.
+
+        Each caption resolves its slider into the quantity it actually changes.
+        None of these read as anything on their own — 1.30x of what, in what
+        direction — and a knob you have to go and read the source to understand
+        is one you will end up tuning by guess.
+        """
+        from HeroAI.fight import publisher as fight_runtime
+
+        run_speed_ups = 288.0
+        authored = fight_runtime.AUTHORED_ZONE_CFG
+        step = float(authored.give_ground_step)
+
+        standoff = HeroAI_BaseUI.tuned_float(
+            cfg,
+            fight_runtime.STANDOFF_KEY,
+            "Standoff",
+            fight_runtime.STANDOFF_MIN,
+            fight_runtime.STANDOFF_MAX,
+            float(authored.engagement_standoff),
+            "%.0fu",
+        )
+        PyImGui.text_disabled(
+            "Front rank closes over the pack — its centre lands in the middle of the front line."
+            if standoff < 1.0
+            else f"Front rank holds {standoff:.0f}u back from the pack's centre and never reaches it."
+        )
+
+        advance = int(cfg.get_int("FightRuntime", fight_runtime.ADVANCE_HOLD_KEY, authored.advance_hold_ms))
+        new_advance = PyImGui.slider_int(
+            "Advance cadence##fight_advance_hold",
+            advance,
+            fight_runtime.ADVANCE_HOLD_MIN,
+            fight_runtime.ADVANCE_HOLD_MAX,
+            "%d ms",
+        )
+        if new_advance != advance:
+            cfg.set_int("FightRuntime", fight_runtime.ADVANCE_HOLD_KEY, int(new_advance))
+            cfg.save()
+        closing_speed = step / (max(1, new_advance) / 1000.0)
+        PyImGui.text_disabled(
+            f"One {step:.0f}u step every {new_advance / 1000.0:.2f}s"
+            f" = {closing_speed:.0f} u/s, {100.0 * closing_speed / run_speed_ups:.0f}% of run speed."
+        )
+
+        recover = HeroAI_BaseUI.tuned_float(
+            cfg,
+            fight_runtime.RECOVER_DWELL_KEY,
+            "Recover dwell",
+            fight_runtime.SCALE_MIN,
+            fight_runtime.SCALE_MAX,
+            1.0,
+            "%.2fx",
+        )
+        tiers = authored.recover_hold_tiers_ms
+        PyImGui.text_disabled(
+            f"Sit this long after giving ground: {tiers[-1] * recover / 1000.0:.1f}s against a full pack,"
+            f" {tiers[0] * recover / 1000.0:.1f}s down to the last enemy. A breach ignores it."
+        )
+
+        response = HeroAI_BaseUI.tuned_float(
+            cfg,
+            fight_runtime.REAIM_RESPONSE_KEY,
+            "Re-aim responsiveness",
+            fight_runtime.SCALE_MIN,
+            fight_runtime.SCALE_MAX,
+            1.0,
+            "%.2fx",
+        )
+        PyImGui.text_disabled(
+            f"Higher re-forms sooner: confirm a shift for {authored.reaim_commit_ms / response / 1000.0:.2f}s,"
+            f" then at most one re-aim per {authored.min_facing_recompute_ms / response / 1000.0:.1f}s,"
+            " before the per-blob-size slowdown stretches both."
+        )
+
+    @staticmethod
     def _draw_fight_lines_tab() -> None:
         from HeroAI.fight.lines import NAME_BY_LINE
         from HeroAI.fight.lines import CombatLine
@@ -1755,11 +1849,24 @@ class HeroAI_BaseUI:
             cfg.set_bool("FightRuntime", "show_fight_zone_overlay", new_overlay)
             cfg.save()
         if new_overlay:
-            circles_only = bool(cfg.get_bool("FightRuntime", "fight_zone_overlay_circles_only", False))
-            new_circles_only = PyImGui.checkbox("Circles only (no spokes, arrow or labels)", circles_only)
-            if new_circles_only != circles_only:
-                cfg.set_bool("FightRuntime", "fight_zone_overlay_circles_only", new_circles_only)
+            from HeroAI.fight import publisher as fight_runtime
+
+            detail = fight_runtime.read_overlay_detail(cfg)
+            new_detail = PyImGui.combo("Detail##fight_overlay_detail", detail, list(fight_runtime.OVERLAY_DETAIL_NAMES))
+            if new_detail != detail:
+                cfg.set_int("FightRuntime", fight_runtime.OVERLAY_DETAIL_KEY, int(new_detail))
                 cfg.save()
+            PyImGui.text_disabled(
+                (
+                    "Everything: pins, tolerance rings, spokes, names, labels and the way back."
+                    if new_detail == fight_runtime.OVERLAY_FULL
+                    else (
+                        "Only rings that are currently triggering, plus the per-character pins."
+                        if new_detail == fight_runtime.OVERLAY_CIRCLES
+                        else "Planted flag, the enemy blob, the three trigger rings and the escape path."
+                    )
+                )
+            )
         engage_default = 730.0
         engage_setting = float(cfg.get_float("FightRuntime", "engage_depth_u", engage_default))
         new_engage = PyImGui.slider_float("Engage reach##fight_engage_depth", engage_setting, 250.0, 900.0)
@@ -1771,6 +1878,8 @@ class HeroAI_BaseUI:
             f" reaching {218.0 + new_engage:.0f}u ahead and {218.0 - new_engage:.0f}u behind the pin."
         )
         PyImGui.text_disabled("Overlay works with the zone disabled — watch where lines form before switching it on.")
+        if PyImGui.collapsing_header("Tuning"):
+            HeroAI_BaseUI.draw_fight_tuning(cfg)
 
         snapshot = hero_globals.fight_zone_debug_snapshot
         if snapshot is not None and bool(snapshot.get("released", False)):
@@ -2460,11 +2569,15 @@ class HeroAI_BaseUI:
             "BACK": Utils.RGBToColor(80, 190, 255, 230),
         }
 
-        # Read from the snapshot rather than hero_globals so the flag the
-        # publisher actually drew this frame is the one honoured — the approach
-        # point and slot list are omitted from the snapshot in this mode, and
-        # reading a different source could ask for points never published.
-        circles_only = bool(snapshot.get("circles_only", False))
+        # Read from the snapshot rather than hero_globals so the mode the
+        # publisher actually built for is the one honoured — the approach point,
+        # slot list and route are omitted from the snapshot in the leaner modes,
+        # and reading a different source could ask for points never published.
+        from HeroAI.fight.publisher import OVERLAY_CIRCLES
+        from HeroAI.fight.publisher import OVERLAY_FULL
+
+        detail = int(snapshot.get("detail", OVERLAY_FULL))
+        labelled = detail == OVERLAY_FULL
 
         try:
             Overlay().BeginDraw()
@@ -2487,7 +2600,7 @@ class HeroAI_BaseUI:
 
             # Arrow from the pin toward the enemies, so "the fight is in front of
             # everyone" is verifiable at a glance rather than inferred.
-            if not circles_only:
+            if labelled:
                 facing = float(snapshot.get("facing", 0.0))
                 tip_x = ax + (math.cos(facing) * 260.0)
                 tip_y = ay + (math.sin(facing) * 260.0)
@@ -2507,6 +2620,9 @@ class HeroAI_BaseUI:
             # hold band. When the formation moves for no visible reason, these
             # are what to check against the eye.
             past_midline = bool(snapshot.get("overrun", False))
+            # Kept in every mode including minimal: the rings are all measured
+            # against this point, so without it a lit ring says something is
+            # wrong without saying where.
             blob = snapshot.get("blob")
             if blob is not None:
                 bx, by = float(blob[0]), float(blob[1])
@@ -2514,14 +2630,16 @@ class HeroAI_BaseUI:
                 blob_color = Utils.RGBToColor(255, 60, 60, 240)
                 Overlay().DrawPoly3D(bx, by, bz, radius=50.0, color=blob_color, numsegments=12, thickness=3.0)
                 blob_front = snapshot.get("blob_depth")
-                if not circles_only and blob_front is not None:
+                if labelled and blob_front is not None:
                     Overlay().DrawText3D(bx, by, bz, f"blob {float(blob_front):+.0f}u", blob_color)
 
             # The three trigger rings, drawn as the ellipses the tests actually
             # run on. DrawPoly3D takes a scalar radius and so cannot express
-            # them; they go out as closed polylines instead. An armed ring
-            # survives circles-only — a formation moving for no visible reason
-            # is exactly when it must say why.
+            # them; they go out as closed polylines instead. Armed-circles keeps
+            # only the ones currently triggering — a formation moving for no
+            # visible reason is exactly when it must say why — while minimal
+            # keeps all three, dim until they light, because the rings ARE the
+            # thing it is there to show.
             rings = snapshot.get("rings") or {}
             ring_facing = float(snapshot.get("facing", 0.0))
             cos_f = math.cos(ring_facing)
@@ -2538,7 +2656,7 @@ class HeroAI_BaseUI:
             }
             for name, geometry in rings.items():
                 is_armed = armed.get(name, False)
-                if circles_only and not is_armed:
+                if detail == OVERLAY_CIRCLES and not is_armed:
                     continue
                 centre, ring_fwd, ring_lat = (float(v) for v in geometry)
                 if ring_fwd <= 0.0 or ring_lat <= 0.0:
@@ -2556,7 +2674,7 @@ class HeroAI_BaseUI:
                     Overlay().DrawLine3D(
                         start[0], start[1], start[2], end[0], end[1], end[2], color, 3.0 if is_armed else 1.5
                     )
-                if not circles_only:
+                if labelled:
                     tip_fwd = centre + ring_fwd
                     tx = ax + (tip_fwd * cos_f)
                     ty = ay + (tip_fwd * sin_f)
@@ -2587,13 +2705,14 @@ class HeroAI_BaseUI:
                 wx, wy = float(waypoint[0]), float(waypoint[1])
                 wz = Overlay().FindZ(wx, wy, 0)
                 Overlay().DrawPoly3D(wx, wy, wz, radius=70.0, color=escape_color, numsegments=12, thickness=2.0)
-                Overlay().DrawText3D(
-                    wx,
-                    wy,
-                    wz,
-                    f"escape {float(escape.get('distance', 0.0)):.0f}u ({str(escape.get('source', '?')).lower()})",
-                    escape_color,
-                )
+                if labelled:
+                    Overlay().DrawText3D(
+                        wx,
+                        wy,
+                        wz,
+                        f"escape {float(escape.get('distance', 0.0)):.0f}u ({str(escape.get('source', '?')).lower()})",
+                        escape_color,
+                    )
                 route = escape.get("path") or ()
                 resolved_route = [(float(px), float(py), Overlay().FindZ(float(px), float(py), 0)) for px, py in route]
                 for i in range(1, len(resolved_route)):
@@ -2602,9 +2721,9 @@ class HeroAI_BaseUI:
                     Overlay().DrawLine3D(x1, y1, z1, x2, y2, z2, escape_color, 2.5)
 
             clamped = bool(snapshot.get("depth_clamped", False))
-            # A clamped depth still gets its label in circles-only mode: it is a
+            # A clamped depth still gets its label in the lean modes: it is a
             # warning, not decoration, and nothing else on the ground says it.
-            if not circles_only or clamped:
+            if labelled or clamped:
                 depth = float(snapshot.get("depth", 0.0))
                 header = f"{snapshot.get('state', '?')}  depth {depth:.0f}"
                 if clamped:
@@ -2632,7 +2751,7 @@ class HeroAI_BaseUI:
                     numsegments=16,
                     thickness=1.0,
                 )
-                if not circles_only:
+                if labelled:
                     Overlay().DrawLine3D(ax, ay, az, sx, sy, sz, color, 1.0)
                     Overlay().DrawText3D(sx, sy, sz, str(slot.get("name", "")), color)
 
@@ -2905,10 +3024,8 @@ class HeroAI_BaseUI:
             #       the avatar moved less than this in the sample window.
             #     - No-Progress Close Units: sample counts as no-progress when
             #       the gap to follow_xy shrank by less than this.
-            from HeroAI.follow.smart_unstuck import (
-                SMART_UNSTUCK_CFG,
-                reload_smart_unstuck_config_from_ini,
-            )
+            from HeroAI.follow.smart_unstuck import SMART_UNSTUCK_CFG
+            from HeroAI.follow.smart_unstuck import reload_smart_unstuck_config_from_ini
 
             new_waypoint_smoothing = max(
                 1.0, float(PyImGui.input_float("Waypoint Smoothing", float(SMART_UNSTUCK_CFG.waypoint_smoothing)))

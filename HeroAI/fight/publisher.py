@@ -43,8 +43,9 @@ from .safespot import SAFE_CFG
 from .safespot import SafeSpot
 from .safespot import approach_from
 from .safespot import update_safe_spot
-from .zone import FightZone
 from .zone import ZONE_CFG
+from .zone import FightZone
+from .zone import ZoneConfig
 from .zone import ZoneInputs
 from .zone import ZoneState
 from .zone import backline_ring
@@ -64,6 +65,16 @@ RUNTIME_SECTION = "FightRuntime"
 ENABLED_KEY = "fight_zone_enabled"
 OVERLAY_KEY = "show_fight_zone_overlay"
 CIRCLES_ONLY_KEY = "fight_zone_overlay_circles_only"
+OVERLAY_DETAIL_KEY = "fight_zone_overlay_detail"
+# FULL diagnoses, MINIMAL is for actually fighting: the planted flag, the three
+# trigger rings, and the escape path. Nothing per-character, nothing labelled —
+# the standing circle and tolerance ring around every member is the bulk of what
+# makes the overlay unreadable in a fight, and it says nothing the party's own
+# bodies do not already show.
+OVERLAY_FULL = 0
+OVERLAY_CIRCLES = 1
+OVERLAY_MINIMAL = 2
+OVERLAY_DETAIL_NAMES = ("Full", "Armed circles", "Minimal")
 ENGAGE_DEPTH_KEY = "engage_depth_u"
 # Drives the frontline ring's forward semi-axis: how far ahead the formation
 # looks before deciding there is nothing to fight. Key and range are unchanged
@@ -75,6 +86,42 @@ ENGAGE_DEPTH_MIN = 250.0
 ENGAGE_DEPTH_MAX = 900.0
 RUNTIME_RELOAD_MS = 1000
 
+# --- Fight Lines tuning sliders ---------------------------------------------
+# Ceiling is the standoff this replaced, so the old behaviour is still reachable
+# from the tab rather than needing a code change.
+STANDOFF_KEY = "engagement_standoff_u"
+STANDOFF_MIN = 0.0
+STANDOFF_MAX = 400.0
+# Floor is roughly run speed at a 250u step; anything quicker is a slide, not a
+# sequence of deliberate moves, and the whole ground controller assumes moves.
+ADVANCE_HOLD_KEY = "advance_hold_ms"
+ADVANCE_HOLD_MIN = 750
+ADVANCE_HOLD_MAX = 4000
+RECOVER_DWELL_KEY = "recover_dwell_scale"
+REAIM_RESPONSE_KEY = "reaim_responsiveness"
+SCALE_MIN = 0.5
+SCALE_MAX = 2.0
+
+# The authored numbers, captured before anything writes over them. Sliders scale
+# THESE and never ZONE_CFG's current contents: reload_runtime runs once a second
+# against a config it has already written to, so a scale folded back onto its own
+# output compounds — a 1.5x recover dwell reaches an hour inside twenty minutes.
+AUTHORED_ZONE_CFG = ZoneConfig()
+
+
+def clamp(value, low, high):
+    return min(high, max(low, value))
+
+
+def read_overlay_detail(cfg: Settings) -> int:
+    """Detail level, falling back to the boolean this replaced.
+
+    A saved circles-only setting keeps meaning something rather than silently
+    reverting to the full overlay the first time the tab is opened.
+    """
+    legacy = OVERLAY_CIRCLES if cfg.get_bool(RUNTIME_SECTION, CIRCLES_ONLY_KEY, False) else OVERLAY_FULL
+    return int(clamp(int(cfg.get_int(RUNTIME_SECTION, OVERLAY_DETAIL_KEY, legacy)), OVERLAY_FULL, OVERLAY_MINIMAL))
+
 
 @dataclass(slots=True)
 class FightRuntimeConfig:
@@ -82,9 +129,61 @@ class FightRuntimeConfig:
     # until it has been watched through the overlay.
     enabled: bool = False
     show_overlay: bool = False
-    # Ground circles only — no spokes, arrow or labels. The per-slot list is the
-    # expensive half of the snapshot, so this drops building it too.
-    circles_only: bool = False
+    # One of OVERLAY_FULL / OVERLAY_CIRCLES / OVERLAY_MINIMAL. Drives what the
+    # snapshot even builds, not just what gets drawn: the per-slot list is the
+    # expensive half, so a mode that cannot show it does not pay for it.
+    overlay_detail: int = OVERLAY_FULL
+
+
+def apply_tuning(cfg: Settings) -> None:
+    """Fold the Fight Lines sliders onto the shared ZoneConfig.
+
+    Everything here is derived from AUTHORED_ZONE_CFG, never read back off
+    ZONE_CFG — see the note on that constant.
+    """
+    standoff = float(cfg.get_float(RUNTIME_SECTION, STANDOFF_KEY, AUTHORED_ZONE_CFG.engagement_standoff))
+    ZONE_CFG.engagement_standoff = clamp(standoff, STANDOFF_MIN, STANDOFF_MAX)
+
+    advance = int(cfg.get_int(RUNTIME_SECTION, ADVANCE_HOLD_KEY, AUTHORED_ZONE_CFG.advance_hold_ms))
+    ZONE_CFG.advance_hold_ms = int(clamp(advance, ADVANCE_HOLD_MIN, ADVANCE_HOLD_MAX))
+
+    # Scales the whole per-blob-size table rather than replacing it: the tail of
+    # a fight giving ground most rarely is authored behaviour, and a flat dwell
+    # would throw it away.
+    recover = clamp(float(cfg.get_float(RUNTIME_SECTION, RECOVER_DWELL_KEY, 1.0)), SCALE_MIN, SCALE_MAX)
+    ZONE_CFG.recover_hold_tiers_ms = tuple(tier * recover for tier in AUTHORED_ZONE_CFG.recover_hold_tiers_ms)
+
+    # Reads as "snappier at higher values", so it DIVIDES the two windows. Both
+    # move together because they are one feel — a short confirm behind a long
+    # floor just waits in a different place.
+    response = clamp(float(cfg.get_float(RUNTIME_SECTION, REAIM_RESPONSE_KEY, 1.0)), SCALE_MIN, SCALE_MAX)
+    ZONE_CFG.reaim_commit_ms = int(AUTHORED_ZONE_CFG.reaim_commit_ms / response)
+    ZONE_CFG.min_facing_recompute_ms = int(AUTHORED_ZONE_CFG.min_facing_recompute_ms / response)
+
+
+def collect_spirit_ids() -> set[int]:
+    """Spirits, which are not part of the fight blob.
+
+    A spirit does not move, so a centroid that counts one is anchored to a
+    stationary object: the formation gets planted on ground the mob has already
+    left, and every re-aim drags it back there. The pack is what the party is
+    fighting, and the pack walks.
+
+    Read off the SpiritPet array rather than by testing every enemy: spirits and
+    pets share that allegiance and are separated by `is_spawned`, so this costs
+    one native call plus a check per spirit instead of a check per enemy. Pets
+    are deliberately left in — a hostile ranger's pet closes and hits, so it
+    belongs in the blob exactly as much as its owner does.
+
+    Likely already a no-op: allegiance buckets an agent into exactly one array,
+    so a spirit should never appear in the enemy array to begin with. Those
+    arrays are filled by Py4GW.dll, which cannot be inspected from this tree, so
+    the filter stands as the thing that makes it true rather than assuming it.
+    """
+    try:
+        return {int(agent_id) for agent_id in AgentArray.GetSpiritPetArray() if Agent.IsSpawned(int(agent_id))}
+    except Exception:
+        return set()
 
 
 def mean_party_health(party_health: dict[int, float]) -> float:
@@ -165,13 +264,14 @@ class FightZonePublisher:
                 pass
             self.runtime.enabled = bool(cfg.get_bool(RUNTIME_SECTION, ENABLED_KEY, False))
             self.runtime.show_overlay = bool(cfg.get_bool(RUNTIME_SECTION, OVERLAY_KEY, False))
-            self.runtime.circles_only = bool(cfg.get_bool(RUNTIME_SECTION, CIRCLES_ONLY_KEY, False))
+            self.runtime.overlay_detail = read_overlay_detail(cfg)
             # Applied onto the shared config so the whole controller — triggers,
             # snapshot, drawn bar — reads the tuned value with no plumbing.
             depth = float(cfg.get_float(RUNTIME_SECTION, ENGAGE_DEPTH_KEY, float(ZONE_CFG.frontline_ring_fwd)))
             ZONE_CFG.frontline_ring_fwd = min(ENGAGE_DEPTH_MAX, max(ENGAGE_DEPTH_MIN, depth))
+            apply_tuning(cfg)
             hero_globals.show_fight_zone_overlay = self.runtime.show_overlay
-            hero_globals.fight_zone_overlay_circles_only = self.runtime.circles_only
+            hero_globals.fight_zone_overlay_detail = self.runtime.overlay_detail
         except Exception:
             pass
 
@@ -278,7 +378,11 @@ class FightZonePublisher:
             return self.plan
 
         enemy_ids = self.collect_enemy_ids(leader_xy)
-        enemy_positions = self.collect_enemy_positions(enemy_ids)
+        # Spirits are dropped from the BLOB but left in `enemy_ids`, which is
+        # what the engagement detector reads. A spirit hitting the party is
+        # still a fight — it just is not a thing to form up on.
+        spirits = collect_spirit_ids()
+        enemy_positions = self.collect_enemy_positions([i for i in enemy_ids if i not in spirits])
         self.last_approach_xy = approach_from(self.safe_spot, SAFE_CFG, party_centre)
         was_active = self.zone.is_active()
 
@@ -385,7 +489,16 @@ class FightZonePublisher:
         # The Fight Lines tab still wants the scalars with the overlay off, but
         # only the 3D draw needs the per-slot list, which is what costs.
         drawing = self.runtime.show_overlay
-        tracing = drawing and not self.runtime.circles_only
+        detail = self.runtime.overlay_detail
+        # Full is the only mode that labels anything or shows where the party
+        # came from; the other two are for watching a fight, not reading one.
+        labelled = drawing and detail == OVERLAY_FULL
+        # Minimal drops every per-character marker — the clutter it exists to
+        # remove — and so never pays to build the list.
+        slotted = drawing and detail != OVERLAY_MINIMAL
+        # Armed-circles keeps the escape WAYPOINT without the dogleg to it;
+        # minimal wants the path itself, which is one of its three things.
+        routed = drawing and detail != OVERLAY_CIRCLES
         route = self.escape.route
         # The two readings the ground controller acts on, recomputed against the
         # post-tick pin so the drawn blob and midline are the ones the NEXT
@@ -417,8 +530,8 @@ class FightZonePublisher:
             "driving": self.runtime.enabled and self.plan.is_active(),
             "anchor": (self.zone.anchor_x, self.zone.anchor_y),
             "facing": self.zone.facing,
-            "approach": self.last_approach_xy if tracing else None,
-            "circles_only": self.runtime.circles_only,
+            "approach": self.last_approach_xy if labelled else None,
+            "detail": detail,
             "radius": self.zone.radius,
             "reaim_blob_size": self.zone.reaim_blob_size,
             "reaim_commit_ms": self.zone.reaim_commit_window_ms,
@@ -443,7 +556,7 @@ class FightZonePublisher:
                     "waypoint": route.waypoint,
                     "distance": route.distance,
                     "source": route.source.name,
-                    "path": list(route.path) if tracing else (),
+                    "path": list(route.path) if routed else (),
                 }
             ),
             "escape_boxed_in": self.escape.boxed_in,
@@ -461,7 +574,7 @@ class FightZonePublisher:
                     "pos": (slot.world_x, slot.world_y),
                     "tolerance": slot.tolerance,
                 }
-                for slot in (self.plan.slots.values() if drawing else ())
+                for slot in (self.plan.slots.values() if slotted else ())
             ],
             "slot_count": len(self.plan.slots),
         }
