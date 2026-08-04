@@ -172,10 +172,15 @@ def key_by_path() -> dict[str, str]:
 
 # --------------------------------------------------------------------------
 def fold_hierarchy(rows) -> tuple:
-    """Fold native ``(frame_id, parent_id, code, hash)`` rows into the lookup maps.
+    """Fold ``(frame_id, parent_id, code, hash)`` rows into the lookup maps.
 
     Split out of ``FrameTree.rebuild`` so the bookkeeping can be exercised without
     a client: the native call needs a live UI, folding its output does not.
+
+    **Not currently wired to ``get_frame_hierarchy()``.** That row layout is an
+    assumption no source in this tree confirms, and acting on it blanked every
+    path-resolved overlay — see ``rebuild``. The folding itself is correct and
+    tested; only where the rows come from is in question.
     """
     parent: dict[int, int] = {}
     code: dict[int, int] = {}
@@ -348,13 +353,49 @@ class _FrameTree:
 
     # -- structure snapshot -----------------------------------------------
     def rebuild(self) -> None:
-        # One native call for the whole tree.  Reading it a frame at a time
-        # through UIFrame cost ~370 object constructions and ~1100 getattrs per
-        # tick - measured at 4.4ms of a 5.8ms frame, and billed to whichever
-        # widget happened to touch the tree first that tick.  get_frame_hierarchy
-        # returns exactly the four fields this needs, in the row layout
-        # hierarchy() below documents.
-        parent, code, fhash, children, order, by_hash = fold_hierarchy(PyUIManager.UIManager.get_frame_hierarchy())
+        # Read one frame at a time, BY NAME.  Slow - ~370 object constructions
+        # and ~1100 getattrs per tick, measured at 4.4ms of a 5.8ms frame - and
+        # correct, which the one-call version could not be shown to be.
+        #
+        # get_frame_hierarchy() returns four ints per row and nothing states
+        # which four: the stub says Tuple[int, int, int, int], and docs/ lists
+        # the call twice without ever giving the columns.  Unpacking it by
+        # position is therefore a guess, and a wrong guess is silent - every
+        # FrameId PATH stops resolving while by_hash/child_native keep working,
+        # because those go straight to the engine and never read this snapshot.
+        # That is what blanked the HeroAI party overlay and the Party Search
+        # accounts tab, both of which gate on `.exists`.
+        #
+        # fold_hierarchy() below is the folding half of the fast path and is
+        # still tested.  Put this back on it once a live dump has confirmed the
+        # column order - the reads are what cost, not the fold.
+        parent: dict[int, int] = {}
+        code: dict[int, int] = {}
+        fhash: dict[int, int] = {}
+        children: dict[int, dict[int, list[int]]] = {}
+        order: list[int] = []
+        by_hash: dict[int, list[int]] = {}
+
+        for raw in PyUIManager.UIManager.get_frame_array():
+            fid = int(raw)
+            # Appended before the read, so a frame that is in the array but
+            # unreadable this tick still counts as known.
+            order.append(fid)
+            try:
+                fr = PyUIManager.UIFrame(fid)
+            except Exception:
+                continue
+            pid = int(getattr(fr, "parent_id", 0) or 0)
+            cod = int(getattr(fr, "child_offset_id", 0) or 0)
+            h = int(getattr(fr, "frame_hash", 0) or 0)
+            parent[fid] = pid
+            code[fid] = cod
+            fhash[fid] = h
+            # a code is normally unique per parent, but siblings can collide -
+            # keep every one so enumeration does not silently lose frames
+            children.setdefault(pid, {}).setdefault(cod, []).append(fid)
+            if h:
+                by_hash.setdefault(h, []).append(fid)
 
         # The engine returns an EMPTY array whenever its frame array pointer is
         # null - during map load, UI teardown, or before the UI context exists.
@@ -448,7 +489,23 @@ class _FrameTree:
 
     def child_of(self, frame_id: int, code: int) -> Optional[int]:
         got = self._children.get(frame_id, {}).get(code)
-        return got[0] if got else None
+        if got:
+            return got[0]
+
+        # Guarded the same way anchor_ids is, and for the same reason: a miss in
+        # the snapshot is not proof the child is gone.  Unguarded, a wrong tree
+        # kills every path walk at its first code, and None is also the normal
+        # reading for "that window is closed" - so the failure is silent and
+        # presents as an overlay that simply declines to draw.  That is exactly
+        # how a mis-unpacked get_frame_hierarchy() blanked the party overlay.
+        # See docs/frametree_hierarchy_regression.md.
+        if not frame_id:
+            return None
+        try:
+            fid = int(PyUIManager.UIManager.get_child_frame_by_frame_id(int(frame_id), int(code)) or 0)
+        except Exception:
+            fid = 0
+        return fid or None
 
     def children_at(self, frame_id: int, code: int) -> list[int]:
         """Every child under `code` - normally one, occasionally colliding siblings."""

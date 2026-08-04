@@ -1,12 +1,18 @@
-"""Folding the native hierarchy dump into FrameTree's lookup maps.
+"""Folding a hierarchy dump into FrameTree's lookup maps.
 
 The native call needs a live client; folding its rows does not, which is the
 whole reason it is a separate function.
+
+These rows are hand-written, so this suite proves the FOLD is right and proves
+nothing about what ``get_frame_hierarchy()`` actually returns. It passed while
+that assumption was blanking every path-resolved overlay. Before rebuild() goes
+back on the one-call path, replace these fixtures with a dump captured from a
+live client — then the layout is evidence rather than a premise.
 """
 
 from Core.FrameTree.frame import fold_hierarchy
 
-# (frame_id, parent_id, code, hash), the layout FrameTree.hierarchy() documents.
+# (frame_id, parent_id, code, hash) — the ASSUMED layout, not a confirmed one.
 ROOT = (1, 0, 0, 0xAAAA)
 CHILD_A = (2, 1, 0, 0xBBBB)
 CHILD_B = (3, 1, 1, 0)
