@@ -60,10 +60,28 @@ fight slot from a follow slot except by the tolerance value attached to it.
 `_resolve_fight_plan` returns `None` — meaning stock follow behaviour, unchanged
 — in any of these cases, checked in this order:
 
+0. **Not in an explorable area.** `publisher.tick` bails before the safe spot and
+   the breadcrumb trail, so outpost coordinates never enter either, and clears
+   the debug snapshot — which is what stops the overlay drawing over town. The
+   dry-run (overlay on, zone off) is gated by this too.
 1. `fight_zone_enabled` is false (default).
 2. A **manual all-flag** exists: `leader_options.IsFlagged` and `AllFlag` is
    non-zero and `fight_owns_all_flag` is false. Assignment state is cleared.
 3. `tick_zone` leaves the zone in a non-active state (`TRAVELING`).
+
+### Map changes
+
+Everything the publisher holds is **map-local**. Breadcrumbs and the safe spot
+are raw world coordinates, so carrying them through a zone plots an escape route
+across geometry belonging to the map just left — and since the route now moves
+the party, that is a walk into a wall rather than a wrong drawing.
+`reset_map_state()` drops the trail, the safe spot, the route, engagement, the
+health episode, the assignment and any given ground.
+
+`map_changed()` ignores a **zero** map id. `GetMapID` returns 0 whenever the map
+is not ready, including transient frames during ordinary play, and treating that
+as a zone change would wipe the trail mid-fight — precisely when the long escape
+route matters most.
 
 Gate 2 is the important one. The zone writes its anchor into the same `AllFlag`
 field the user's manual flag uses, because `HeroAIOptionStruct` is a C++-owned
@@ -278,13 +296,23 @@ blob at all, so an empty field keeps closing armed.
 ```
 1. breached = backline_breached(...)          # latched to zone.breached
 2. if not breached and now < hold_until_ms:   return    # dwell blocks everything else
-3. if breached or overrun(...):               RETREAT one step
-4. elif not frontline_reached(...):           ADVANCE one step
-5. else:                                      HOLD
+3. if breached or overrun(...):               RETREAT one step   (geometry)
+4. elif verdict is WITHDRAW:                  RETREAT one step   (health)
+5. elif verdict is CLEAR
+        and not frontline_reached(...):       ADVANCE one step
+6. else:                                      HOLD
 ```
 
 A breach **outranks the dwell** — it is the only thing that can move the pin
 before `hold_until_ms`. Everything else waits.
+
+Geometry outranks health at every point. Health can add a step and it can veto
+closing; it can never delay an emergency. `HealthVerdict.HOLD` matches no branch
+and falls through to the hold — that *is* the veto.
+
+Both retreat branches call the same `give_ground()`, so the ceiling, the route
+and the spend-the-advance-first rule have one implementation whatever the reason
+for withdrawing.
 
 ### Retreat
 
@@ -307,10 +335,45 @@ before `hold_until_ms`. Everything else waits.
 - Retreat steps are **popped in reverse order** before any new ground is taken.
   Popping the stack is what retraces a dogleg withdrawal through the corner it
   went round instead of cutting across it.
-- Dwell after: flat `advance_hold_ms` (4000), at every blob size.
+- Dwell after: flat `advance_hold_ms` (1500), at every blob size.
 
-250u per 4s is roughly 22% of run speed — a deliberate creep onto a camped mob,
-not a charge.
+250u per 1.5s is roughly 58% of run speed — brisk enough to actually arrive at a
+camped mob, and an early step taken on a bad centroid is undone by the next one
+rather than sitting there for four seconds.
+
+### Health retreat — `health_retreat.py`
+
+Opt-in, off by default (`health_retreat_enabled`). Disabled still computes and
+publishes the verdict; the zone just receives `CLEAR`.
+
+Health cannot be a condition here. A ring releases itself — one step back moves
+it off the mob — while a health threshold is still true after the step, because
+backing up heals nobody. Left as a level test it ratchets to the distance cap and
+sits there. So health carries a **finite budget** instead:
+
+| Gate | Default | What it answers |
+|---|---|---|
+| `max_steps` | 3 (750u) | A level trigger never releasing |
+| living-only mean | — | A corpse reads 0.0 forever and pins the average down |
+| death as an *event* | — | Living-only means a death RAISES the mean and disarms |
+| `recover_margin` | 0.05 | A step that is already working must not spend another |
+
+Arm at `arm_fraction` (0.60), release at `release_fraction` (0.75). The **gap is
+the release condition**, and `apply_health_tuning` enforces a minimum of 5
+points between them whatever the sliders say — collapsed, health sitting on the
+threshold refills the budget every dwell and the ratchet is back.
+
+**No timer anywhere.** A timed refill is the ratchet rebuilt one refill at a time.
+
+`observe` / `verdict` / `spend` are three calls on purpose. The controller sits
+behind a 5-18s dwell and evaluates every frame in between, so a verdict that
+charged the budget as it answered would empty it in three frames and buy one 250u
+step for the whole fight. `zone.health_steps` is the signal the publisher charges
+against — the zone is what knows whether a step survived the dwell, the ceiling
+and the route.
+
+Ground given on health is retraced by the ordinary advance branch, through the
+same stack and the same dogleg. Nothing new gives it back.
 
 ### Dwell tiers
 
@@ -436,6 +499,14 @@ Section `FightRuntime`, via `Settings`.
 | `show_fight_zone_overlay` | `False` | 3D debug overlay |
 | `fight_zone_overlay_circles_only` | `False` | Draw only armed rings |
 | `engage_depth_u` | `538.0` | → `frontline_ring_fwd`, clamped to [250, 900] |
+| `health_retreat_enabled` | `False` | Apply the verdict. Off still publishes it |
+| `health_retreat_arm` | `60` | **Percent.** Below this, start giving ground |
+| `health_retreat_release` | `75` | **Percent.** Above this, the budget refills |
+| `health_retreat_steps` | `3` | Steps per episode — the hard bound, 750u |
+
+The health thresholds are stored as percentages because the INI is hand-edited
+and 60 is what everyone means by it; `apply_health_tuning` converts. `release` is
+floored at `arm + 5` whatever is saved.
 
 `FightLines.ini` holds per-character manual line overrides.
 
@@ -469,6 +540,15 @@ Breaking any of these produces behaviour that looks plausible and is wrong.
    package-root import closes the cycle.
 9. **The overlay reads only the published snapshot dict.** `ui_base` importing
    from `HeroAI.fight` at module scope would couple UI to engine startup.
+10. **Health never becomes a condition.** Every path that moves the pin on health
+    must spend from `max_steps`, and the budget must refill only on an observed
+    recovery past a strictly higher threshold. Replacing either with a timer, or
+    collapsing the arm/release gap, restores the infinite retreat.
+11. **`verdict()` never charges the budget.** Only `spend()` does, and only the
+    publisher calls it, only on a change in `zone.health_steps`.
+12. **The mean excludes the dead, and deaths are counted as events.** Either half
+    alone is wrong in the opposite direction — a raw mean arms forever, a
+    living-only mean disarms on the death it should be answering.
 
 ---
 
@@ -494,6 +574,12 @@ This is the entire debugging surface and the only thing the UI reads.
 | `escape_terrain_known` | Whether a navmesh probe was available at all |
 | `slots` | Per-member pins — **wanted positions, not resolved ones** |
 | `depth_clamped` | The formation was compressed to fit the reach budget |
+| `party_health` | Mean over the **living**. Corpses are excluded, not averaged in |
+| `party_alive`, `party_dead` | The census. Without it a depressed mean is unreadable |
+| `health_verdict` | `CLEAR` / `WITHDRAW` / `HOLD` — published even when disabled |
+| `health_enabled` | Whether the verdict is being applied or only watched |
+| `health_steps_used`, `health_max_steps` | Budget spent and its bound |
+| `health_arm`, `health_release` | The two thresholds, as applied after clamping |
 
 `escape_boxed_in` and `escape_terrain_known` are separate on purpose: "we
 searched and are trapped" and "we had no map" are different facts and the UI

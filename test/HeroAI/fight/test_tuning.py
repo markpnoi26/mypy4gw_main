@@ -3,6 +3,7 @@
 See .claude/skills/test-harness.md.
 """
 
+from HeroAI.fight import health_retreat
 from HeroAI.fight import publisher
 from HeroAI.fight import zone
 
@@ -43,6 +44,22 @@ def tune(values=None, times=1):
     finally:
         for name, value in saved.items():
             setattr(zone.ZONE_CFG, name, value)
+
+
+HEALTH_AUTHORED = publisher.AUTHORED_HEALTH_CFG
+HEALTH_FIELDS = ("enabled", "arm_fraction", "release_fraction", "max_steps")
+
+
+def tune_health(values=None):
+    """Apply and restore. HEALTH_CFG is the same object test_health_retreat reads,
+    so a leak here would fail a suite that never touched a slider."""
+    saved = {name: getattr(health_retreat.HEALTH_CFG, name) for name in HEALTH_FIELDS}
+    try:
+        publisher.apply_health_tuning(FakeCfg(values))
+        return {name: getattr(health_retreat.HEALTH_CFG, name) for name in HEALTH_FIELDS}
+    finally:
+        for name, value in saved.items():
+            setattr(health_retreat.HEALTH_CFG, name, value)
 
 
 def test_an_empty_config_leaves_the_authored_numbers_alone():
@@ -161,6 +178,77 @@ def test_a_native_failure_degrades_to_filtering_nothing():
         publisher.AgentArray = saved
 
 
+class DeathAwareAgent:
+    """Agent stand-in reproducing the real IsDead/IsAlive asymmetry.
+
+    Both return False when the living view cannot be resolved — that is the whole
+    trap. IsValid only asks whether the agent exists, and a corpse exists.
+    """
+
+    def __init__(self, alive, corpses, unreadable):
+        self.alive = set(alive)
+        self.corpses = set(corpses)
+        self.unreadable = set(unreadable)
+
+    def IsValid(self, agent_id):
+        return True
+
+    def IsDead(self, agent_id):
+        if agent_id in self.unreadable:
+            return False
+        return agent_id in self.corpses
+
+    def IsAlive(self, agent_id):
+        if agent_id in self.unreadable:
+            return False
+        return agent_id in self.alive
+
+
+class PassThroughAgentArray:
+    def __init__(self, ids):
+        self.ids = list(ids)
+        self.Filter = self
+
+    def GetEnemyArray(self):
+        return list(self.ids)
+
+    def ByCondition(self, agent_array, filter_func):
+        return [a for a in agent_array if filter_func(a)]
+
+    def ByDistance(self, agent_array, pos, max_distance):
+        return list(agent_array)
+
+
+def collect_enemies(alive, corpses, unreadable):
+    saved_agent, saved_array = publisher.Agent, publisher.AgentArray
+    publisher.Agent = DeathAwareAgent(alive, corpses, unreadable)
+    publisher.AgentArray = PassThroughAgentArray(list(alive) + list(corpses) + list(unreadable))
+    try:
+        return set(publisher.FightZonePublisher().collect_enemy_ids((0.0, 0.0)))
+    finally:
+        publisher.Agent, publisher.AgentArray = saved_agent, saved_array
+
+
+def test_corpses_never_reach_the_blob():
+    """A corpse in the enemy set holds the engagement open, re-forms the party on
+    a pile of bodies and never lets the fight end."""
+    assert collect_enemies(alive=[1, 2], corpses=[3, 4], unreadable=[]) == {1, 2}
+
+
+def test_an_unreadable_agent_is_dropped_rather_than_kept():
+    """The reason the test is IsAlive and not `not IsDead`.
+
+    Both answer False when the living view cannot be resolved, so the NEGATION
+    turns "cannot tell" into "keep it". IsValid does not save it — a corpse is a
+    perfectly valid agent.
+    """
+    agent = DeathAwareAgent(alive=[1], corpses=[], unreadable=[9])
+    assert agent.IsValid(9) and not agent.IsDead(9), "fixture must reproduce the trap"
+    assert agent.IsAlive(9) is False
+
+    assert collect_enemies(alive=[1], corpses=[], unreadable=[9]) == {1}
+
+
 def test_engage_reach_defaults_to_the_authored_tip():
     assert publisher.read_engage_reach(FakeCfg()) == AUTHORED.frontline_ring_tip
 
@@ -181,3 +269,90 @@ def test_reach_is_clamped_from_either_key():
     assert publisher.read_engage_reach(FakeCfg({"engage_reach_u": 5000.0})) == publisher.ENGAGE_REACH_MAX
     assert publisher.read_engage_reach(FakeCfg({"engage_depth_u": 4000.0})) == publisher.ENGAGE_REACH_MAX
     assert publisher.read_engage_reach(FakeCfg({"engage_reach_u": 10.0})) == publisher.ENGAGE_REACH_MIN
+
+
+def test_an_unreadable_map_id_is_not_a_zone_change():
+    """GetMapID returns 0 whenever the map is not ready, and IsMapReady can go
+    false for a frame during ordinary play. Treating that as a change wipes the
+    breadcrumb trail mid-fight and takes the long escape route with it."""
+    assert publisher.map_changed(400, 0) is False
+    assert publisher.map_changed(0, 0) is False
+
+
+def test_a_real_zone_change_is_detected_in_both_directions():
+    assert publisher.map_changed(400, 401) is True
+    assert publisher.map_changed(0, 400) is True, "first sighting after a load must reset too"
+    assert publisher.map_changed(400, 400) is False
+
+
+def test_resetting_map_state_drops_every_map_local_reading():
+    """Breadcrumbs and the safe spot are raw world coordinates. Carried across a
+    zone they plot a route through geometry that belongs to the map we left —
+    and the route moves the party now, so it is a walk into a wall."""
+    pub = publisher.FightZonePublisher()
+    pub.breadcrumbs.points.append((100.0, 200.0))
+    pub.safe_spot.xy = (300.0, 400.0)
+    pub.zone.retreat_steps.append((-250.0, 0.0))
+    pub.zone.advance = 500.0
+    pub.zone.state = zone.ZoneState.HOLDING
+    pub.last_approach_xy = (1.0, 2.0)
+
+    pub.reset_map_state()
+
+    assert pub.breadcrumbs.points == []
+    assert pub.safe_spot.xy is None
+    assert pub.zone.retreat_steps == []
+    assert pub.zone.advance == 0.0
+    assert pub.zone.state == zone.ZoneState.TRAVELING
+    assert pub.last_approach_xy is None
+
+
+def test_health_retreat_is_off_until_it_is_switched_on():
+    assert tune_health()["enabled"] is False
+    assert tune_health({"health_retreat_enabled": True})["enabled"] is True
+
+
+def test_an_empty_config_leaves_the_health_defaults_alone():
+    applied = tune_health()
+    for name in HEALTH_FIELDS:
+        assert applied[name] == getattr(HEALTH_AUTHORED, name), name
+
+
+def test_thresholds_are_stored_as_percentages_and_applied_as_fractions():
+    """The INI is hand-edited, so it holds 60 rather than 0.6. Reading a
+    percentage straight into the controller would arm it at 6000% and never."""
+    applied = tune_health({"health_retreat_arm": 40.0, "health_retreat_release": 65.0})
+    assert abs(applied["arm_fraction"] - 0.40) < 0.0001
+    assert abs(applied["release_fraction"] - 0.65) < 0.0001
+
+
+def test_the_release_threshold_cannot_be_dragged_onto_the_arm_threshold():
+    """The gap IS the release condition. Collapsed, health sitting on the
+    threshold refills the budget every dwell and the retreat ratchets again —
+    which is the entire failure the budget exists to prevent."""
+    applied = tune_health({"health_retreat_arm": 60.0, "health_retreat_release": 60.0})
+    gap = (applied["release_fraction"] - applied["arm_fraction"]) * 100.0
+    assert gap >= publisher.HEALTH_RELEASE_MIN_GAP - 0.0001, "gap collapsed to %.2f" % gap
+
+
+def test_the_gap_is_measured_against_the_saved_arm_not_the_default():
+    """An arm dragged above the default release is the case that breaks a floor
+    computed from the authored numbers."""
+    applied = tune_health({"health_retreat_arm": 85.0, "health_retreat_release": 70.0})
+    gap = (applied["release_fraction"] - applied["arm_fraction"]) * 100.0
+    assert gap >= publisher.HEALTH_RELEASE_MIN_GAP - 0.0001, "gap collapsed to %.2f" % gap
+
+
+def test_the_thresholds_stay_inside_their_own_range():
+    high = tune_health({"health_retreat_arm": 400.0, "health_retreat_release": 400.0})
+    assert high["arm_fraction"] <= publisher.HEALTH_ARM_MAX / 100.0
+    assert high["release_fraction"] <= publisher.HEALTH_RELEASE_MAX / 100.0
+    low = tune_health({"health_retreat_arm": -50.0})
+    assert abs(low["arm_fraction"] - (publisher.HEALTH_ARM_MIN / 100.0)) < 0.0001
+
+
+def test_the_budget_is_clamped_to_at_least_one_step():
+    """Zero would publish an armed retreat that can never step — a HOLD veto with
+    no withdrawal behind it, which reads as the feature being broken."""
+    assert tune_health({"health_retreat_steps": 0})["max_steps"] == publisher.HEALTH_STEPS_MIN
+    assert tune_health({"health_retreat_steps": 99})["max_steps"] == publisher.HEALTH_STEPS_MAX

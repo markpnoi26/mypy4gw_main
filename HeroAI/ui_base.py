@@ -1829,6 +1829,127 @@ class HeroAI_BaseUI:
         )
 
     @staticmethod
+    def draw_party_health(snapshot: dict) -> None:
+        """Mean health, the alive/dead split, and what the retreat budget is doing.
+
+        The split is the half that matters. A corpse reads 0% and never recovers,
+        so a mean that counts them says "losing" for the rest of a fight the party
+        is winning — and a readout showing only the mean cannot tell you that is
+        what happened.
+        """
+        health = float(snapshot.get("party_health", 1.0))
+        alive = int(snapshot.get("party_alive", 0))
+        dead = int(snapshot.get("party_dead", 0))
+        verdict = str(snapshot.get("health_verdict", "CLEAR"))
+        arm = float(snapshot.get("health_arm", 0.0))
+        release = float(snapshot.get("health_release", 1.0))
+        used = int(snapshot.get("health_steps_used", 0))
+        budget = int(snapshot.get("health_max_steps", 0))
+
+        PyImGui.text("Party HP")
+        PyImGui.same_line(0, 12)
+        ImGui.progress_bar(health, 180.0, 18.0, f"{health * 100.0:.0f}%")
+        PyImGui.same_line(0, 12)
+        census = f"{alive} alive" + (f", {dead} DEAD" if dead else "")
+        if dead:
+            PyImGui.text_colored(census, ColorPalette.GetColor("gw_gold").to_tuple_normalized())
+        else:
+            PyImGui.text_disabled(census)
+
+        if verdict == "WITHDRAW":
+            deaths = int(snapshot.get("health_pending_deaths", 0))
+            # A death and a level drop read identically once the step is taken,
+            # and want opposite reactions from whoever is watching this.
+            because = (
+                f"answering {deaths} death{'s' if deaths > 1 else ''}" if deaths else f"party under {arm * 100.0:.0f}%"
+            )
+            PyImGui.text_colored(
+                f"HEALTH RETREAT — {because}, {used} of {budget} steps given",
+                ColorPalette.GetColor("gw_gold").to_tuple_normalized(),
+            )
+        elif verdict == "HOLD":
+            PyImGui.text_colored(
+                f"BUDGET SPENT — {used} of {budget} steps given, standing until {release * 100.0:.0f}%",
+                ColorPalette.GetColor("red").to_tuple_normalized(),
+            )
+        elif used:
+            PyImGui.text_colored(
+                f"Recovering — {used} of {budget} steps given, releases at {release * 100.0:.0f}%",
+                ColorPalette.GetColor("dodger_blue").to_tuple_normalized(),
+            )
+        else:
+            PyImGui.text_disabled(f"Health retreat idle — arms below {arm * 100.0:.0f}%")
+
+        if not bool(snapshot.get("health_enabled", False)):
+            PyImGui.same_line(0, 10)
+            PyImGui.text_disabled("(watching only)")
+
+    @staticmethod
+    def draw_health_retreat_controls(cfg: Settings) -> None:
+        """The opt-in and the three numbers that bound it.
+
+        Same rule as the tuning sliders: every caption resolves into the quantity
+        it actually changes, because a threshold you have to read the source to
+        understand is one you will end up setting by guess.
+        """
+        from HeroAI.fight import publisher as fight_runtime
+
+        authored = fight_runtime.AUTHORED_HEALTH_CFG
+        step = float(fight_runtime.AUTHORED_ZONE_CFG.give_ground_step)
+
+        enabled = bool(cfg.get_bool("FightRuntime", fight_runtime.HEALTH_ENABLED_KEY, authored.enabled))
+        new_enabled = PyImGui.checkbox("Retreat on party health", enabled)
+        if new_enabled != enabled:
+            cfg.set_bool("FightRuntime", fight_runtime.HEALTH_ENABLED_KEY, new_enabled)
+            cfg.save()
+        PyImGui.text_disabled("Off still reads and reports the verdict — watch the bar above before switching it on.")
+
+        arm = HeroAI_BaseUI.tuned_float(
+            cfg,
+            fight_runtime.HEALTH_ARM_KEY,
+            "Back off below",
+            fight_runtime.HEALTH_ARM_MIN,
+            fight_runtime.HEALTH_ARM_MAX,
+            authored.arm_fraction * 100.0,
+            "%.0f%%",
+        )
+        release = HeroAI_BaseUI.tuned_float(
+            cfg,
+            fight_runtime.HEALTH_RELEASE_KEY,
+            "Recovered at",
+            fight_runtime.HEALTH_ARM_MIN + fight_runtime.HEALTH_RELEASE_MIN_GAP,
+            fight_runtime.HEALTH_RELEASE_MAX,
+            authored.release_fraction * 100.0,
+            "%.0f%%",
+        )
+        applied = max(release, arm + fight_runtime.HEALTH_RELEASE_MIN_GAP)
+        PyImGui.text_disabled(
+            f"Mean health of the LIVING. Below {arm:.0f}% the party gives ground; the budget comes back"
+            f" only above {applied:.0f}%."
+            + (
+                ""
+                if applied <= release
+                else f"  (raised from {release:.0f}% — the gap between the two is what stops it cycling)"
+            )
+        )
+
+        steps = int(cfg.get_int("FightRuntime", fight_runtime.HEALTH_STEPS_KEY, authored.max_steps))
+        new_steps = PyImGui.slider_int(
+            "Retreat budget##fight_health_steps",
+            steps,
+            fight_runtime.HEALTH_STEPS_MIN,
+            fight_runtime.HEALTH_STEPS_MAX,
+            "%d steps",
+        )
+        if new_steps != steps:
+            cfg.set_int("FightRuntime", fight_runtime.HEALTH_STEPS_KEY, int(new_steps))
+            cfg.save()
+        PyImGui.text_disabled(
+            f"The hard bound: health can move the pin at most {new_steps * step:.0f}u before it stops having a vote."
+            " A death spends one of these too, whatever the average says."
+        )
+
+    @staticmethod
     def _draw_fight_lines_tab() -> None:
         from HeroAI.fight.lines import NAME_BY_LINE
         from HeroAI.fight.lines import CombatLine
@@ -1888,6 +2009,8 @@ class HeroAI_BaseUI:
         PyImGui.text_disabled("Overlay works with the zone disabled — watch where lines form before switching it on.")
         if PyImGui.collapsing_header("Tuning"):
             HeroAI_BaseUI.draw_fight_tuning(cfg)
+        if PyImGui.collapsing_header("Health retreat"):
+            HeroAI_BaseUI.draw_health_retreat_controls(cfg)
 
         snapshot = hero_globals.fight_zone_debug_snapshot
         if snapshot is not None and bool(snapshot.get("released", False)):
@@ -1917,6 +2040,7 @@ class HeroAI_BaseUI:
                 f" then at most one per {float(snapshot.get('reaim_floor_ms', 0.0)) / 1000.0:.0f}s"
                 + (f"   (forced {forced}x)" if forced else "")
             )
+            HeroAI_BaseUI.draw_party_health(snapshot)
             health = float(snapshot.get("party_health", 1.0))
             given = float(snapshot.get("given_ground", 0.0))
             advance = float(snapshot.get("advance", 0.0))
@@ -2007,6 +2131,8 @@ class HeroAI_BaseUI:
                     else ColorPalette.GetColor("gw_gold").to_tuple_normalized()
                 ),
             )
+        elif not Map.IsExplorable():
+            PyImGui.text_disabled("Outpost — the fight zone only runs in explorable areas.")
         else:
             PyImGui.text_disabled("No fight zone right now (no party aggro, or both toggles off).")
 
@@ -2727,6 +2853,33 @@ class HeroAI_BaseUI:
                     x1, y1, z1 = resolved_route[i - 1]
                     x2, y2, z2 = resolved_route[i]
                     Overlay().DrawLine3D(x1, y1, z1, x2, y2, z2, escape_color, 2.5)
+
+            # Party health on the ground, behind the pin where the party stands.
+            # In a real fight nobody is reading the tab, and this is the number
+            # that explains a formation backing off a mob it was beating. Kept in
+            # the lean modes only while the retreat is doing something, same rule
+            # as the clamp warning below.
+            health_verdict = str(snapshot.get("health_verdict", "CLEAR"))
+            if labelled or health_verdict != "CLEAR":
+                health_facing = float(snapshot.get("facing", 0.0))
+                hx = ax - (math.cos(health_facing) * 200.0)
+                hy = ay - (math.sin(health_facing) * 200.0)
+                dead = int(snapshot.get("party_dead", 0))
+                health_label = f"HP {float(snapshot.get('party_health', 1.0)) * 100.0:.0f}%"
+                if dead:
+                    health_label += f"  ({dead} dead)"
+                if health_verdict == "HOLD":
+                    health_label += "  budget spent"
+                Overlay().DrawText3D(
+                    hx,
+                    hy,
+                    Overlay().FindZ(hx, hy, 0),
+                    health_label,
+                    {
+                        "WITHDRAW": Utils.RGBToColor(255, 200, 60, 255),
+                        "HOLD": Utils.RGBToColor(255, 80, 80, 255),
+                    }.get(health_verdict, Utils.RGBToColor(220, 220, 220, 230)),
+                )
 
             clamped = bool(snapshot.get("depth_clamped", False))
             # A clamped depth still gets its label in the lean modes: it is a

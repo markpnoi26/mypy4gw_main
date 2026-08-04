@@ -15,6 +15,7 @@ from dataclasses import field
 import HeroAI.globals as hero_globals
 from Core import Agent
 from Core import AgentArray
+from Core import Map
 from Core import Range
 from Core import ThrottledTimer
 from Core.py4gwcorelib_src.Settings import Settings
@@ -34,6 +35,13 @@ from .escape import plot_escape
 from .formation import CAST_RANGE
 from .formation import FightFormationLoader
 from .formation import rotate_fight_local_to_world
+from .health_retreat import HEALTH_CFG
+from .health_retreat import HealthRetreatConfig
+from .health_retreat import HealthRetreatState
+from .health_retreat import HealthVerdict
+from .health_retreat import observe as observe_health
+from .health_retreat import spend as spend_health
+from .health_retreat import verdict as health_verdict
 from .lines import CombatLine
 from .lines import LineSource
 from .lines import ResolvedLine
@@ -106,11 +114,30 @@ REAIM_RESPONSE_KEY = "reaim_responsiveness"
 SCALE_MIN = 0.5
 SCALE_MAX = 2.0
 
+# --- Health retreat ----------------------------------------------------------
+HEALTH_ENABLED_KEY = "health_retreat_enabled"
+HEALTH_ARM_KEY = "health_retreat_arm"
+HEALTH_RELEASE_KEY = "health_retreat_release"
+HEALTH_STEPS_KEY = "health_retreat_steps"
+# Stored as percentages. The INI is hand-edited and 60 is what everyone means by
+# it; the controller works in fractions and apply_health_tuning converts.
+HEALTH_ARM_MIN = 20.0
+HEALTH_ARM_MAX = 90.0
+HEALTH_RELEASE_MAX = 95.0
+# The gap between arm and release IS the release condition. Collapsed to zero,
+# health sitting on the threshold cycles the budget every dwell and the retreat
+# ratchets again — which is the whole thing the budget exists to prevent. So the
+# sliders cannot express it, whatever the two are set to.
+HEALTH_RELEASE_MIN_GAP = 5.0
+HEALTH_STEPS_MIN = 1
+HEALTH_STEPS_MAX = 6
+
 # The authored numbers, captured before anything writes over them. Sliders scale
 # THESE and never ZONE_CFG's current contents: reload_runtime runs once a second
 # against a config it has already written to, so a scale folded back onto its own
 # output compounds — a 1.5x recover dwell reaches an hour inside twenty minutes.
 AUTHORED_ZONE_CFG = ZoneConfig()
+AUTHORED_HEALTH_CFG = HealthRetreatConfig()
 
 
 def clamp(value, low, high):
@@ -177,6 +204,30 @@ def apply_tuning(cfg: Settings) -> None:
     ZONE_CFG.reaim_commit_ms = int(AUTHORED_ZONE_CFG.reaim_commit_ms / response)
     ZONE_CFG.min_facing_recompute_ms = int(AUTHORED_ZONE_CFG.min_facing_recompute_ms / response)
 
+    apply_health_tuning(cfg)
+
+
+def apply_health_tuning(cfg: Settings) -> None:
+    HEALTH_CFG.enabled = bool(cfg.get_bool(RUNTIME_SECTION, HEALTH_ENABLED_KEY, AUTHORED_HEALTH_CFG.enabled))
+
+    arm = clamp(
+        float(cfg.get_float(RUNTIME_SECTION, HEALTH_ARM_KEY, AUTHORED_HEALTH_CFG.arm_fraction * 100.0)),
+        HEALTH_ARM_MIN,
+        HEALTH_ARM_MAX,
+    )
+    # Floored against the ARM the user actually set, not against the default, so
+    # the gap survives any pair of saved values.
+    release = clamp(
+        float(cfg.get_float(RUNTIME_SECTION, HEALTH_RELEASE_KEY, AUTHORED_HEALTH_CFG.release_fraction * 100.0)),
+        arm + HEALTH_RELEASE_MIN_GAP,
+        HEALTH_RELEASE_MAX,
+    )
+    HEALTH_CFG.arm_fraction = arm / 100.0
+    HEALTH_CFG.release_fraction = release / 100.0
+
+    steps = int(cfg.get_int(RUNTIME_SECTION, HEALTH_STEPS_KEY, AUTHORED_HEALTH_CFG.max_steps))
+    HEALTH_CFG.max_steps = int(clamp(steps, HEALTH_STEPS_MIN, HEALTH_STEPS_MAX))
+
 
 def collect_spirit_ids() -> set[int]:
     """Spirits, which are not part of the fight blob.
@@ -203,11 +254,15 @@ def collect_spirit_ids() -> set[int]:
         return set()
 
 
-def mean_party_health(party_health: dict[int, float]) -> float:
-    """1.0 when nothing is known: an absent reading must never argue for retreat."""
-    if not party_health:
-        return 1.0
-    return sum(party_health.values()) / len(party_health)
+def map_changed(previous: int, current: int) -> bool:
+    """Zero is "cannot tell right now", not a new map.
+
+    GetMapID returns 0 whenever the map is not ready, and IsMapReady can go false
+    for a frame during ordinary play. Reading that as a zone change would wipe
+    the breadcrumb trail mid-fight and take the long escape route with it —
+    exactly when the party is most likely to need it.
+    """
+    return bool(current) and current != previous
 
 
 def party_centroid(
@@ -255,6 +310,7 @@ class FightZonePublisher:
         self.breadcrumbs = Breadcrumbs()
         self.engagement = EngagementState()
         self.escape = EscapeState()
+        self.health = HealthRetreatState()
         self.last_approach_xy: tuple[float, float] | None = None
         self.formation_loader = FightFormationLoader()
         self.assignment = AssignmentLatch()
@@ -265,6 +321,8 @@ class FightZonePublisher:
         self.resolved_by_character: dict[str, ResolvedLine] = {}
         self.last_party_health: dict[int, float] = {}
         self.last_zone_inputs: ZoneInputs | None = None
+        self.last_health_verdict = HealthVerdict.CLEAR
+        self.last_map_id = 0
 
     def runtime_cfg(self) -> Settings:
         return Settings(f"{RUNTIME_INI_PATH}/{RUNTIME_INI_NAME}", "global")
@@ -287,6 +345,20 @@ class FightZonePublisher:
             hero_globals.fight_zone_overlay_detail = self.runtime.overlay_detail
         except Exception:
             pass
+
+    def reset_map_state(self) -> None:
+        """Drop everything that only means something on the map we just left."""
+        self.breadcrumbs.clear()
+        self.safe_spot.clear()
+        self.escape.clear()
+        self.engagement.reset()
+        self.health.release()
+        self.assignment.clear()
+        self.last_approach_xy = None
+        self.zone.state = ZoneState.TRAVELING
+        self.zone.retreat_steps.clear()
+        self.zone.advance = 0.0
+        self.zone.health_steps = 0
 
     def report_build_line(self, character_name: str, line: CombatLine) -> None:
         """Followers report their build-declared line; only their own client knows
@@ -316,10 +388,13 @@ class FightZonePublisher:
             ids = AgentArray.GetEnemyArray()
         except Exception:
             return []
-        ids = AgentArray.Filter.ByCondition(
-            ids,
-            lambda aid: Agent.IsValid(int(aid)) and not Agent.IsDead(int(aid)),
-        )
+        # IsAlive, never `not IsDead`. Both return False when the living view
+        # cannot be resolved, so the NEGATION turns "cannot tell" into "keep it"
+        # and corpses ride into the blob — which holds the engagement open, keeps
+        # re-forming the party on a pile of bodies, and never lets the fight end.
+        # IsValid does not save it either: it only asks whether the agent exists,
+        # and a corpse is a perfectly valid agent.
+        ids = AgentArray.Filter.ByCondition(ids, lambda aid: Agent.IsAlive(int(aid)))
         ids = AgentArray.Filter.ByDistance(ids, leader_xy, float(ZONE_CFG.engagement_scan_radius))
         return [int(agent_id) for agent_id in ids]
 
@@ -364,6 +439,25 @@ class FightZonePublisher:
         self.last_party_health = party_health
         self.reload_runtime()
 
+        # Everything this publisher holds is MAP-LOCAL. Breadcrumbs and the safe
+        # spot are raw world coordinates, so carrying them through a zone plots
+        # an escape route across geometry belonging to the map we just left — and
+        # the route now moves the party, so that is a walk into a wall rather
+        # than a wrong drawing.
+        current_map = Map.GetMapID()
+        if map_changed(self.last_map_id, current_map):
+            self.last_map_id = current_map
+            self.reset_map_state()
+
+        # Outposts have nothing to hold a formation for, and the overlay was
+        # still drawing over town. Gated before the safe spot and the trail so
+        # town coordinates never enter either.
+        if not Map.IsExplorable():
+            self.zone.state = ZoneState.TRAVELING
+            self.plan = FightPlan(zone=self.zone)
+            hero_globals.fight_zone_debug_snapshot = None
+            return self.plan
+
         # Track the PARTY centroid, not the leader. A leader jinks back and
         # forth while pulling and repositioning; the blob as a whole travels in
         # one coherent direction, which is the axis the formation wants.
@@ -386,6 +480,7 @@ class FightZonePublisher:
             self.zone.state = ZoneState.TRAVELING
             self.assignment.clear()
             self.escape.clear()
+            self.health.release()
             self.plan = FightPlan(zone=self.zone)
             hero_globals.fight_zone_debug_snapshot = None
             return self.plan
@@ -433,6 +528,13 @@ class FightZonePublisher:
 
         formation = self.formation_loader.get()
 
+        # Read every tick and decide every tick; the budget is charged only if
+        # the zone actually takes the step below. Disabled publishes the real
+        # verdict to the snapshot but hands the zone a CLEAR, which is the same
+        # dry run the zone itself shipped with.
+        observe_health(self.health, party_health)
+        self.last_health_verdict = health_verdict(self.health, HEALTH_CFG)
+
         zone_inputs = ZoneInputs(
             leader_xy=leader_xy,
             enemy_positions=enemy_positions,
@@ -448,14 +550,22 @@ class FightZonePublisher:
             retreat_distance=self.escape.route.distance if self.escape.route is not None else 0.0,
             midline_depth=formation.midline_depth(),
             backline_depth=formation.backline_depth(),
+            health_verdict=self.last_health_verdict if HEALTH_CFG.enabled else HealthVerdict.CLEAR,
         )
+        health_steps_before = self.zone.health_steps
         tick_zone(self.zone, ZONE_CFG, zone_inputs)
+        # The zone is what knows whether the step survived the dwell, the ceiling
+        # and the route, so it is what the budget is charged against — never the
+        # verdict, which is answered on every frame of a dwell it cannot act in.
+        if self.zone.health_steps != health_steps_before:
+            spend_health(self.health)
         self.last_zone_inputs = zone_inputs
 
         if not self.zone.is_active():
             if was_active:
                 self.assignment.clear()
             self.escape.clear()
+            self.health.release()
             self.plan = FightPlan(zone=self.zone)
             hero_globals.fight_zone_debug_snapshot = None
             return self.plan
@@ -554,7 +664,22 @@ class FightZonePublisher:
             "closing": self.zone.closing,
             "given_ground": given_ground(self.zone),
             "advance": self.zone.advance,
-            "party_health": mean_party_health(self.last_party_health),
+            # Living-only. A corpse reads 0.0 and never recovers, so averaging
+            # them in caps an eight-man party at 0.75 with two down and makes the
+            # readout say "losing" for the rest of a fight it is winning.
+            "party_health": self.health.last_mean,
+            "party_alive": self.health.alive,
+            "party_dead": self.health.dead,
+            "health_verdict": self.last_health_verdict.name,
+            "health_enabled": HEALTH_CFG.enabled,
+            # Why it armed. A level drop and a death produce the same verdict and
+            # want opposite responses from whoever is watching, so the readout has
+            # to be able to tell them apart.
+            "health_pending_deaths": self.health.pending_deaths,
+            "health_steps_used": self.health.steps_used,
+            "health_max_steps": HEALTH_CFG.max_steps,
+            "health_arm": HEALTH_CFG.arm_fraction,
+            "health_release": HEALTH_CFG.release_fraction,
             "blob": blob_centre,
             "blob_depth": blob_front_depth,
             "rings": rings,

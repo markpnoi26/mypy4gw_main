@@ -10,6 +10,7 @@ from enum import IntEnum
 from Core import Range
 
 from .breadcrumbs import sample_at
+from .health_retreat import HealthVerdict
 
 
 class ZoneState(IntEnum):
@@ -296,6 +297,12 @@ class FightZone:
     hold_until_ms: int = 0
     giving_ground: bool = False
     closing: bool = False
+    # Steps taken on the health verdict this fight, counted so the publisher can
+    # charge the budget off a CHANGE in it. The zone is what knows whether a step
+    # survived the dwell, the ceiling and the route; the verdict is answered on
+    # every frame of a dwell it cannot act in, so charging there empties the
+    # budget in three frames.
+    health_steps: int = 0
     # Blob centre of mass is inside the backline ring. Latched each tick so the
     # tab can show the emergency without recomputing the test.
     breached: bool = False
@@ -876,14 +883,34 @@ def ground_dwell_ms(cfg: ZoneConfig, inputs: "ZoneInputs", tiers: tuple[float, .
     return int(tier_for(tiers, len(blob)))
 
 
+def give_ground(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs", hold_ms: int) -> bool:
+    """One step back along the escape route, or False if there is nowhere to go.
+
+    Shared by the geometric trip and the health verdict. Whatever the reason for
+    withdrawing, the ceiling, the route and the spend-the-advance-first rule are
+    the same, and a second copy of them is a second place to get them wrong.
+    """
+    ceiling = ground_ceiling(cfg, inputs)
+    step = min(cfg.give_ground_step, max(0.0, ceiling - given_ground(zone)))
+    vector = retreat_step_vector(inputs, step)
+    if vector is None:
+        return False
+    if zone.advance > 0.0:
+        zone.advance = max(0.0, zone.advance - cfg.give_ground_step)
+    else:
+        zone.retreat_steps.append(vector)
+    zone.hold_until_ms = inputs.now_ms + hold_ms
+    return True
+
+
 def adjust_ground(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> None:
     """Back off, close, or hold — one deliberate move, then sit.
 
-    Three rings decide everything, tested against the blob in the formation's
-    own frame. PURELY GEOMETRIC — health deliberately has no vote. The readings
-    are not yet trusted, and a wrong one here either routs a winning party or
-    pins a losing one; they are published for the tab so they can be watched
-    until they are.
+    Three rings decide the geometry, tested against the blob in the formation's
+    own frame, and they outrank everything. Health enters only BELOW them, as a
+    pre-decided verdict carrying its own finite budget — see health_retreat.py
+    for why it cannot be a condition here. It can add a step and it can veto
+    closing; it can never delay an emergency.
 
     RETREAT on the midline ring, whose forward tip sits ahead of the mid rank,
     and again — harder, and without waiting out the dwell — on the backline
@@ -891,9 +918,12 @@ def adjust_ground(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> Non
     midline tip is the shallower of the pair, so the soft step always gets its
     chance before the emergency does.
 
-    CLOSE while the blob's centre of mass is still OUTSIDE the frontline ring,
-    one step per dwell. Self-limiting: every step drags the ring forward onto the
-    mob, so closing stops as soon as the centre of the pack is in reach.
+    Then RETREAT again on a WITHDRAW verdict, on the ordinary recover dwell.
+
+    CLOSE while the blob's centre of mass is still OUTSIDE the frontline ring
+    and health has no objection, one step per dwell. Self-limiting: every step
+    drags the ring forward onto the mob, so closing stops as soon as the centre
+    of the pack is in reach.
 
     HOLD otherwise, and always for the dwell after any move — one deliberate
     move, then long enough for heals to land and the mob to re-form in front,
@@ -910,18 +940,19 @@ def adjust_ground(zone: FightZone, cfg: ZoneConfig, inputs: "ZoneInputs") -> Non
         return
 
     if breached or overrun(zone, cfg, inputs):
-        ceiling = ground_ceiling(cfg, inputs)
-        step = min(cfg.give_ground_step, max(0.0, ceiling - given_ground(zone)))
-        vector = retreat_step_vector(inputs, step)
-        if vector is not None:
-            if zone.advance > 0.0:
-                zone.advance = max(0.0, zone.advance - cfg.give_ground_step)
-            else:
-                zone.retreat_steps.append(vector)
-            zone.hold_until_ms = inputs.now_ms + (
-                cfg.breach_hold_ms if breached else ground_dwell_ms(cfg, inputs, cfg.recover_hold_tiers_ms)
-            )
-    elif not frontline_reached(zone, cfg, inputs):
+        give_ground(
+            zone,
+            cfg,
+            inputs,
+            cfg.breach_hold_ms if breached else ground_dwell_ms(cfg, inputs, cfg.recover_hold_tiers_ms),
+        )
+    elif inputs.health_verdict is HealthVerdict.WITHDRAW:
+        if give_ground(zone, cfg, inputs, ground_dwell_ms(cfg, inputs, cfg.recover_hold_tiers_ms)):
+            zone.health_steps += 1
+    # A HOLD verdict matches nothing and falls through to the hold below. That is
+    # the veto: the party stands and fights where it got to rather than creeping
+    # back into a fight it is losing.
+    elif inputs.health_verdict is HealthVerdict.CLEAR and not frontline_reached(zone, cfg, inputs):
         # Give back the way out first, retracing it exactly, before pushing past
         # the authored position. Popping the stack is what stops a dogleg
         # withdrawal being unwound through the corner it went round.
@@ -987,6 +1018,10 @@ class ZoneInputs:
     midline_depth: float = 320.0
     # Depth of the rear rank, where the panic ring is centred. Same reasoning.
     backline_depth: float = 620.0
+    # What the party's own health wants, already decided and already budgeted.
+    # CLEAR by default, so a caller that does not fill it gets exactly the
+    # geometric controller this was before.
+    health_verdict: HealthVerdict = HealthVerdict.CLEAR
 
 
 def enter_state(zone: FightZone, state: ZoneState, now_ms: int) -> None:
@@ -1013,6 +1048,7 @@ def tick_zone(zone: FightZone, cfg: ZoneConfig, inputs: ZoneInputs) -> FightZone
             zone.hold_until_ms = 0
             zone.giving_ground = False
             zone.closing = False
+            zone.health_steps = 0
             zone.anchor_x, zone.anchor_y = anchor_and_facing(zone, cfg, inputs)
             enter_state(zone, ZoneState.ENGAGING, now)
         return zone

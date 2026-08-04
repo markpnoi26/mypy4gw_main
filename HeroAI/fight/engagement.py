@@ -55,7 +55,10 @@ def hostile_pressure(
     """An enemy close by that is actually swinging or casting."""
     for agent_id in enemy_ids:
         try:
-            if not Agent.IsValid(agent_id) or Agent.IsDead(agent_id):
+            # Positive test. `not IsDead` reads True for an agent whose living
+            # view cannot be resolved, so a corpse counts as hostile pressure and
+            # the engagement never releases. See collect_enemy_ids.
+            if not Agent.IsAlive(agent_id):
                 continue
             x, y = Agent.GetXY(agent_id)
             if math.hypot(float(x) - leader_xy[0], float(y) - leader_xy[1]) > cfg.engage_radius:

@@ -8,6 +8,7 @@ See .claude/skills/test-harness.md.
 import math
 
 from HeroAI.fight import zone
+from HeroAI.fight.health_retreat import HealthVerdict
 
 CFG = zone.ZONE_CFG
 
@@ -290,3 +291,94 @@ def test_advance_uses_a_flat_cadence_at_every_blob_size():
     assert len(set(holds)) == 1, "advance dwell varied with blob size: %s" % holds
     retreat = [zone.tier_for(CFG.recover_hold_tiers_ms, size) for size in (1, 2, 3, 6)]
     assert len(set(retreat)) > 1, "retreat dwell should still be tiered: %s" % retreat
+
+
+# --- health verdict ----------------------------------------------------------
+# The verdict arrives already decided and already budgeted (health_retreat.py).
+# What is tested here is only where it sits in the precedence order.
+
+FAR = [(2400.0, 0.0), (2480.0, 0.0), (2560.0, 0.0)]
+
+
+def test_the_health_verdict_defaults_to_clear():
+    """Every caller that predates this gets the geometric controller unchanged."""
+    assert (
+        zone.ZoneInputs(
+            leader_xy=(0.0, 0.0),
+            enemy_positions=[],
+            party_in_aggro=True,
+            leader_local_aggro=True,
+            loot_pending=False,
+            members_in_position=True,
+            now_ms=0,
+        ).health_verdict
+        is HealthVerdict.CLEAR
+    )
+
+
+def test_geometry_outranks_the_health_verdict():
+    """A breach and a WITHDRAW must not compound into two steps, and the breach
+    dwell must win — health can add a step, never delay an emergency."""
+    z = zone_at()
+    deep = [local_to_world(-620.0, 0.0)]
+    zone.adjust_ground(z, CFG, inputs(deep, now_ms=100000, health_verdict=HealthVerdict.WITHDRAW, **ROUTE))
+
+    assert len(z.retreat_steps) == 1
+    assert z.hold_until_ms == 100000 + CFG.breach_hold_ms
+    assert z.health_steps == 0, "the geometry took that step, so the budget must not be charged"
+
+
+def test_a_withdraw_verdict_outranks_the_advance():
+    """The case the feature exists for: the blob is positioned fine — far enough
+    out that the party would otherwise close on it — and the party is losing."""
+    z = zone_at()
+    assert zone.frontline_reached(z, CFG, inputs(FAR)) is False
+
+    inp = inputs(FAR, now_ms=100000, health_verdict=HealthVerdict.WITHDRAW, **ROUTE)
+    zone.adjust_ground(z, CFG, inp)
+
+    assert abs(zone.given_ground(z) - CFG.give_ground_step) < 1.0
+    assert z.advance == 0.0, "it must give ground, not take it"
+    assert z.health_steps == 1
+    assert z.hold_until_ms == 100000 + zone.ground_dwell_ms(CFG, inp, CFG.recover_hold_tiers_ms)
+
+
+def test_a_hold_verdict_vetoes_the_advance_and_moves_nothing():
+    """The state a spent budget lands in. It must not creep forward, and it must
+    not be a slower retreat either — nothing moves at all."""
+    z = zone_at()
+    before = (z.anchor_x, z.anchor_y)
+    for tick in range(5):
+        zone.adjust_ground(
+            z, CFG, inputs(FAR, now_ms=100000 + (tick * 60000), health_verdict=HealthVerdict.HOLD, **ROUTE)
+        )
+
+    assert z.retreat_steps == []
+    assert z.advance == 0.0
+    assert z.health_steps == 0
+    assert (z.anchor_x, z.anchor_y) == before
+
+
+def test_a_health_withdrawal_is_retraced_by_the_ordinary_advance():
+    """Nothing new gives the ground back. Once health stops objecting the blob is
+    outside the frontline ring, so the existing advance branch pops the same
+    stack — which is what stops a health retreat being one-way."""
+    z = zone_at()
+    zone.adjust_ground(z, CFG, inputs(FAR, now_ms=100000, health_verdict=HealthVerdict.WITHDRAW, **ROUTE))
+    withdrawn = zone.given_ground(z)
+    assert withdrawn > 0.0
+
+    zone.adjust_ground(z, CFG, inputs(FAR, now_ms=400000, health_verdict=HealthVerdict.CLEAR, **ROUTE))
+    assert z.retreat_steps == []
+    assert zone.given_ground(z) < withdrawn
+
+
+def test_a_health_step_is_still_capped_by_the_route():
+    """Health does not get its own ceiling. Boxed in with no route means no step,
+    and the counter must not move either — a charge for a step never taken would
+    spend the budget on nothing."""
+    z = zone_at()
+    zone.adjust_ground(z, CFG, inputs(FAR, now_ms=100000, health_verdict=HealthVerdict.WITHDRAW))
+
+    assert z.retreat_steps == []
+    assert z.health_steps == 0

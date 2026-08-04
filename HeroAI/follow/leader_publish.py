@@ -503,6 +503,7 @@ class FollowFormationPublisher:
         user did". Without it the zone would read its own flag back as manual.
         """
         from HeroAI.fight.assignment import MemberLine
+        from HeroAI.fight.health_retreat import health_fraction
 
         manual_all_flag = (
             bool(leader_options.IsFlagged)
@@ -537,10 +538,9 @@ class FollowFormationPublisher:
             resolved = publisher.resolve_member_line(character_name, primary_profession)
             member_lines.append(MemberLine(party_position, character_name, resolved.line))
             member_positions.append((party_position, (float(account.AgentData.Pos.x), float(account.AgentData.Pos.y))))
-            health = account.AgentData.Health
-            max_health = float(getattr(health, "Max", 0.0) or 0.0)
-            if max_health > 0.0:
-                party_health[party_position] = float(getattr(health, "Current", 0.0)) / max_health
+            fraction = health_fraction(account.AgentData.Health)
+            if fraction is not None:
+                party_health[party_position] = fraction
             party_target_ids[party_position] = int(getattr(account.AgentData, "TargetID", 0) or 0)
 
         plan = publisher.tick(
