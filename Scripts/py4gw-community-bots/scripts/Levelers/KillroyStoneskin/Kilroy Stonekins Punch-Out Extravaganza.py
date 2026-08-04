@@ -127,7 +127,8 @@ def main():
     draw_window(bot)
     path = os.path.join(
         PySystem.Console.get_projects_path(),
-        "Sources",
+        "dev",
+        "reference",
         "ApoSource",
         "textures",
         "Kilroy Stonekins Punch-Out Extravaganza-art.png",
