@@ -852,7 +852,12 @@ class Player:
             cleaned = dialog_id.strip().lower().replace("0x", "")
             dialog = int(cleaned, 16)
 
-        ActionQueueManager().AddAction("ACTION", Player.player_instance().SendDialog, dialog)
+        # Routed through the raw kSendAgentDialog message rather than PyPlayer.SendDialog:
+        # player_instance() hands back a fresh PyPlayer whose def_readonly members are only
+        # populated by GetContext(), which nothing calls, so the binding has no target to
+        # send to and silently does nothing. Verified live — SendRawDialog(0x84) works where
+        # PyPlayer.SendDialog(0x84) does not.
+        Player.SendRawDialog(dialog)
 
     @staticmethod
     def SendAutomaticDialog(button_number: int):
