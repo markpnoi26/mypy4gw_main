@@ -55,7 +55,8 @@ def load(cfg: OverlayConfig) -> None:
     if s is None:
         return
 
-    cfg.mode = OverlayMode(s.get_str("general", "mode", cfg.mode.value))
+    stored_mode = s.get_str("general", "mode", cfg.mode.value)
+    cfg.mode = next((m for m in OverlayMode if m.value == stored_mode), cfg.mode)
     cfg.spirit_alpha = s.get_int("general", "spirit_alpha", cfg.spirit_alpha)
     cfg.show_spirit_range = s.get_bool("general", "show_spirit_range", cfg.show_spirit_range)
     cfg.boss_profession_colors = s.get_bool("general", "boss_profession_colors", cfg.boss_profession_colors)
