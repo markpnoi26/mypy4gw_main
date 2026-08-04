@@ -11,7 +11,7 @@ from Core import (
     Range,
     Utils,
 )
-from Core.Builds.CombatAutomatorExcluded.SF_Derv_Runner import SF_Derv_Runner
+from Core.BTBuilds.FarmBuilds.Dervish.D_A.SF_Derv_Runner import SF_Derv_Runner
 import Py4GW
 import os
 import re
@@ -21,7 +21,7 @@ import PyImGui
 import importlib.util
 
 projects_base_path = PySystem.Console.get_projects_path()
-ac_folder_path = os.path.join(projects_base_path, "Sources", "aC_Scripts")
+ac_folder_path = os.path.join(projects_base_path, "dev", "reference", "aC_Scripts")
 from dev.reference.aC_Scripts.aC_api import *
 
 RUNS_DIR = os.path.join(ac_folder_path, "OutpostRunner", "maps")
@@ -40,6 +40,10 @@ class BotSettings:
         "Return to outpost on defeat",
     )
     WIDGETS_TO_DISABLE: tuple[str, ...] = ("HeroAI",)
+
+
+PARTY_REGROUP_TIMEOUT_MS = 45000
+PARTY_REGROUP_POLL_MS = 1000
 
 
 bot = Botting(
@@ -133,8 +137,7 @@ def bot_routine(bot: Botting) -> None:
         bot.Multibox.KickAllAccounts()
         bot.Map.Travel(target_map_id=run.outpost_id)
         bot.Multibox.SummonAllAccounts()
-        bot.Wait.ForTime(4000)
-        bot.Multibox.InviteAllAccounts()
+        bot.States.AddCustomState(lambda: regroup_party(bot), f"RegroupParty_{run_idx}")
         bot.Party.SetHardMode(False)
         bot.Items.Restock.WarSupplies()
         bot.Items.Restock.BirthdayCupcake()
@@ -162,6 +165,41 @@ def bot_routine(bot: Botting) -> None:
     bot.States.AddHeader("All Runs Finished")
     bot.UI.PrintMessageToConsole(BotSettings.BOT_NAME, "All runs finished. Bot Stopped.")
     bot.States.AddCustomState(lambda: _stop_bot(), "StopBot")
+
+
+def regroup_party(bot: Botting):
+    """Keep inviting until every account is actually in the party.
+
+    Multibox._invite_all_accounts only invites accounts already standing in the leader's
+    map, and never revisits the ones it skipped. A single fixed wait after SummonAllAccounts
+    is a guess at how long a map load takes, so any account that loads slower stays kicked
+    for the rest of the run. Poll instead, and re-invite as stragglers arrive.
+
+    Invite first, check second: shared memory still reports the pre-kick PartyID for a few
+    frames, so an immediate check would see everyone as present and return without inviting.
+    """
+    helpers = bot.helpers.Multibox
+    deadline = time.time() + PARTY_REGROUP_TIMEOUT_MS / 1000.0
+
+    while time.time() < deadline:
+        yield from helpers._invite_all_accounts()
+        yield from Routines.Yield.wait(PARTY_REGROUP_POLL_MS)
+
+        player_data = helpers._get_player_data()
+        if player_data and not accounts_outside_party(helpers, player_data):
+            return
+
+    player_data = helpers._get_player_data()
+    stragglers = [a.CharacterName for a in accounts_outside_party(helpers, player_data)] if player_data else []
+    ConsoleLog(
+        BotSettings.BOT_NAME,
+        f"Regroup gave up after {PARTY_REGROUP_TIMEOUT_MS}ms; still outside the party: {stragglers or 'unknown'}",
+        PySystem.Console.MessageType.Warning,
+    )
+
+
+def accounts_outside_party(helpers, player_data):
+    return [a for a in helpers._get_all_account_data() if a.PartyID != player_data.PartyID]
 
 
 def _stop_bot():
