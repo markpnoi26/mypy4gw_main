@@ -1,22 +1,28 @@
 from typing import Optional
+
 import Py4GW
 import PyImGui
 import PySystem
 
-from Core import Timer, UIManager
 from Core import GLOBAL_CACHE
-from Core import ImGui
-from Core import ThemeTextures
-from Core import Style
-from Core import Map
+from Core import Color
+from Core import ColorPalette
 from Core import IconsFontAwesome5
-from Core import Color, ColorPalette
+from Core import ImGui
 from Core import JsonFactory
-
-from Core.ImGui_src.types import Alignment
-from Core.Py4GWcorelib import ConsoleLog, ThrottledTimer, Utils
+from Core import Map
+from Core import Style
+from Core import ThemeTextures
+from Core import Timer
+from Core import UIManager
 from Core.enums import Key
-from Core.py4gwcorelib_src.WidgetManager import Widget, WidgetHandler, get_widget_handler
+from Core.ImGui_src.types import Alignment
+from Core.Py4GWcorelib import ConsoleLog
+from Core.Py4GWcorelib import ThrottledTimer
+from Core.Py4GWcorelib import Utils
+from Core.py4gwcorelib_src.WidgetManager import Widget
+from Core.py4gwcorelib_src.WidgetManager import WidgetHandler
+from Core.py4gwcorelib_src.WidgetManager import get_widget_handler
 
 MODULE_ALIASES = ['Guild Wars/Travel.py']
 MODULE_NAME = "Travel"
@@ -830,7 +836,7 @@ def _ensure_commands():
         ChatCommands.register(
             "travel",
             _chat_travel,
-            aliases=["tp"],
+            aliases=["to"],
             help="Travel to an outpost: /travel <name|initials|id> (no arg opens the window).",
         )
         _commands_registered = True
