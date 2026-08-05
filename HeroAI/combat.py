@@ -568,6 +568,25 @@ class CombatClass:
             source="leader_selected",
         )
 
+    def _may_call_targets(self) -> bool:
+        """Only the party leader calls targets. There can be exactly one caller.
+
+        Calling is a party-wide broadcast, so a second caller is not a second
+        opinion — it overwrites the first. Ebon Vanguard Assassin Support ships
+        with SpikeLock on, so on a full multibox team every account was calling
+        its own target every time it cast, and the called target became whichever
+        follower fired last. The leader follows the call, so it kept being
+        dragged onto whatever a backline hero happened to be looking at.
+        """
+        if not Settings().AutoCallTargets:
+            return False
+        player_id = Player.GetAgentID()
+        return (
+            player_id == GLOBAL_CACHE.Party.GetPartyLeaderID()
+            and Agent.IsAlive(player_id)
+            and Routines.Checks.Map.MapValid()
+        )
+
     def MaybeCallCombatTarget(
         self,
         target_id: int,
@@ -576,12 +595,7 @@ class CombatClass:
         force: bool = False,
         source: str = "auto",
     ) -> None:
-        if cached_data is None or not Settings().AutoCallTargets:
-            self._clear_auto_call_target_state()
-            return
-
-        is_local_party_leader = Player.GetAgentID() == GLOBAL_CACHE.Party.GetPartyLeaderID()
-        if not is_local_party_leader or not Agent.IsAlive(Player.GetAgentID()) or not Routines.Checks.Map.MapValid():
+        if cached_data is None or not self._may_call_targets():
             self._clear_auto_call_target_state()
             return
 
@@ -668,7 +682,10 @@ class CombatClass:
         _, target_allegiance = Agent.GetAllegiance(target_id)
         if target_allegiance != "Enemy":
             return
-        if CallTarget(target_id, interact=False):
+        # Gates the CALL only. The whiteboard claim below is cross-hero cast
+        # intent, not a target broadcast, and every account still needs to post
+        # it or spikes stop coordinating.
+        if self._may_call_targets() and CallTarget(target_id, interact=False):
             self.auto_call_target_id = target_id
             self.auto_call_target_called = True
             self.auto_call_target_source = "spike"
