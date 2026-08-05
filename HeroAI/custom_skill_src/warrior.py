@@ -1,6 +1,9 @@
-from Core import GLOBAL_CACHE, Range
-from HeroAI.types import SkillNature, Skilltarget, SkillType
+from Core import GLOBAL_CACHE
+from Core import Range
 from HeroAI.custom_skill import CustomSkill
+from HeroAI.types import SkillNature
+from HeroAI.types import Skilltarget
+from HeroAI.types import SkillType
 
 
 class WarriorSkills:
@@ -1102,7 +1105,7 @@ class WarriorSkills:
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Skull_Crack")
         skill.SkillType = SkillType.Attack.value
         skill.TargetAllegiance = Skilltarget.EnemyCastingSpell.value
-        skill.Nature = SkillNature.Interrupt.value
+        skill.Nature = SkillNature.Offensive.value
         skill.Conditions.IsCasting = True
         skill_data[skill.SkillID] = skill
 

@@ -827,6 +827,12 @@ class NecromancerSkills:
         skill.TargetAllegiance = Skilltarget.Self.value
         skill.Nature = SkillNature.Healing.value
         skill.Conditions.SacrificeHealth = 0.4
+        # BotM sacrifices 17% of max HP and its 2s recharge lets it be paid over
+        # and over. These are the hard floor under every caller; the minion
+        # master build layers stricter ones on top for non-rescue casts.
+        skill.Conditions.SacrificePercent = 0.17
+        skill.Conditions.MinHealthAfterSacrificePercent = 0.35
+        skill.Conditions.MinHealthAfterSacrificeAbsolute = 100
         skill_data[skill.SkillID] = skill
 
         skill = CustomSkill()
@@ -939,6 +945,9 @@ class NecromancerSkills:
         skill.SkillType = SkillType.Spell.value
         skill.TargetAllegiance = Skilltarget.Self.value
         skill.Nature = SkillNature.Buff.value
+        # The drain is paid per minion hit, so upkeep outside aggro is a pure
+        # health leak.
+        skill.Conditions.CloseToAggro = True
         skill_data[skill.SkillID] = skill
 
         skill = CustomSkill()
