@@ -13,6 +13,7 @@ path is expressed relative to the repo root.
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 from types import ModuleType
 
@@ -28,5 +29,13 @@ def load(relative_path: str) -> ModuleType:
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # Registered BEFORE exec: `@dataclass(slots=True)` rebuilds the class and
+    # looks its own module up in sys.modules to resolve annotations, so a target
+    # using slotted dataclasses fails to import at all without this.
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        sys.modules.pop(name, None)
+        raise
     return module

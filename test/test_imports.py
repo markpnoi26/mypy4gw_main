@@ -138,7 +138,17 @@ def test_script_loads(path):
 
 
 def load_from_path(path: Path) -> None:
-    """Import a file whose name can't be a module identifier (spaces, dashes)."""
+    """Import a file whose name can't be a module identifier (spaces, dashes).
+
+    Deliberately does NOT register in sys.modules first. The native side runs a
+    script by compiling its source and exec'ing it under a name that is not a
+    real module, so a module-scope `@dataclass` combined with
+    `from __future__ import annotations` raises there — dataclasses resolves
+    string annotations via `sys.modules[cls.__module__].__dict__`. Registering
+    here would make this gate pass a script the client cannot load, which is the
+    one failure mode it exists to catch. `ScriptLoader.load` does register, but
+    it is not what the Script Management System uses.
+    """
     name = "leafmod_%s" % abs(hash(str(path)))
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec and spec.loader
