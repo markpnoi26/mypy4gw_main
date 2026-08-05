@@ -32,12 +32,26 @@ class SkillbarPlusController:
             raise AttributeError("Unknown Skillbar+ option: %s" % key)
         setattr(self.config, key, value)
         persistence.save(self.config)
+        if key == "enabled":
+            self.sync_registration()
 
     def reset_autocast_slots(self) -> None:
         self.autocast_slots[:] = [False] * 8
 
+    def sync_registration(self) -> None:
+        """Bring the native callback in line with the persisted enable flag."""
+
+        if self.config.enabled:
+            self.register()
+        else:
+            self.unregister()
+
     def register(self) -> None:
         """Register the complete runtime as one profiled native Draw callback."""
+
+        if not self.config.enabled:
+            self.unregister()
+            return
 
         try:
             import PyCallback

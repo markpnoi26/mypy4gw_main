@@ -7,6 +7,7 @@ from dataclasses import dataclass
 class SkillbarPlusConfig:
     """Persisted Skillbar+ options using the shared ABGR integer colour format."""
 
+    enabled: bool = True
     skill_font_size: int = 40
     draw_background: bool = True
     background_color: int = 0x3200FF00

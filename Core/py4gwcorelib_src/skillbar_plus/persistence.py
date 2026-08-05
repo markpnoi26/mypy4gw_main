@@ -22,6 +22,7 @@ def _settings(document: str, scope: str = "account"):
 
 def _has_new_values(settings) -> bool:
     keys = (
+        ("Skillbar", "enabled"),
         ("Skillbar", "skill_font_size"),
         ("Skillbar", "draw_background"),
         ("Effects", "font_size"),
@@ -72,6 +73,7 @@ def load() -> model.SkillbarPlusConfig:
     if not _has_new_values(settings):
         _migrate_legacy(config, settings)
 
+    config.enabled = settings.get_bool("Skillbar", "enabled", config.enabled)
     config.skill_font_size = settings.get_int("Skillbar", "skill_font_size", config.skill_font_size)
     config.draw_background = settings.get_bool("Skillbar", "draw_background", config.draw_background)
     config.background_color = settings.get_int("Skillbar", "background_color", config.background_color)
@@ -97,6 +99,7 @@ def save(config: model.SkillbarPlusConfig, settings=None) -> None:
     if target is None:
         return
 
+    target.set("Skillbar", "enabled", config.enabled)
     target.set("Skillbar", "skill_font_size", config.skill_font_size)
     target.set("Skillbar", "draw_background", config.draw_background)
     target.set("Skillbar", "background_color", config.background_color)

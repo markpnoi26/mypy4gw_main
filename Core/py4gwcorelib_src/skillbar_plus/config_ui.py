@@ -29,6 +29,12 @@ def _draw_skillbar(controller: SkillbarPlusController) -> None:
     config = controller.config
     PyImGui.text_wrapped("Recharge timers, effect backgrounds, and duration bars drawn over the in-game skillbar.")
     PyImGui.separator()
+    runtime_enabled = PyImGui.checkbox("Enable Skillbar+ on this account", config.enabled)
+    if runtime_enabled != config.enabled:
+        _set(controller, "enabled", runtime_enabled)
+    if not config.enabled:
+        PyImGui.text_colored("Off — the overlay draw callback is not registered on this account.", _MUTED)
+        return
     value = PyImGui.slider_int("Recharge font size", config.skill_font_size, 10, 100)
     if value != config.skill_font_size:
         _set(controller, "skill_font_size", value)
@@ -63,7 +69,16 @@ def _draw_skillbar(controller: SkillbarPlusController) -> None:
             _set(controller, "duration_offset", offset)
 
 
+def runtime_off_notice(controller: SkillbarPlusController) -> bool:
+    if controller.config.enabled:
+        return False
+    PyImGui.text_colored("Skillbar+ is off on this account. Enable it in the Skillbar tab.", _MUTED)
+    return True
+
+
 def _draw_effects(controller: SkillbarPlusController) -> None:
+    if runtime_off_notice(controller):
+        return
     config = controller.config
     PyImGui.text_wrapped("Show remaining durations on the game's active-effect frames.")
     value = PyImGui.slider_int("Effects font size", config.effects_font_size, 5, 50)
@@ -75,6 +90,8 @@ def _draw_effects(controller: SkillbarPlusController) -> None:
 
 
 def _draw_autocast(controller: SkillbarPlusController) -> None:
+    if runtime_off_notice(controller):
+        return
     config = controller.config
     enabled = PyImGui.checkbox(
         "Enable Alt + right-click on a skill to toggle autocasting", config.auto_cast_alt_right_click
