@@ -1,11 +1,11 @@
-
-from Py4GWCoreLib import GLOBAL_CACHE, Range
+from Core import GLOBAL_CACHE, Range
 from HeroAI.types import SkillNature, Skilltarget, SkillType
 from HeroAI.custom_skill import CustomSkill
 
+
 class ElementalistSkills:
     def __init__(self, skill_data):
-        #region ENERGY_STORAGE
+        # region ENERGY_STORAGE
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Aura_of_Restoration")
@@ -89,7 +89,7 @@ class ElementalistSkills:
         skill.Conditions.IsOutOfCombat = True
         skill_data[skill.SkillID] = skill
 
-        #region AIR_MAGIC
+        # region AIR_MAGIC
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Air_Attunement")
@@ -310,7 +310,7 @@ class ElementalistSkills:
         skill.Conditions.IsOutOfCombat = True
         skill_data[skill.SkillID] = skill
 
-        #region EARTH_MAGIC
+        # region EARTH_MAGIC
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Aftershock")
@@ -569,7 +569,7 @@ class ElementalistSkills:
         skill.Conditions.EnemiesInRange = Range.Area.value
         skill_data[skill.SkillID] = skill
 
-        #region FIRE_MAGIC
+        # region FIRE_MAGIC
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Bed_of_Coals")
@@ -812,7 +812,7 @@ class ElementalistSkills:
         skill.Conditions.EnemiesInRange = Range.Area.value
         skill_data[skill.SkillID] = skill
 
-        #region WATER_MAGIC
+        # region WATER_MAGIC
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Armor_of_Frost")
@@ -1034,7 +1034,7 @@ class ElementalistSkills:
         skill.Nature = SkillNature.Offensive.value
         skill_data[skill.SkillID] = skill
 
-        #region NO_ATTRIBUTE
+        # region NO_ATTRIBUTE
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Glyph_of_Concentration")

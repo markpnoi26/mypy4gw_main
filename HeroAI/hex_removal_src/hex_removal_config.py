@@ -21,14 +21,13 @@ from dataclasses import dataclass, field
 
 import PySystem
 
-from Py4GWCoreLib.enums_src.GameData_enums import Profession, Profession_Names
-from Py4GWCoreLib.GlobalCache.HexRemovalPriority import (
+from Core.enums_src.GameData_enums import Profession, Profession_Names
+from Core.GlobalCache.HexRemovalPriority import (
     HexRemovalEntry,
     HexRemovalPriority,
     _HEX_DEFAULTS,
 )
-from Py4GWCoreLib.py4gwcorelib_src.JsonFactory import JsonFactory
-
+from Core.py4gwcorelib_src.JsonFactory import JsonFactory
 
 # ============================================================================
 # Constants
@@ -41,26 +40,25 @@ CONFIG_DOC = "HeroAI/HexRemoval.json"
 
 _PRIORITY_BY_NAME: dict[str, HexRemovalPriority] = {
     "NONE": HexRemovalPriority.NONE,
-    "LOW":  HexRemovalPriority.LOW,
-    "MED":  HexRemovalPriority.MEDIUM,
+    "LOW": HexRemovalPriority.LOW,
+    "MED": HexRemovalPriority.MEDIUM,
     "HIGH": HexRemovalPriority.HIGH,
 }
-_NAME_BY_PRIORITY: dict[HexRemovalPriority, str] = {
-    v: k for k, v in _PRIORITY_BY_NAME.items()
-}
+_NAME_BY_PRIORITY: dict[HexRemovalPriority, str] = {v: k for k, v in _PRIORITY_BY_NAME.items()}
 
-_PROFESSION_BY_NAME: dict[str, int] = {
-    Profession_Names[p]: int(p)
-    for p in Profession if p != Profession._None
-}
-_NAME_BY_PROFESSION_ID: dict[int, str] = {
-    v: k for k, v in _PROFESSION_BY_NAME.items()
-}
+_PROFESSION_BY_NAME: dict[str, int] = {Profession_Names[p]: int(p) for p in Profession if p != Profession._None}
+_NAME_BY_PROFESSION_ID: dict[int, str] = {v: k for k, v in _PROFESSION_BY_NAME.items()}
 
 _PROFESSION_ORDER: list[int] = [
-    int(Profession.Warrior), int(Profession.Ranger), int(Profession.Monk),
-    int(Profession.Necromancer), int(Profession.Mesmer), int(Profession.Elementalist),
-    int(Profession.Assassin), int(Profession.Ritualist), int(Profession.Paragon),
+    int(Profession.Warrior),
+    int(Profession.Ranger),
+    int(Profession.Monk),
+    int(Profession.Necromancer),
+    int(Profession.Mesmer),
+    int(Profession.Elementalist),
+    int(Profession.Assassin),
+    int(Profession.Ritualist),
+    int(Profession.Paragon),
     int(Profession.Dervish),
 ]
 
@@ -68,6 +66,7 @@ _PROFESSION_ORDER: list[int] = [
 # ============================================================================
 # In-memory state
 # ============================================================================
+
 
 @dataclass
 class HexEntryState:
@@ -91,9 +90,11 @@ _cache_state: ConfigState | None = None
 # Logging + store helpers
 # ============================================================================
 
+
 def _log(msg: str) -> None:
     try:
-        from Py4GWCoreLib import ConsoleLog
+        from Core import ConsoleLog
+
         ConsoleLog("HexRemoval", msg, PySystem.Console.MessageType.Info)
     except Exception:
         pass
@@ -112,7 +113,8 @@ def _char_key(character_name: str) -> str:
 def _active_account_key() -> tuple[str, str]:
     """Returns (email, character_name). Either may be empty if not ready."""
     try:
-        from Py4GWCoreLib.Player import Player
+        from Core.Player import Player
+
         email = (Player.GetAccountEmail() or "").strip()
         char = (Player.GetName() or "").strip()
         return email, char
@@ -123,6 +125,7 @@ def _active_account_key() -> tuple[str, str]:
 # ============================================================================
 # Parsing (dict subtree -> ConfigState)
 # ============================================================================
+
 
 def _parse_priority(value: object) -> HexRemovalPriority | None:
     if not isinstance(value, str):
@@ -196,6 +199,7 @@ def _state_from_dict(data: object) -> ConfigState | None:
 # Serialization (ConfigState -> dict subtree)
 # ============================================================================
 
+
 def _state_to_dict(state: ConfigState) -> dict:
     """Render a ConfigState to the JSON subtree shape JsonFactory persists."""
     hexes: dict[str, object] = {}
@@ -225,6 +229,7 @@ def _state_to_dict(state: ConfigState) -> dict:
 # Load / normalize
 # ============================================================================
 
+
 def _build_initial_state() -> ConfigState:
     state = ConfigState()
     for name, entry in _HEX_DEFAULTS.items():
@@ -242,10 +247,7 @@ def _normalize_loaded(parsed: ConfigState) -> tuple[ConfigState, bool]:
 
     for name, parsed_state in parsed.hexes.items():
         if name not in _HEX_DEFAULTS:
-            _log(
-                f"config: '{name}' is not in the default table - "
-                f"kept in JSON, ignored at runtime"
-            )
+            _log(f"config: '{name}' is not in the default table - " f"kept in JSON, ignored at runtime")
         state.hexes[name] = parsed_state
 
     for name, default_entry in _HEX_DEFAULTS.items():
@@ -259,6 +261,7 @@ def _normalize_loaded(parsed: ConfigState) -> tuple[ConfigState, bool]:
 # ============================================================================
 # Store IO (JsonFactory-backed)
 # ============================================================================
+
 
 def _load_from_store(email: str, character_name: str) -> ConfigState:
     if not email or not character_name:
@@ -294,15 +297,18 @@ def _save_active(state: ConfigState) -> bool:
 # Runtime debug-flag application
 # ============================================================================
 
+
 def _apply_debug_flags_to_runtime(state: ConfigState) -> None:
     try:
-        from Py4GWCoreLib.GlobalCache import HexRemovalPriority as hp
+        from Core.GlobalCache import HexRemovalPriority as hp
+
         hp.HEX_REMOVAL_DEBUG = False
     except Exception:
         pass
     try:
-        from Py4GWCoreLib.GlobalCache.shared_memory_src import AllAccounts as wb
-        from Py4GWCoreLib.enums_src.Whiteboard_enums import WhiteboardLockKind
+        from Core.GlobalCache.shared_memory_src import AllAccounts as wb
+        from Core.enums_src.Whiteboard_enums import WhiteboardLockKind
+
         kind = int(WhiteboardLockKind.HEX_REMOVAL_TARGET)
         if hasattr(wb, "WHITEBOARD_DEBUG_KINDS"):
             wb.WHITEBOARD_DEBUG_KINDS[kind] = bool(state.debug_hex_removal_locks)
@@ -312,7 +318,8 @@ def _apply_debug_flags_to_runtime(state: ConfigState) -> None:
 
 def _invalidate_priority() -> None:
     try:
-        from Py4GWCoreLib.GlobalCache import HexRemovalPriority as hp
+        from Core.GlobalCache import HexRemovalPriority as hp
+
         if hasattr(hp, "invalidate_hex_removal_priority"):
             hp.invalidate_hex_removal_priority()
         else:
@@ -325,6 +332,7 @@ def _invalidate_priority() -> None:
 # ============================================================================
 # Public API
 # ============================================================================
+
 
 def _get_state() -> ConfigState:
     """Return cached ConfigState for the active character. Reloads when the
@@ -398,13 +406,11 @@ def set_debug_flags(hex_removal: bool, hex_removal_locks: bool) -> None:
     state.debug_hex_removal_locks = bool(hex_removal_locks)
     _save_active(state)
     _apply_debug_flags_to_runtime(state)
-    _log(
-        f"debug toggles updated: hex_removal={hex_removal}, "
-        f"hex_removal_locks={hex_removal_locks}"
-    )
+    _log(f"debug toggles updated: hex_removal={hex_removal}, " f"hex_removal_locks={hex_removal_locks}")
 
 
 # ----- Import / Export -------------------------------------------------------
+
 
 def export_to_desktop() -> tuple[bool, str]:
     """Point the user at the on-disk config document for a manual backup.

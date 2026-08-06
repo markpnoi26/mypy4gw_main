@@ -1,7 +1,7 @@
-
-from Py4GWCoreLib import GLOBAL_CACHE, Range
+from Core import GLOBAL_CACHE, Range
 from HeroAI.types import SkillNature, Skilltarget, SkillType
 from HeroAI.custom_skill import CustomSkill
+
 
 class MesmerSkills:
     def __init__(self, skill_data):
@@ -83,7 +83,7 @@ class MesmerSkills:
         skill.Nature = SkillNature.Offensive.value
         skill_data[skill.SkillID] = skill
 
-        #region DOMINATION
+        # region DOMINATION
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Aneurysm")
@@ -397,7 +397,7 @@ class MesmerSkills:
         skill.Nature = SkillNature.Offensive.value
         skill_data[skill.SkillID] = skill
 
-        #region ILLUSION_MAGIC
+        # region ILLUSION_MAGIC
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Accumulated_Pain")
@@ -643,7 +643,7 @@ class MesmerSkills:
         skill.Nature = SkillNature.Offensive.value
         skill_data[skill.SkillID] = skill
 
-        #region INSPIRATION_MAGIC
+        # region INSPIRATION_MAGIC
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Auspicious_Incantation")
@@ -966,7 +966,7 @@ class MesmerSkills:
         skill.Conditions.UniqueProperty = True
         skill_data[skill.SkillID] = skill
 
-        #region NO_ATTRIBUTE
+        # region NO_ATTRIBUTE
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Arcane_Echo")

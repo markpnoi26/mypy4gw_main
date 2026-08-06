@@ -1,11 +1,11 @@
-
-from Py4GWCoreLib import GLOBAL_CACHE, Range
+from Core import GLOBAL_CACHE, Range
 from HeroAI.types import SkillNature, Skilltarget, SkillType
 from HeroAI.custom_skill import CustomSkill
 
+
 class MonkSkills:
     def __init__(self, skill_data):
-        #region DIVINE_FAVOR
+        # region DIVINE_FAVOR
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Blessed_Aura")
@@ -429,7 +429,6 @@ class MonkSkills:
         skill.Conditions.IsOutOfCombat = True
         skill_data[skill.SkillID] = skill
 
-
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Orison_of_Healing")
         skill.SkillType = SkillType.Spell.value
@@ -534,7 +533,7 @@ class MonkSkills:
         skill.Conditions.HasCondition = True
         skill_data[skill.SkillID] = skill
 
-        #region PROTECTION_PRAYERS
+        # region PROTECTION_PRAYERS
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Aegis")
@@ -828,7 +827,7 @@ class MonkSkills:
         skill.Conditions.LessLife = 0.5
         skill_data[skill.SkillID] = skill
 
-        #region SMITHING_PRAYERS
+        # region SMITHING_PRAYERS
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Balthazars_Aura")
@@ -1059,7 +1058,7 @@ class MonkSkills:
         skill.Nature = SkillNature.Offensive.value
         skill_data[skill.SkillID] = skill
 
-        #region NO_ATTRIBUTE
+        # region NO_ATTRIBUTE
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Empathic_Removal")

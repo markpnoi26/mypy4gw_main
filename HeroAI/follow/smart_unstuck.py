@@ -17,6 +17,7 @@ the detection thresholds are live-tunable via FollowRuntime.ini sliders.
 Consumed by HeroAI/follow/follower_runtime.py only. Import exact symbols,
 not the package root (per AGENTS.md follow-package rule).
 """
+
 from __future__ import annotations
 
 import math
@@ -25,13 +26,12 @@ from dataclasses import dataclass, field
 import Py4GW
 
 import HeroAI.globals as hero_globals
-from Py4GWCoreLib import Agent, AgentArray, ThrottledTimer, Utils
-from Py4GWCoreLib.py4gwcorelib_src.Settings import Settings
-from Py4GWCoreLib.Pathing import AutoPathing
-from Py4GWCoreLib.native_src.internals.types import Vec2f
-from Py4GWCoreLib.py4gwcorelib_src.BehaviorTree import BehaviorTree
-from Py4GWCoreLib.routines_src.BehaviourTrees import BT
-
+from Core import Agent, AgentArray, ThrottledTimer, Utils
+from Core.py4gwcorelib_src.Settings import Settings
+from Core.Pathing import AutoPathing
+from Core.native_src.internals.types import Vec2f
+from Core.py4gwcorelib_src.BehaviorTree import BehaviorTree
+from Core.routines_src.BehaviourTrees import BT
 
 # Outer-ring radius for waypoint overlay; not a behavior knob.
 _OVERLAY_TOUCH_RADIUS: float = 25.0
@@ -43,29 +43,31 @@ class SmartUnstuckConfig:
     # smaller = closer to the arc but risks stopping at each waypoint.
     waypoint_smoothing: float = 77.0
 
-    touch_radius: float = 120.0                  # detour-circle radius (live-tunable via INI)
-    enemy_detection_range: float = 250.0         # enemy-slalom scan radius (live-tunable via INI)
-    progress_sample_interval_ms: int = 500       # idle-mode sample period
-    no_progress_close_units: float = 10.0        # < this distance closed per sample → no-progress sample (live-tunable via INI)
-    no_progress_move_units: float = 15.0         # < this distance moved per sample → no-progress sample (live-tunable via INI)
-    stuck_sample_count: int = 1                  # consecutive no-progress samples to trigger (1 = ~500ms) (live-tunable via INI)
+    touch_radius: float = 120.0  # detour-circle radius (live-tunable via INI)
+    enemy_detection_range: float = 250.0  # enemy-slalom scan radius (live-tunable via INI)
+    progress_sample_interval_ms: int = 500  # idle-mode sample period
+    no_progress_close_units: float = (
+        10.0  # < this distance closed per sample → no-progress sample (live-tunable via INI)
+    )
+    no_progress_move_units: float = 15.0  # < this distance moved per sample → no-progress sample (live-tunable via INI)
+    stuck_sample_count: int = 1  # consecutive no-progress samples to trigger (1 = ~500ms) (live-tunable via INI)
     # Short-circuit detection when the follower is already this close to slot.
-    min_distance_activate_unstuck: float = 500.0        # (live-tunable via INI)
-    waypoint_count: int = 5                      # front-of-follower mode only; slalom uses adaptive count
-    arc_span_rad: float = math.pi                # front-of-follower mode: half-circle per side
-    total_detour_timeout_ms: int = 12000         # absolute cap on a single detour
+    min_distance_activate_unstuck: float = 500.0  # (live-tunable via INI)
+    waypoint_count: int = 5  # front-of-follower mode only; slalom uses adaptive count
+    arc_span_rad: float = math.pi  # front-of-follower mode: half-circle per side
+    total_detour_timeout_ms: int = 12000  # absolute cap on a single detour
     # Detour exits early when the follower has closed >= this much distance
     # from its starting dist_to_follow.
-    obstacle_cleared_delta: float = 500.0        # (live-tunable via INI)
-    navmesh_contains_margin: float = 50.0        # margin for navmesh.contains()
-    navmesh_snap_tolerance: float = 80.0         # accept snap from find_nearest_reachable within this
+    obstacle_cleared_delta: float = 500.0  # (live-tunable via INI)
+    navmesh_contains_margin: float = 50.0  # margin for navmesh.contains()
+    navmesh_snap_tolerance: float = 80.0  # accept snap from find_nearest_reachable within this
     arc_walkability_required_fraction: float = 0.5  # front-of-follower mode side acceptance
-    preferred_side_when_both_walkable: int = 1   # +1 right, -1 left
+    preferred_side_when_both_walkable: int = 1  # +1 right, -1 left
 
 
 @dataclass(slots=True)
 class SmartUnstuckState:
-    mode: str = "idle"                                              # "idle" | "detouring"
+    mode: str = "idle"  # "idle" | "detouring"
     progress_timer: ThrottledTimer | None = None
     prev_sample_xy: tuple[float, float] | None = None
     prev_sample_dist: float | None = None
@@ -168,15 +170,13 @@ def reload_smart_unstuck_config_from_ini(force_reload: bool = False) -> None:
         pass
 
     try:
-        new_waypoint_smoothing = max(1.0, float(
-            cfg.get_float(_INI_SECTION, _INI_KEY_TOLERANCE, SMART_UNSTUCK_CFG.waypoint_smoothing)
-        ))
+        new_waypoint_smoothing = max(
+            1.0, float(cfg.get_float(_INI_SECTION, _INI_KEY_TOLERANCE, SMART_UNSTUCK_CFG.waypoint_smoothing))
+        )
     except Exception:
         new_waypoint_smoothing = SMART_UNSTUCK_CFG.waypoint_smoothing
     try:
-        new_radius = _clamp_radius(
-            cfg.get_float(_INI_SECTION, _INI_KEY_TOUCH_RADIUS, SMART_UNSTUCK_CFG.touch_radius)
-        )
+        new_radius = _clamp_radius(cfg.get_float(_INI_SECTION, _INI_KEY_TOUCH_RADIUS, SMART_UNSTUCK_CFG.touch_radius))
     except Exception:
         new_radius = SMART_UNSTUCK_CFG.touch_radius
     try:
@@ -210,9 +210,7 @@ def reload_smart_unstuck_config_from_ini(force_reload: bool = False) -> None:
     except Exception:
         new_close_units = SMART_UNSTUCK_CFG.no_progress_close_units
     try:
-        new_overlay = bool(
-            cfg.get_bool(_INI_SECTION, _INI_KEY_OVERLAY, hero_globals.show_followers_unstuck_overlay)
-        )
+        new_overlay = bool(cfg.get_bool(_INI_SECTION, _INI_KEY_OVERLAY, hero_globals.show_followers_unstuck_overlay))
     except Exception:
         new_overlay = hero_globals.show_followers_unstuck_overlay
     try:
@@ -233,10 +231,7 @@ def reload_smart_unstuck_config_from_ini(force_reload: bool = False) -> None:
     if abs(new_enemy_range - SMART_UNSTUCK_CFG.enemy_detection_range) > 0.01 or force_reload:
         old = SMART_UNSTUCK_CFG.enemy_detection_range
         SMART_UNSTUCK_CFG.enemy_detection_range = new_enemy_range
-        _log(
-            f"stuck.cfg_reload enemy_detection_range "
-            f"{old:.1f}->{new_enemy_range:.1f} force={force_reload}"
-        )
+        _log(f"stuck.cfg_reload enemy_detection_range " f"{old:.1f}->{new_enemy_range:.1f} force={force_reload}")
     if new_sample_count != SMART_UNSTUCK_CFG.stuck_sample_count or force_reload:
         old_int = SMART_UNSTUCK_CFG.stuck_sample_count
         SMART_UNSTUCK_CFG.stuck_sample_count = new_sample_count
@@ -500,7 +495,7 @@ def _build_union_boundary(
         ray_dx = math.cos(theta)
         ray_dy = math.sin(theta)
         max_t = 0.0
-        for (cc, cr) in member_circles:
+        for cc, cr in member_circles:
             ex = centroid[0] - cc[0]
             ey = centroid[1] - cc[1]
             # ray_dir is unit, so quadratic in t has a==1
@@ -663,9 +658,7 @@ def _build_path_for_side(
     walk = _walk_boundary_directed(boundary, entry_idx, exit_idx, arc_dir)
     if len(walk) < 2:
         return (), 0, 0
-    return _build_navmesh_aware_waypoints_with_segments(
-        walk, cfg, navmesh, _WAYPOINT_SPACING_UNITS
-    )
+    return _build_navmesh_aware_waypoints_with_segments(walk, cfg, navmesh, _WAYPOINT_SPACING_UNITS)
 
 
 def _path_length(path: tuple[tuple[float, float], ...]) -> float:
@@ -709,7 +702,7 @@ def _cluster_blocks_segment(
     member_circles: tuple[tuple[tuple[float, float], float], ...],
 ) -> bool:
     """True iff the segment is blocked by ANY member circle of the cluster."""
-    for (cc, cr) in member_circles:
+    for cc, cr in member_circles:
         if _segment_circle_blocks(seg_start, seg_end, cc, cr):
             return True
     return False
@@ -965,9 +958,7 @@ def _log_detour_init(
     )
     for i, wp in enumerate(wps):
         dist_from_start = Utils.Distance(current_xy, wp)
-        dist_to_next = (
-            Utils.Distance(wp, wps[i + 1]) if (i + 1) < len(wps) else -1.0
-        )
+        dist_to_next = Utils.Distance(wp, wps[i + 1]) if (i + 1) < len(wps) else -1.0
         _log(
             f"stuck.wp[{i}] pos=({wp[0]:.0f},{wp[1]:.0f}) "
             f"dist_from_start={dist_from_start:.0f} "
@@ -1147,12 +1138,8 @@ def _enter_detour(
             )
             if hero_globals.show_stuck_avoidance_debug:
                 for i, ec in enumerate(accepted_centers):
-                    _log(
-                        f"stuck.slalom.enemy[{i}] pos=({ec[0]:.0f},{ec[1]:.0f})"
-                    )
-                _log_detour_init(
-                    state, cfg, current_xy, follow_xy, 0, accepted_centers[0], slalom_waypoints
-                )
+                    _log(f"stuck.slalom.enemy[{i}] pos=({ec[0]:.0f},{ec[1]:.0f})")
+                _log_detour_init(state, cfg, current_xy, follow_xy, 0, accepted_centers[0], slalom_waypoints)
             # Tick once now so Player.Move(first_waypoint) goes out this frame
             # rather than waiting for the next update_smart_unstuck call.
             first_result = _tick_tree_safe(state.detour_tree)
@@ -1170,10 +1157,7 @@ def _enter_detour(
         # Enemies present but slalom yielded nothing walkable — fall through
         # to the single-circle path.
         if hero_globals.show_stuck_avoidance_debug:
-            _log(
-                f"stuck.slalom.empty enemies_in_range={len(enemies)} "
-                f"-> falling back to front-of-follower circle"
-            )
+            _log(f"stuck.slalom.empty enemies_in_range={len(enemies)} " f"-> falling back to front-of-follower circle")
 
     candidates: list[tuple[int, tuple[float, float], tuple[tuple[float, float], ...], bool]] = []
     for side in (-1, 1):
@@ -1358,18 +1342,14 @@ def update_smart_unstuck(
         now = _now_ms()
         if (now - state.detour_started_ms) > cfg.total_detour_timeout_ms:
             total_ms = now - state.detour_started_ms
-            _log(
-                f"stuck.exit reason=total_timeout "
-                f"total_time_ms={total_ms} ticks={state.tick_count}"
-            )
+            _log(f"stuck.exit reason=total_timeout " f"total_time_ms={total_ms} ticks={state.tick_count}")
             reset_smart_unstuck(state)
             return None
         if (state.detour_start_dist - dist_to_follow) >= cfg.obstacle_cleared_delta:
             total_ms = now - state.detour_started_ms
             dropped = state.detour_start_dist - dist_to_follow
             _log(
-                f"stuck.exit reason=cleared dropped={dropped:.0f} "
-                f"total_time_ms={total_ms} ticks={state.tick_count}"
+                f"stuck.exit reason=cleared dropped={dropped:.0f} " f"total_time_ms={total_ms} ticks={state.tick_count}"
             )
             reset_smart_unstuck(state)
             return None
@@ -1411,19 +1391,13 @@ def update_smart_unstuck(
 
         if result == BehaviorTree.NodeState.SUCCESS:
             total_ms = tick_now - state.detour_started_ms
-            _log(
-                f"stuck.bt_finished reason=success "
-                f"total_time_ms={total_ms} ticks={state.tick_count}"
-            )
+            _log(f"stuck.bt_finished reason=success " f"total_time_ms={total_ms} ticks={state.tick_count}")
             reset_smart_unstuck(state)
             return None
         if result == BehaviorTree.NodeState.FAILURE:
             reason = state.detour_tree.blackboard.get("move_reason", "?")
             total_ms = tick_now - state.detour_started_ms
-            _log(
-                f"stuck.bt_failed reason={reason} "
-                f"total_time_ms={total_ms} ticks={state.tick_count}"
-            )
+            _log(f"stuck.bt_failed reason={reason} " f"total_time_ms={total_ms} ticks={state.tick_count}")
             reset_smart_unstuck(state)
             return None
 

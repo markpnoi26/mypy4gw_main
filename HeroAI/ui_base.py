@@ -5,12 +5,25 @@ import PyImGui
 from HeroAI import enemy_party
 from HeroAI import resurrection_scroll
 
-from Py4GWCoreLib import GLOBAL_CACHE, Agent, IconsFontAwesome5, ImGui, Map, Overlay, Range, Utils, Color, ColorPalette, ConsoleLog, SharedCommandType
-from Py4GWCoreLib import Key, Keystroke, ThrottledTimer, UIManager
-from Py4GWCoreLib.FrameTree import Frame, FrameId
-from Py4GWCoreLib.GlobalCache.SharedMemory import AccountStruct, HeroAIOptionStruct
-from Py4GWCoreLib.py4gwcorelib_src.Settings import Settings
-from Py4GWCoreLib.Player import Player
+from Core import (
+    GLOBAL_CACHE,
+    Agent,
+    IconsFontAwesome5,
+    ImGui,
+    Map,
+    Overlay,
+    Range,
+    Utils,
+    Color,
+    ColorPalette,
+    ConsoleLog,
+    SharedCommandType,
+)
+from Core import Key, Keystroke, ThrottledTimer, UIManager
+from Core.FrameTree import Frame, FrameId
+from Core.GlobalCache.SharedMemory import AccountStruct, HeroAIOptionStruct
+from Core.py4gwcorelib_src.Settings import Settings
+from Core.Player import Player
 
 from HeroAI.cache_data import CacheData
 from HeroAI.constants import NUMBER_OF_SKILLS
@@ -18,9 +31,15 @@ from HeroAI.utils import DrawFlagAll, DrawHeroFlag, IsHeroFlagged
 from HeroAI.windows import HeroAI_FloatingWindows, HeroAI_Windows
 from .constants import MAX_NUM_PLAYERS, NUMBER_OF_SKILLS
 
-from HeroAI.constants import (FOLLOW_DISTANCE_OUT_OF_COMBAT, MAX_NUM_PLAYERS, MELEE_RANGE_VALUE, PARTY_WINDOW_FRAME_EXPLORABLE_OFFSETS,
-                              PARTY_WINDOW_FRAME_OUTPOST_OFFSETS, PARTY_WINDOW_HASH, RANGED_RANGE_VALUE)
-
+from HeroAI.constants import (
+    FOLLOW_DISTANCE_OUT_OF_COMBAT,
+    MAX_NUM_PLAYERS,
+    MELEE_RANGE_VALUE,
+    PARTY_WINDOW_FRAME_EXPLORABLE_OFFSETS,
+    PARTY_WINDOW_FRAME_OUTPOST_OFFSETS,
+    PARTY_WINDOW_HASH,
+    RANGED_RANGE_VALUE,
+)
 
 _SKILL_NAME_SUFFIXES: dict[str, str] = {
     "Summon_Spirits_kurzick": "(Kurzick)",
@@ -69,7 +88,9 @@ class HeroAI_BaseUI:
     follow_move_threshold_flagged_mode = "Zero"
     _build_match_timer = ThrottledTimer(750)
     _build_match_rows: list[tuple[int, str, int, int, str, str, str]] = []
-    _build_match_signature_cache: dict[int, tuple[tuple[int, int, tuple[int, ...]], tuple[int, str, int, int, str, str, str]]] = {}
+    _build_match_signature_cache: dict[
+        int, tuple[tuple[int, int, tuple[int, ...]], tuple[int, str, int, int, str, str, str]]
+    ] = {}
     _build_registry = None
     _supported_build_selected_key = ""
     _supported_build_selected_skill_id = 0
@@ -111,25 +132,113 @@ class HeroAI_BaseUI:
             self.texture_path = texture_path
 
     ButtonColors = {
-        "Resign": ButtonColor(button_color=Color(90, 0, 10, 255), hovered_color=Color(160, 0, 15, 255), active_color=Color(210, 0, 20, 255)),
-        "PixelStack": ButtonColor(button_color=Color(90, 0, 10, 255), hovered_color=Color(160, 0, 15, 255), active_color=Color(190, 0, 20, 255)),
-        "Flag": ButtonColor(button_color=Color(90, 0, 10, 255), hovered_color=Color(160, 0, 15, 255), active_color=Color(190, 0, 20, 255)),
-        "ClearFlags": ButtonColor(button_color=Color(90, 0, 10, 255), hovered_color=Color(160, 0, 15, 255), active_color=Color(190, 0, 20, 255)),
-        "Celerity": ButtonColor(button_color=Color(129, 33, 188, 255), hovered_color=Color(165, 100, 200, 255), active_color=Color(135, 225, 230, 255), texture_path="Textures\\Consumables\\Trimmed\\Essence_of_Celerity.png"),
-        "GrailOfMight": ButtonColor(button_color=Color(70, 0, 10, 255), hovered_color=Color(160, 0, 15, 255), active_color=Color(252, 225, 115, 255), texture_path="Textures\\Consumables\\Trimmed\\Grail_of_Might.png"),
-        "ArmorOfSalvation": ButtonColor(button_color=Color(96, 60, 15, 255), hovered_color=Color(187, 149, 38, 255), active_color=Color(225, 150, 0, 255), texture_path="Textures\\Consumables\\Trimmed\\Armor_of_Salvation.png"),
-        "CandyCane": ButtonColor(button_color=Color(63, 91, 54, 255), hovered_color=Color(149, 72, 34, 255), active_color=Color(96, 172, 28, 255), texture_path="Textures\\Consumables\\Trimmed\\Rainbow_Candy_Cane.png"),
-        "BirthdayCupcake": ButtonColor(button_color=Color(138, 54, 80, 255), hovered_color=Color(255, 186, 198, 255), active_color=Color(205, 94, 215, 255), texture_path="Textures\\Consumables\\Trimmed\\Birthday_Cupcake.png"),
-        "GoldenEgg": ButtonColor(button_color=Color(245, 227, 143, 255), hovered_color=Color(253, 248, 234, 255), active_color=Color(129, 82, 35, 255), texture_path="Textures\\Consumables\\Trimmed\\Golden_Egg.png"),
-        "CandyCorn": ButtonColor(button_color=Color(239, 174, 33, 255), hovered_color=Color(206, 178, 148, 255), active_color=Color(239, 77, 16, 255), texture_path="Textures\\Consumables\\Trimmed\\Candy_Corn.png"),
-        "CandyApple": ButtonColor(button_color=Color(75, 26, 28, 255), hovered_color=Color(202, 60, 88, 255), active_color=Color(179, 0, 39, 255), texture_path="Textures\\Consumables\\Trimmed\\Candy_Apple.png"),
-        "PumpkinPie": ButtonColor(button_color=Color(224, 176, 126, 255), hovered_color=Color(226, 209, 210, 255), active_color=Color(129, 87, 54, 255), texture_path="Textures\\Consumables\\Trimmed\\Slice_of_Pumpkin_Pie.png"),
-        "DrakeKabob": ButtonColor(button_color=Color(28, 28, 28, 255), hovered_color=Color(190, 187, 184, 255), active_color=Color(94, 26, 13, 255), texture_path="Textures\\Consumables\\Trimmed\\Drake_Kabob.png"),
-        "SkalefinSoup": ButtonColor(button_color=Color(68, 85, 142, 255), hovered_color=Color(255, 255, 107, 255), active_color=Color(106, 139, 51, 255), texture_path="Textures\\Consumables\\Trimmed\\Bowl_of_Skalefin_Soup.png"),
-        "PahnaiSalad": ButtonColor(button_color=Color(113, 43, 25, 255), hovered_color=Color(185, 157, 90, 255), active_color=Color(137, 175, 10, 255), texture_path="Textures\\Consumables\\Trimmed\\Pahnai_Salad.png"),
-        "WarSupplies": ButtonColor(button_color=Color(51, 26, 13, 255), hovered_color=Color(113, 43, 25, 255), active_color=Color(202, 115, 77, 255), texture_path="Textures\\Consumables\\Trimmed\\War_Supplies.png"),
-        "Alcohol": ButtonColor(button_color=Color(58, 41, 50, 255), hovered_color=Color(169, 145, 111, 255), active_color=Color(173, 173, 156, 255), texture_path="Textures\\Consumables\\Trimmed\\Dwarven_Ale.png"),
-        "Blank": ButtonColor(button_color=Color(0, 0, 0, 0), hovered_color=Color(0, 0, 0, 0), active_color=Color(0, 0, 0, 0)),
+        "Resign": ButtonColor(
+            button_color=Color(90, 0, 10, 255),
+            hovered_color=Color(160, 0, 15, 255),
+            active_color=Color(210, 0, 20, 255),
+        ),
+        "PixelStack": ButtonColor(
+            button_color=Color(90, 0, 10, 255),
+            hovered_color=Color(160, 0, 15, 255),
+            active_color=Color(190, 0, 20, 255),
+        ),
+        "Flag": ButtonColor(
+            button_color=Color(90, 0, 10, 255),
+            hovered_color=Color(160, 0, 15, 255),
+            active_color=Color(190, 0, 20, 255),
+        ),
+        "ClearFlags": ButtonColor(
+            button_color=Color(90, 0, 10, 255),
+            hovered_color=Color(160, 0, 15, 255),
+            active_color=Color(190, 0, 20, 255),
+        ),
+        "Celerity": ButtonColor(
+            button_color=Color(129, 33, 188, 255),
+            hovered_color=Color(165, 100, 200, 255),
+            active_color=Color(135, 225, 230, 255),
+            texture_path="Textures\\Consumables\\Trimmed\\Essence_of_Celerity.png",
+        ),
+        "GrailOfMight": ButtonColor(
+            button_color=Color(70, 0, 10, 255),
+            hovered_color=Color(160, 0, 15, 255),
+            active_color=Color(252, 225, 115, 255),
+            texture_path="Textures\\Consumables\\Trimmed\\Grail_of_Might.png",
+        ),
+        "ArmorOfSalvation": ButtonColor(
+            button_color=Color(96, 60, 15, 255),
+            hovered_color=Color(187, 149, 38, 255),
+            active_color=Color(225, 150, 0, 255),
+            texture_path="Textures\\Consumables\\Trimmed\\Armor_of_Salvation.png",
+        ),
+        "CandyCane": ButtonColor(
+            button_color=Color(63, 91, 54, 255),
+            hovered_color=Color(149, 72, 34, 255),
+            active_color=Color(96, 172, 28, 255),
+            texture_path="Textures\\Consumables\\Trimmed\\Rainbow_Candy_Cane.png",
+        ),
+        "BirthdayCupcake": ButtonColor(
+            button_color=Color(138, 54, 80, 255),
+            hovered_color=Color(255, 186, 198, 255),
+            active_color=Color(205, 94, 215, 255),
+            texture_path="Textures\\Consumables\\Trimmed\\Birthday_Cupcake.png",
+        ),
+        "GoldenEgg": ButtonColor(
+            button_color=Color(245, 227, 143, 255),
+            hovered_color=Color(253, 248, 234, 255),
+            active_color=Color(129, 82, 35, 255),
+            texture_path="Textures\\Consumables\\Trimmed\\Golden_Egg.png",
+        ),
+        "CandyCorn": ButtonColor(
+            button_color=Color(239, 174, 33, 255),
+            hovered_color=Color(206, 178, 148, 255),
+            active_color=Color(239, 77, 16, 255),
+            texture_path="Textures\\Consumables\\Trimmed\\Candy_Corn.png",
+        ),
+        "CandyApple": ButtonColor(
+            button_color=Color(75, 26, 28, 255),
+            hovered_color=Color(202, 60, 88, 255),
+            active_color=Color(179, 0, 39, 255),
+            texture_path="Textures\\Consumables\\Trimmed\\Candy_Apple.png",
+        ),
+        "PumpkinPie": ButtonColor(
+            button_color=Color(224, 176, 126, 255),
+            hovered_color=Color(226, 209, 210, 255),
+            active_color=Color(129, 87, 54, 255),
+            texture_path="Textures\\Consumables\\Trimmed\\Slice_of_Pumpkin_Pie.png",
+        ),
+        "DrakeKabob": ButtonColor(
+            button_color=Color(28, 28, 28, 255),
+            hovered_color=Color(190, 187, 184, 255),
+            active_color=Color(94, 26, 13, 255),
+            texture_path="Textures\\Consumables\\Trimmed\\Drake_Kabob.png",
+        ),
+        "SkalefinSoup": ButtonColor(
+            button_color=Color(68, 85, 142, 255),
+            hovered_color=Color(255, 255, 107, 255),
+            active_color=Color(106, 139, 51, 255),
+            texture_path="Textures\\Consumables\\Trimmed\\Bowl_of_Skalefin_Soup.png",
+        ),
+        "PahnaiSalad": ButtonColor(
+            button_color=Color(113, 43, 25, 255),
+            hovered_color=Color(185, 157, 90, 255),
+            active_color=Color(137, 175, 10, 255),
+            texture_path="Textures\\Consumables\\Trimmed\\Pahnai_Salad.png",
+        ),
+        "WarSupplies": ButtonColor(
+            button_color=Color(51, 26, 13, 255),
+            hovered_color=Color(113, 43, 25, 255),
+            active_color=Color(202, 115, 77, 255),
+            texture_path="Textures\\Consumables\\Trimmed\\War_Supplies.png",
+        ),
+        "Alcohol": ButtonColor(
+            button_color=Color(58, 41, 50, 255),
+            hovered_color=Color(169, 145, 111, 255),
+            active_color=Color(173, 173, 156, 255),
+            texture_path="Textures\\Consumables\\Trimmed\\Dwarven_Ale.png",
+        ),
+        "Blank": ButtonColor(
+            button_color=Color(0, 0, 0, 0), hovered_color=Color(0, 0, 0, 0), active_color=Color(0, 0, 0, 0)
+        ),
     }
 
     @staticmethod
@@ -142,8 +251,12 @@ class HeroAI_BaseUI:
         hero_globals.capture_mouse_timer.Stop()
 
     @staticmethod
-    def _get_flag_option_pairs() -> tuple[list[HeroAIOptionStruct | None], list[AccountStruct | None], HeroAIOptionStruct | None]:
-        active_account_option_pairs: list[tuple[AccountStruct, HeroAIOptionStruct]] = GLOBAL_CACHE.ShMem.GetAllActiveAccountHeroAIPairs(sort_results=False)
+    def _get_flag_option_pairs() -> (
+        tuple[list[HeroAIOptionStruct | None], list[AccountStruct | None], HeroAIOptionStruct | None]
+    ):
+        active_account_option_pairs: list[tuple[AccountStruct, HeroAIOptionStruct]] = (
+            GLOBAL_CACHE.ShMem.GetAllActiveAccountHeroAIPairs(sort_results=False)
+        )
         options_by_party: list[HeroAIOptionStruct | None] = [None] * MAX_NUM_PLAYERS
         accounts_by_party: list[AccountStruct | None] = [None] * MAX_NUM_PLAYERS
 
@@ -314,14 +427,18 @@ class HeroAI_BaseUI:
                 fz = Overlay().FindZ(fx, fy, 0)
                 if hero_globals.show_broadcast_follow_positions:
                     Overlay().DrawPoly3D(
-                        fx, fy, fz,
+                        fx,
+                        fy,
+                        fz,
                         radius=Range.Touch.value / 3,
                         color=Utils.RGBToColor(0, 255, 255, 140),
                         numsegments=segments,
                         thickness=2.0,
                     )
                     Overlay().DrawText3D(
-                        fx, fy, fz - 110,
+                        fx,
+                        fy,
+                        fz - 110,
                         f"F{i}",
                         color=Utils.RGBToColor(0, 255, 255, 220),
                         autoZ=False,
@@ -332,7 +449,9 @@ class HeroAI_BaseUI:
                     thr = max(0.0, float(getattr(options, "FollowMoveThreshold", 0.0)))
                     if thr > 0.0:
                         Overlay().DrawPoly3D(
-                            fx, fy, fz,
+                            fx,
+                            fy,
+                            fz,
                             radius=thr,
                             color=Utils.RGBToColor(255, 215, 0, 110),
                             numsegments=max(24, segments),
@@ -356,7 +475,12 @@ class HeroAI_BaseUI:
                 return
 
             for account in accounts:
-                if not account or not account.IsSlotActive or account.IsHero or account.AgentPartyData.PartyID != GLOBAL_CACHE.Party.GetPartyID():
+                if (
+                    not account
+                    or not account.IsSlotActive
+                    or account.IsHero
+                    or account.AgentPartyData.PartyID != GLOBAL_CACHE.Party.GetPartyID()
+                ):
                     continue
 
                 account_options = GLOBAL_CACHE.ShMem.GetHeroAIOptionsFromEmail(account.AccountEmail)
@@ -370,7 +494,10 @@ class HeroAI_BaseUI:
                         setattr(account_options, option_name, value)
                     case "Skills":
                         if 0 <= skill_index < NUMBER_OF_SKILLS:
-                            ConsoleLog("HeroAI", f"Setting Skills[{skill_index}] to {game_option.Skills[skill_index]} for account {account.AccountEmail}")
+                            ConsoleLog(
+                                "HeroAI",
+                                f"Setting Skills[{skill_index}] to {game_option.Skills[skill_index]} for account {account.AccountEmail}",
+                            )
                             account_options.Skills[skill_index] = game_option.Skills[skill_index]
 
         avail_x, _avail_y = PyImGui.get_content_region_avail()
@@ -384,7 +511,12 @@ class HeroAI_BaseUI:
         if PyImGui.begin_table(f"GameOptionTable##{identifier}", 5, 0, table_width, btn_size + 2):
             PyImGui.table_next_row()
             PyImGui.table_next_column()
-            following = ImGui.toggle_button(IconsFontAwesome5.ICON_RUNNING + "##Following" + identifier, source_game_option.Following, btn_size, btn_size)
+            following = ImGui.toggle_button(
+                IconsFontAwesome5.ICON_RUNNING + "##Following" + identifier,
+                source_game_option.Following,
+                btn_size,
+                btn_size,
+            )
             if following != source_game_option.Following:
                 source_game_option.Following = following
                 if set_global:
@@ -392,7 +524,12 @@ class HeroAI_BaseUI:
             ImGui.show_tooltip("Following")
 
             PyImGui.table_next_column()
-            avoidance = ImGui.toggle_button(IconsFontAwesome5.ICON_PODCAST + "##Avoidance" + identifier, source_game_option.Avoidance, btn_size, btn_size)
+            avoidance = ImGui.toggle_button(
+                IconsFontAwesome5.ICON_PODCAST + "##Avoidance" + identifier,
+                source_game_option.Avoidance,
+                btn_size,
+                btn_size,
+            )
             if avoidance != source_game_option.Avoidance:
                 source_game_option.Avoidance = avoidance
                 if set_global:
@@ -400,7 +537,9 @@ class HeroAI_BaseUI:
             ImGui.show_tooltip("Avoidance")
 
             PyImGui.table_next_column()
-            looting = ImGui.toggle_button(IconsFontAwesome5.ICON_COINS + "##Looting" + identifier, source_game_option.Looting, btn_size, btn_size)
+            looting = ImGui.toggle_button(
+                IconsFontAwesome5.ICON_COINS + "##Looting" + identifier, source_game_option.Looting, btn_size, btn_size
+            )
             if looting != source_game_option.Looting:
                 source_game_option.Looting = looting
                 if set_global:
@@ -408,7 +547,12 @@ class HeroAI_BaseUI:
             ImGui.show_tooltip("Looting")
 
             PyImGui.table_next_column()
-            targeting = ImGui.toggle_button(IconsFontAwesome5.ICON_BULLSEYE + "##Targeting" + identifier, source_game_option.Targeting, btn_size, btn_size)
+            targeting = ImGui.toggle_button(
+                IconsFontAwesome5.ICON_BULLSEYE + "##Targeting" + identifier,
+                source_game_option.Targeting,
+                btn_size,
+                btn_size,
+            )
             if targeting != source_game_option.Targeting:
                 source_game_option.Targeting = targeting
                 if set_global:
@@ -417,7 +561,12 @@ class HeroAI_BaseUI:
             ImGui.show_tooltip("Targeting")
 
             PyImGui.table_next_column()
-            combat = ImGui.toggle_button(IconsFontAwesome5.ICON_SKULL_CROSSBONES + "##Combat" + identifier, source_game_option.Combat, btn_size, btn_size)
+            combat = ImGui.toggle_button(
+                IconsFontAwesome5.ICON_SKULL_CROSSBONES + "##Combat" + identifier,
+                source_game_option.Combat,
+                btn_size,
+                btn_size,
+            )
             if combat != source_game_option.Combat:
                 source_game_option.Combat = combat
                 if set_global:
@@ -425,12 +574,16 @@ class HeroAI_BaseUI:
             ImGui.show_tooltip("Combat")
             PyImGui.end_table()
 
-        style.ButtonPadding.push_style_var(5 if style.Theme not in ImGui.Textured_Themes else 0, 3 if style.Theme not in ImGui.Textured_Themes else 2)
+        style.ButtonPadding.push_style_var(
+            5 if style.Theme not in ImGui.Textured_Themes else 0, 3 if style.Theme not in ImGui.Textured_Themes else 2
+        )
         if PyImGui.begin_table("SkillsTable", NUMBER_OF_SKILLS, 0, table_width, (btn_size / 3)):
             PyImGui.table_next_row()
             for i in range(NUMBER_OF_SKILLS):
                 PyImGui.table_next_column()
-                skill_active = ImGui.toggle_button(f"{i + 1}##Skill{i}" + identifier, source_game_option.Skills[i], skill_size, skill_size)
+                skill_active = ImGui.toggle_button(
+                    f"{i + 1}##Skill{i}" + identifier, source_game_option.Skills[i], skill_size, skill_size
+                )
                 if skill_active != source_game_option.Skills[i]:
                     source_game_option.Skills[i] = skill_active
                     if set_global:
@@ -462,7 +615,9 @@ class HeroAI_BaseUI:
                     sender_email = cached_data.account_email
                     for account in accounts:
                         ConsoleLog("Messaging", "Resigning account: " + account.AccountEmail)
-                        GLOBAL_CACHE.ShMem.SendMessage(sender_email, account.AccountEmail, SharedCommandType.Resign, (0, 0, 0, 0))
+                        GLOBAL_CACHE.ShMem.SendMessage(
+                            sender_email, account.AccountEmail, SharedCommandType.Resign, (0, 0, 0, 0)
+                        )
                 ImGui.pop_font()
                 ImGui.show_tooltip("Resign Party")
                 ImGui.push_font("Regular", 10)
@@ -470,7 +625,9 @@ class HeroAI_BaseUI:
                 PyImGui.text("|")
                 PyImGui.same_line(0, -1)
 
-                if PyImGui.button(f"{IconsFontAwesome5.ICON_COMPRESS_ARROWS_ALT}##commands_pixelstack", btn_size, btn_size):
+                if PyImGui.button(
+                    f"{IconsFontAwesome5.ICON_COMPRESS_ARROWS_ALT}##commands_pixelstack", btn_size, btn_size
+                ):
                     self_account = GLOBAL_CACHE.ShMem.GetAccountDataFromEmail(cached_data.account_email)
                     if not self_account:
                         return
@@ -480,13 +637,20 @@ class HeroAI_BaseUI:
                         if self_account.AccountEmail == account.AccountEmail:
                             continue
                         ConsoleLog("Messaging", "Pixelstacking account: " + account.AccountEmail)
-                        GLOBAL_CACHE.ShMem.SendMessage(sender_email, account.AccountEmail, SharedCommandType.PixelStack, (self_account.AgentData.Pos.x, self_account.AgentData.Pos.y, 0, 0))
+                        GLOBAL_CACHE.ShMem.SendMessage(
+                            sender_email,
+                            account.AccountEmail,
+                            SharedCommandType.PixelStack,
+                            (self_account.AgentData.Pos.x, self_account.AgentData.Pos.y, 0, 0),
+                        )
                 ImGui.pop_font()
                 ImGui.show_tooltip("Pixel Stack (Carto Helper)")
                 ImGui.push_font("Regular", 10)
                 PyImGui.same_line(0, -1)
 
-                if PyImGui.button(f"{IconsFontAwesome5.ICON_HAND_POINT_RIGHT}##commands_InteractTarget", btn_size, btn_size):
+                if PyImGui.button(
+                    f"{IconsFontAwesome5.ICON_HAND_POINT_RIGHT}##commands_InteractTarget", btn_size, btn_size
+                ):
                     target = Player.GetTargetID()
                     if target == 0:
                         ConsoleLog("Messaging", "No target to interact with.")
@@ -500,7 +664,9 @@ class HeroAI_BaseUI:
                         if self_account.AccountEmail == account.AccountEmail:
                             continue
                         ConsoleLog("Messaging", f"Ordering {account.AccountEmail} to interact with target: {target}")
-                        GLOBAL_CACHE.ShMem.SendMessage(sender_email, account.AccountEmail, SharedCommandType.InteractWithTarget, (target, 0, 0, 0))
+                        GLOBAL_CACHE.ShMem.SendMessage(
+                            sender_email, account.AccountEmail, SharedCommandType.InteractWithTarget, (target, 0, 0, 0)
+                        )
                 ImGui.pop_font()
                 ImGui.show_tooltip("Interact with Target")
                 ImGui.push_font("Regular", 10)
@@ -523,7 +689,12 @@ class HeroAI_BaseUI:
                         if self_account.AccountEmail == account.AccountEmail:
                             continue
                         ConsoleLog("Messaging", f"Ordering {account.AccountEmail} to interact with target: {target}")
-                        GLOBAL_CACHE.ShMem.SendMessage(sender_email, account.AccountEmail, SharedCommandType.TakeDialogWithTarget, (target, 0, 0, 0))
+                        GLOBAL_CACHE.ShMem.SendMessage(
+                            sender_email,
+                            account.AccountEmail,
+                            SharedCommandType.TakeDialogWithTarget,
+                            (target, 0, 0, 0),
+                        )
                 ImGui.pop_font()
                 ImGui.show_tooltip("Get Dialog")
                 ImGui.push_font("Regular", 10)
@@ -537,11 +708,18 @@ class HeroAI_BaseUI:
                         return
 
                     all_accounts = [account for account in cached_data.party.accounts.values()]
-                    lowest_party_index_account = min(all_accounts, key=lambda account: account.AgentPartyData.PartyPosition, default=None)
+                    lowest_party_index_account = min(
+                        all_accounts, key=lambda account: account.AgentPartyData.PartyPosition, default=None
+                    )
                     if lowest_party_index_account is None:
                         return
 
-                    GLOBAL_CACHE.ShMem.SendMessage(sender_email, lowest_party_index_account.AccountEmail, SharedCommandType.OpenChest, (target_id, 1, 0, 0))
+                    GLOBAL_CACHE.ShMem.SendMessage(
+                        sender_email,
+                        lowest_party_index_account.AccountEmail,
+                        SharedCommandType.OpenChest,
+                        (target_id, 1, 0, 0),
+                    )
                 ImGui.pop_font()
                 ImGui.show_tooltip("Open Chest")
                 ImGui.push_font("Regular", 10)
@@ -551,7 +729,9 @@ class HeroAI_BaseUI:
                     sender_email = Player.GetAccountEmail()
                     accounts = GLOBAL_CACHE.ShMem.GetAllAccountData()
                     for account in accounts:
-                        GLOBAL_CACHE.ShMem.SendMessage(sender_email, account.AccountEmail, SharedCommandType.PickUpLoot, (0, 0, 0, 0))
+                        GLOBAL_CACHE.ShMem.SendMessage(
+                            sender_email, account.AccountEmail, SharedCommandType.PickUpLoot, (0, 0, 0, 0)
+                        )
                 ImGui.pop_font()
                 ImGui.show_tooltip("Pick up Loot")
                 ImGui.push_font("Regular", 10)
@@ -654,7 +834,7 @@ class HeroAI_BaseUI:
                 )
                 if new_bv != bv:
                     HeroAI_BaseUI.show_build_match_window = new_bv
-                
+
                 ImGui.pop_font()
                 ImGui.show_tooltip("Builds")
                 ImGui.push_font("Regular", 10)
@@ -669,7 +849,7 @@ class HeroAI_BaseUI:
                 )
                 if new_button_state != button_state_enabled:
                     resurrection_scroll.toggle_all_accounts()
-                    
+
                 ImGui.pop_font()
                 ImGui.show_tooltip(f"Res Scroll Use: {'Enabled' if button_state_enabled else 'Disabled'}")
                 ImGui.push_font("Regular", 10)
@@ -680,14 +860,14 @@ class HeroAI_BaseUI:
     @staticmethod
     def _get_build_registry():
         if HeroAI_BaseUI._build_registry is None:
-            from Py4GWCoreLib.BuildMgr import BuildRegistry
+            from Core.BuildMgr import BuildRegistry
 
             HeroAI_BaseUI._build_registry = BuildRegistry(default_fallback_name="HeroAI")
         return HeroAI_BaseUI._build_registry
 
     @staticmethod
     def _profession_label(profession_value: int) -> str:
-        from Py4GWCoreLib import Profession
+        from Core import Profession
 
         if profession_value == 0:
             return ""
@@ -712,7 +892,7 @@ class HeroAI_BaseUI:
 
     @staticmethod
     def _build_match_row_from_account(account, registry, fallback_name: str):
-        from Py4GWCoreLib import Profession
+        from Core import Profession
 
         primary_value, secondary_value, skill_ids = HeroAI_BaseUI._get_build_signature(account)
         primary_label = HeroAI_BaseUI._profession_label(primary_value)
@@ -786,7 +966,9 @@ class HeroAI_BaseUI:
 
             rows.append(row)
 
-        stale_slot_keys = [slot_key for slot_key in HeroAI_BaseUI._build_match_signature_cache if slot_key not in active_slot_keys]
+        stale_slot_keys = [
+            slot_key for slot_key in HeroAI_BaseUI._build_match_signature_cache if slot_key not in active_slot_keys
+        ]
         for stale_slot_key in stale_slot_keys:
             HeroAI_BaseUI._build_match_signature_cache.pop(stale_slot_key, None)
 
@@ -795,7 +977,7 @@ class HeroAI_BaseUI:
 
     @staticmethod
     def _dump_build_match_debug(cached_data: CacheData) -> None:
-        from Py4GWCoreLib import Profession
+        from Core import Profession
 
         registry = HeroAI_BaseUI._get_build_registry()
         sorted_accounts = sorted(cached_data.party.accounts.values(), key=lambda acc: acc.AgentPartyData.PartyPosition)
@@ -868,7 +1050,10 @@ class HeroAI_BaseUI:
                 f"Prof={primary_prof.name}/{secondary_prof.name} "
                 f"Skills={skill_ids}",
             )
-            ConsoleLog("HeroAI", f"[BuildDebug] Resolved class={resolved_class} build_name={resolved_name!r} source={resolved_source}")
+            ConsoleLog(
+                "HeroAI",
+                f"[BuildDebug] Resolved class={resolved_class} build_name={resolved_name!r} source={resolved_source}",
+            )
 
             all_matchables = registry._iter_matchable_builds()
             ConsoleLog("HeroAI", f"[BuildDebug] Matchable build count={len(all_matchables)}")
@@ -898,11 +1083,16 @@ class HeroAI_BaseUI:
                 ConsoleLog("HeroAI", "[BuildDebug] No matchable build qualified.")
             else:
                 for score, class_name, build_name in scored_candidates:
-                    ConsoleLog("HeroAI", f"[BuildDebug] Candidate score={score} class={class_name} build_name={build_name!r}")
+                    ConsoleLog(
+                        "HeroAI", f"[BuildDebug] Candidate score={score} class={class_name} build_name={build_name!r}"
+                    )
 
             fallback_candidates = registry._iter_fallback_builds()
             for build in fallback_candidates:
-                ConsoleLog("HeroAI", f"[BuildDebug] Fallback class={build.__class__.__name__} build_name={getattr(build, 'build_name', '')!r}")
+                ConsoleLog(
+                    "HeroAI",
+                    f"[BuildDebug] Fallback class={build.__class__.__name__} build_name={getattr(build, 'build_name', '')!r}",
+                )
         ConsoleLog("HeroAI", "=== End Build Match Debug Dump ===")
 
     @staticmethod
@@ -934,26 +1124,44 @@ class HeroAI_BaseUI:
             PyImGui.text("No party accounts available.")
             return
 
-        for party_pos, character_name, primary_value, secondary_value, profession_label, build_name, source_label in HeroAI_BaseUI._build_match_rows:
+        for (
+            party_pos,
+            character_name,
+            primary_value,
+            secondary_value,
+            profession_label,
+            build_name,
+            source_label,
+        ) in HeroAI_BaseUI._build_match_rows:
             PyImGui.text(f"{party_pos + 1}. {character_name}")
             if profession_label:
                 PyImGui.same_line(220, 0)
                 primary_prof = HeroAI_BaseUI._profession_label(primary_value)
                 secondary_prof = HeroAI_BaseUI._profession_label(secondary_value)
                 if secondary_prof:
-                    PyImGui.text_colored(primary_prof, HeroAI_BaseUI._profession_color(primary_value).to_tuple_normalized())
+                    PyImGui.text_colored(
+                        primary_prof, HeroAI_BaseUI._profession_color(primary_value).to_tuple_normalized()
+                    )
                     PyImGui.same_line(0, 0)
                     PyImGui.text("/")
                     PyImGui.same_line(0, 0)
-                    PyImGui.text_colored(secondary_prof, HeroAI_BaseUI._profession_color(secondary_value).to_tuple_normalized())
+                    PyImGui.text_colored(
+                        secondary_prof, HeroAI_BaseUI._profession_color(secondary_value).to_tuple_normalized()
+                    )
                 else:
-                    PyImGui.text_colored(primary_prof, HeroAI_BaseUI._profession_color(primary_value).to_tuple_normalized())
-            build_color = ColorPalette.GetColor("dodger_blue") if source_label == "Matched" else ColorPalette.GetColor("gw_gold")
+                    PyImGui.text_colored(
+                        primary_prof, HeroAI_BaseUI._profession_color(primary_value).to_tuple_normalized()
+                    )
+            build_color = (
+                ColorPalette.GetColor("dodger_blue") if source_label == "Matched" else ColorPalette.GetColor("gw_gold")
+            )
             PyImGui.text("Build:")
             PyImGui.same_line(220, 0)
             PyImGui.text_colored(build_name, build_color.to_tuple_normalized())
             PyImGui.same_line(0, 14)
-            status_color = ColorPalette.GetColor("dodger_blue") if source_label == "Matched" else ColorPalette.GetColor("gw_gold")
+            status_color = (
+                ColorPalette.GetColor("dodger_blue") if source_label == "Matched" else ColorPalette.GetColor("gw_gold")
+            )
             PyImGui.text_colored(source_label, status_color.to_tuple_normalized())
             PyImGui.separator()
 
@@ -968,8 +1176,12 @@ class HeroAI_BaseUI:
             combo_group = module_parts[3] if len(module_parts) > 3 else "General"
             build_name = str(getattr(build, "build_name", "") or build.__class__.__name__)
             build_key = f"{build.__class__.__module__}.{build.__class__.__name__}"
-            required_skills = [int(skill_id) for skill_id in getattr(build, "required_skills", []) if int(skill_id) != 0]
-            optional_skills = [int(skill_id) for skill_id in getattr(build, "optional_skills", []) if int(skill_id) != 0]
+            required_skills = [
+                int(skill_id) for skill_id in getattr(build, "required_skills", []) if int(skill_id) != 0
+            ]
+            optional_skills = [
+                int(skill_id) for skill_id in getattr(build, "optional_skills", []) if int(skill_id) != 0
+            ]
             supported_skills = [int(skill_id) for skill_id in build.GetSupportedSkills() if int(skill_id) != 0]
 
             build_info = {
@@ -1005,16 +1217,20 @@ class HeroAI_BaseUI:
             for combo_group in sorted(grouped_builds[profession_group]):
                 builds = sorted(grouped_builds[profession_group][combo_group], key=lambda item: str(item["name"]))
                 profession_count += len(builds)
-                combo_groups.append({
-                    "name": combo_group,
-                    "count": len(builds),
-                    "builds": builds,
-                })
-            supported_groups.append({
-                "name": profession_group,
-                "count": profession_count,
-                "combo_groups": combo_groups,
-            })
+                combo_groups.append(
+                    {
+                        "name": combo_group,
+                        "count": len(builds),
+                        "builds": builds,
+                    }
+                )
+            supported_groups.append(
+                {
+                    "name": profession_group,
+                    "count": profession_count,
+                    "combo_groups": combo_groups,
+                }
+            )
         return supported_groups
 
     @staticmethod
@@ -1038,7 +1254,9 @@ class HeroAI_BaseUI:
             return
 
         texture_path = GLOBAL_CACHE.Skill.ExtraData.GetTexturePath(skill_id)
-        skill_name = GLOBAL_CACHE.Skill.GetNameFromWiki(skill_id) or GLOBAL_CACHE.Skill.GetName(skill_id) or str(skill_id)
+        skill_name = (
+            GLOBAL_CACHE.Skill.GetNameFromWiki(skill_id) or GLOBAL_CACHE.Skill.GetName(skill_id) or str(skill_id)
+        )
         suffix = _get_skill_name_suffix(skill_id)
         if suffix:
             skill_name = f"{skill_name} {suffix}"
@@ -1053,7 +1271,9 @@ class HeroAI_BaseUI:
         recharge_time = int(GLOBAL_CACHE.Skill.Data.GetRecharge(skill_id))
         is_elite = bool(GLOBAL_CACHE.Skill.Flags.IsElite(skill_id))
         campaign_name = GLOBAL_CACHE.Skill.GetCampaign(skill_id)[1]
-        concise_description = GLOBAL_CACHE.Skill.GetConciseDescription(skill_id) or GLOBAL_CACHE.Skill.GetDescription(skill_id) or ""
+        concise_description = (
+            GLOBAL_CACHE.Skill.GetConciseDescription(skill_id) or GLOBAL_CACHE.Skill.GetDescription(skill_id) or ""
+        )
 
         accent = HeroAI_BaseUI._profession_color(int(profession_value))
         title_color = ColorPalette.GetColor("gw_gold") if is_elite else ColorPalette.GetColor("white")
@@ -1104,7 +1324,13 @@ class HeroAI_BaseUI:
         cards_per_row = 8
         for index, skill_id in enumerate(skill_ids):
             is_selected = HeroAI_BaseUI._supported_build_selected_skill_id == int(skill_id)
-            if ImGui.image_toggle_button(f"{section_name}_{index}_{skill_id}", GLOBAL_CACHE.Skill.ExtraData.GetTexturePath(skill_id), is_selected, 42, 42):
+            if ImGui.image_toggle_button(
+                f"{section_name}_{index}_{skill_id}",
+                GLOBAL_CACHE.Skill.ExtraData.GetTexturePath(skill_id),
+                is_selected,
+                42,
+                42,
+            ):
                 HeroAI_BaseUI._supported_build_selected_skill_id = int(skill_id)
 
             if PyImGui.is_item_hovered():
@@ -1208,7 +1434,12 @@ class HeroAI_BaseUI:
                         build_key = str(build_info["key"])
                         build_name = str(build_info["name"])
                         is_selected = HeroAI_BaseUI._supported_build_selected_key == build_key
-                        if ImGui.selectable(f"{build_name}##supported_build_{build_key}", is_selected, PyImGui.SelectableFlags.NoFlag, (0, 0)):
+                        if ImGui.selectable(
+                            f"{build_name}##supported_build_{build_key}",
+                            is_selected,
+                            PyImGui.SelectableFlags.NoFlag,
+                            (0, 0),
+                        ):
                             HeroAI_BaseUI._supported_build_selected_key = build_key
 
                     PyImGui.tree_pop()
@@ -1306,16 +1537,18 @@ class HeroAI_BaseUI:
             while len(skills) < 8:
                 skills.append(0)
 
-            rows.append((
-                party_pos,
-                character_name,
-                email,
-                primary_value,
-                secondary_value,
-                attributes,
-                tuple(skills),
-                template_code,
-            ))
+            rows.append(
+                (
+                    party_pos,
+                    character_name,
+                    email,
+                    primary_value,
+                    secondary_value,
+                    attributes,
+                    tuple(skills),
+                    template_code,
+                )
+            )
 
         stale_emails = [e for e in HeroAI_BaseUI._team_viewer_parse_cache if e not in active_emails]
         for stale_email in stale_emails:
@@ -1329,11 +1562,11 @@ class HeroAI_BaseUI:
         if not target_email or not template_code:
             return
         try:
-            from Py4GWCoreLib.Player import Player
+            from Core.Player import Player
 
             sender_email = Player.GetAccountEmail() or ""
             chunk_size = 29
-            chunks = [template_code[i:i + chunk_size] for i in range(0, len(template_code), chunk_size)]
+            chunks = [template_code[i : i + chunk_size] for i in range(0, len(template_code), chunk_size)]
             while len(chunks) < 4:
                 chunks.append("")
             GLOBAL_CACHE.ShMem.SendMessage(
@@ -1348,7 +1581,7 @@ class HeroAI_BaseUI:
 
     @staticmethod
     def _format_team_viewer_attributes(attributes: dict) -> str:
-        from Py4GWCoreLib.enums_src.GameData_enums import Attribute, AttributeNames
+        from Core.enums_src.GameData_enums import Attribute, AttributeNames
 
         if not attributes:
             return "No attributes"
@@ -1378,13 +1611,24 @@ class HeroAI_BaseUI:
         name_box_width = 150
         row_height = 140
 
-        for party_pos, character_name, email, primary_value, secondary_value, attributes, skills_tuple, template_code in HeroAI_BaseUI._team_viewer_rows:
+        for (
+            party_pos,
+            character_name,
+            email,
+            primary_value,
+            secondary_value,
+            attributes,
+            skills_tuple,
+            template_code,
+        ) in HeroAI_BaseUI._team_viewer_rows:
             display_name = HeroAI_BaseUI._get_team_viewer_display_name(party_pos, character_name)
             skills = list(skills_tuple)
             primary_label = HeroAI_BaseUI._profession_label(primary_value)
             secondary_label = HeroAI_BaseUI._profession_label(secondary_value)
 
-            if PyImGui.begin_child(f"TVName_{party_pos}", (name_box_width, row_height), True, PyImGui.WindowFlags.NoFlag):
+            if PyImGui.begin_child(
+                f"TVName_{party_pos}", (name_box_width, row_height), True, PyImGui.WindowFlags.NoFlag
+            ):
                 name_inner_y = PyImGui.get_cursor_pos_y()
                 PyImGui.set_cursor_pos_y(name_inner_y + max(0, (row_height - 40) // 2))
                 ImGui.push_font("Bold", 16)
@@ -1395,12 +1639,16 @@ class HeroAI_BaseUI:
             PyImGui.same_line(0, 6)
 
             if PyImGui.begin_child(f"TVDetails_{party_pos}", (0, row_height), True, PyImGui.WindowFlags.NoFlag):
-                PyImGui.text_colored(primary_label, HeroAI_BaseUI._profession_color(primary_value).to_tuple_normalized())
+                PyImGui.text_colored(
+                    primary_label, HeroAI_BaseUI._profession_color(primary_value).to_tuple_normalized()
+                )
                 if secondary_label:
                     PyImGui.same_line(0, 8)
                     PyImGui.text("/")
                     PyImGui.same_line(0, 8)
-                    PyImGui.text_colored(secondary_label, HeroAI_BaseUI._profession_color(secondary_value).to_tuple_normalized())
+                    PyImGui.text_colored(
+                        secondary_label, HeroAI_BaseUI._profession_color(secondary_value).to_tuple_normalized()
+                    )
 
                 PyImGui.text("Attributes:")
                 PyImGui.same_line(0, 8)
@@ -1456,7 +1704,9 @@ class HeroAI_BaseUI:
         registry = HeroAI_BaseUI._get_build_registry()
         PyImGui.set_next_window_size((980, 720), PyImGui.ImGuiCond.FirstUseEver)
 
-        if ImGui.Begin(ini_key=cached_data.ini_key, name="HeroAI Build Matches", p_open=True, flags=PyImGui.WindowFlags.NoFlag):
+        if ImGui.Begin(
+            ini_key=cached_data.ini_key, name="HeroAI Build Matches", p_open=True, flags=PyImGui.WindowFlags.NoFlag
+        ):
             if PyImGui.begin_tab_bar("HeroAIBuildMatchTabs"):
                 if PyImGui.begin_tab_item("Matches"):
                     PyImGui.text("Resolved from each account's shared-memory profession pair and skillbar.")
@@ -1477,6 +1727,7 @@ class HeroAI_BaseUI:
 
                 if PyImGui.begin_tab_item("Hex Removal"):
                     from HeroAI.hex_removal_src.hex_removal_ui import draw_tab as _draw_hex_removal_tab
+
                     _draw_hex_removal_tab()
                     PyImGui.end_tab_item()
 
@@ -1532,78 +1783,165 @@ class HeroAI_BaseUI:
     @staticmethod
     def _load_follow_runtime_config(ini_key: str):
         cfg = HeroAI_BaseUI._follow_runtime_cfg()
-        hero_globals.show_broadcast_follow_positions = bool(cfg.get_bool("FollowRuntime", "show_broadcast_follow_positions", True))
-        hero_globals.show_broadcast_follow_threshold_rings = bool(cfg.get_bool("FollowRuntime", "show_broadcast_follow_threshold_rings", True))
-        hero_globals.show_followers_unstuck_overlay = bool(cfg.get_bool("FollowRuntime", "show_followers_unstuck_overlay", False))
-        hero_globals.show_stuck_avoidance_debug = bool(cfg.get_bool("FollowRuntime", "show_stuck_avoidance_debug", False))
+        hero_globals.show_broadcast_follow_positions = bool(
+            cfg.get_bool("FollowRuntime", "show_broadcast_follow_positions", True)
+        )
+        hero_globals.show_broadcast_follow_threshold_rings = bool(
+            cfg.get_bool("FollowRuntime", "show_broadcast_follow_threshold_rings", True)
+        )
+        hero_globals.show_followers_unstuck_overlay = bool(
+            cfg.get_bool("FollowRuntime", "show_followers_unstuck_overlay", False)
+        )
+        hero_globals.show_stuck_avoidance_debug = bool(
+            cfg.get_bool("FollowRuntime", "show_stuck_avoidance_debug", False)
+        )
         hero_globals.show_flagging_window = bool(cfg.get_bool("FollowRuntime", "show_flagging_window", False))
-        HeroAI_BaseUI.follow_move_threshold_default = max(0.0, float(cfg.get_float("FollowRuntime", "follow_move_threshold_default", float(Range.Area.value))))
-        HeroAI_BaseUI.follow_move_threshold_combat = max(0.0, float(cfg.get_float("FollowRuntime", "follow_move_threshold_combat", float(Range.Adjacent.value))))
-        HeroAI_BaseUI.follow_move_threshold_flagged = max(0.0, float(cfg.get_float("FollowRuntime", "follow_move_threshold_flagged", 0.0)))
-        HeroAI_BaseUI.follow_move_threshold_default_mode = str(cfg.get_str("FollowRuntime", "follow_move_threshold_default_mode", "Area"))
-        HeroAI_BaseUI.follow_move_threshold_combat_mode = str(cfg.get_str("FollowRuntime", "follow_move_threshold_combat_mode", "Adjacent"))
-        HeroAI_BaseUI.follow_move_threshold_flagged_mode = str(cfg.get_str("FollowRuntime", "follow_move_threshold_flagged_mode", "Zero"))
+        HeroAI_BaseUI.follow_move_threshold_default = max(
+            0.0, float(cfg.get_float("FollowRuntime", "follow_move_threshold_default", float(Range.Area.value)))
+        )
+        HeroAI_BaseUI.follow_move_threshold_combat = max(
+            0.0, float(cfg.get_float("FollowRuntime", "follow_move_threshold_combat", float(Range.Adjacent.value)))
+        )
+        HeroAI_BaseUI.follow_move_threshold_flagged = max(
+            0.0, float(cfg.get_float("FollowRuntime", "follow_move_threshold_flagged", 0.0))
+        )
+        HeroAI_BaseUI.follow_move_threshold_default_mode = str(
+            cfg.get_str("FollowRuntime", "follow_move_threshold_default_mode", "Area")
+        )
+        HeroAI_BaseUI.follow_move_threshold_combat_mode = str(
+            cfg.get_str("FollowRuntime", "follow_move_threshold_combat_mode", "Adjacent")
+        )
+        HeroAI_BaseUI.follow_move_threshold_flagged_mode = str(
+            cfg.get_str("FollowRuntime", "follow_move_threshold_flagged_mode", "Zero")
+        )
         # Stuck-avoidance live-tunable knobs: BT.Move tolerance, circle radius,
         # and the body-block enemy-scan radius. All three sync cross-client via
         # the same INI throttle in HeroAI/follow/stuck_avoidance.py.
         from HeroAI.follow.smart_unstuck import SMART_UNSTUCK_CFG
-        SMART_UNSTUCK_CFG.waypoint_smoothing = max(1.0, float(cfg.get_float(
-            "FollowRuntime", "waypoint_smoothing", float(SMART_UNSTUCK_CFG.waypoint_smoothing)
-        )))
-        SMART_UNSTUCK_CFG.touch_radius = max(50.0, min(400.0, float(cfg.get_float(
-            "FollowRuntime", "stuck_touch_radius", float(SMART_UNSTUCK_CFG.touch_radius)
-        ))))
-        SMART_UNSTUCK_CFG.enemy_detection_range = max(50.0, min(400.0, float(cfg.get_float(
-            "FollowRuntime",
-            "stuck_enemy_detection_range",
-            float(SMART_UNSTUCK_CFG.enemy_detection_range),
-        ))))
-        SMART_UNSTUCK_CFG.stuck_sample_count = max(1, min(10, int(cfg.get_int(
-            "FollowRuntime",
-            "stuck_sample_count",
-            int(SMART_UNSTUCK_CFG.stuck_sample_count),
-        ))))
-        SMART_UNSTUCK_CFG.min_distance_activate_unstuck = max(50.0, min(600.0, float(cfg.get_float(
-            "FollowRuntime",
-            "min_distance_activate_unstuck",
-            float(SMART_UNSTUCK_CFG.min_distance_activate_unstuck),
-        ))))
-        SMART_UNSTUCK_CFG.no_progress_move_units = max(1.0, min(100.0, float(cfg.get_float(
-            "FollowRuntime",
-            "no_progress_move_units",
-            float(SMART_UNSTUCK_CFG.no_progress_move_units),
-        ))))
-        SMART_UNSTUCK_CFG.no_progress_close_units = max(1.0, min(100.0, float(cfg.get_float(
-            "FollowRuntime",
-            "no_progress_close_units",
-            float(SMART_UNSTUCK_CFG.no_progress_close_units),
-        ))))
-        SMART_UNSTUCK_CFG.obstacle_cleared_delta = max(50.0, min(800.0, float(cfg.get_float(
-            "FollowRuntime",
-            "obstacle_cleared_delta",
-            float(SMART_UNSTUCK_CFG.obstacle_cleared_delta),
-        ))))
+
+        SMART_UNSTUCK_CFG.waypoint_smoothing = max(
+            1.0,
+            float(cfg.get_float("FollowRuntime", "waypoint_smoothing", float(SMART_UNSTUCK_CFG.waypoint_smoothing))),
+        )
+        SMART_UNSTUCK_CFG.touch_radius = max(
+            50.0,
+            min(
+                400.0,
+                float(cfg.get_float("FollowRuntime", "stuck_touch_radius", float(SMART_UNSTUCK_CFG.touch_radius))),
+            ),
+        )
+        SMART_UNSTUCK_CFG.enemy_detection_range = max(
+            50.0,
+            min(
+                400.0,
+                float(
+                    cfg.get_float(
+                        "FollowRuntime",
+                        "stuck_enemy_detection_range",
+                        float(SMART_UNSTUCK_CFG.enemy_detection_range),
+                    )
+                ),
+            ),
+        )
+        SMART_UNSTUCK_CFG.stuck_sample_count = max(
+            1,
+            min(
+                10,
+                int(
+                    cfg.get_int(
+                        "FollowRuntime",
+                        "stuck_sample_count",
+                        int(SMART_UNSTUCK_CFG.stuck_sample_count),
+                    )
+                ),
+            ),
+        )
+        SMART_UNSTUCK_CFG.min_distance_activate_unstuck = max(
+            50.0,
+            min(
+                600.0,
+                float(
+                    cfg.get_float(
+                        "FollowRuntime",
+                        "min_distance_activate_unstuck",
+                        float(SMART_UNSTUCK_CFG.min_distance_activate_unstuck),
+                    )
+                ),
+            ),
+        )
+        SMART_UNSTUCK_CFG.no_progress_move_units = max(
+            1.0,
+            min(
+                100.0,
+                float(
+                    cfg.get_float(
+                        "FollowRuntime",
+                        "no_progress_move_units",
+                        float(SMART_UNSTUCK_CFG.no_progress_move_units),
+                    )
+                ),
+            ),
+        )
+        SMART_UNSTUCK_CFG.no_progress_close_units = max(
+            1.0,
+            min(
+                100.0,
+                float(
+                    cfg.get_float(
+                        "FollowRuntime",
+                        "no_progress_close_units",
+                        float(SMART_UNSTUCK_CFG.no_progress_close_units),
+                    )
+                ),
+            ),
+        )
+        SMART_UNSTUCK_CFG.obstacle_cleared_delta = max(
+            50.0,
+            min(
+                800.0,
+                float(
+                    cfg.get_float(
+                        "FollowRuntime",
+                        "obstacle_cleared_delta",
+                        float(SMART_UNSTUCK_CFG.obstacle_cleared_delta),
+                    )
+                ),
+            ),
+        )
 
     @staticmethod
     def _save_follow_runtime_config(ini_key: str):
         cfg = HeroAI_BaseUI._follow_runtime_cfg()
         cfg.set("FollowRuntime", "show_broadcast_follow_positions", bool(hero_globals.show_broadcast_follow_positions))
-        cfg.set("FollowRuntime", "show_broadcast_follow_threshold_rings", bool(hero_globals.show_broadcast_follow_threshold_rings))
+        cfg.set(
+            "FollowRuntime",
+            "show_broadcast_follow_threshold_rings",
+            bool(hero_globals.show_broadcast_follow_threshold_rings),
+        )
         cfg.set("FollowRuntime", "show_followers_unstuck_overlay", bool(hero_globals.show_followers_unstuck_overlay))
         cfg.set("FollowRuntime", "show_stuck_avoidance_debug", bool(hero_globals.show_stuck_avoidance_debug))
         cfg.set("FollowRuntime", "show_flagging_window", bool(hero_globals.show_flagging_window))
         cfg.set("FollowRuntime", "follow_move_threshold_default", float(HeroAI_BaseUI.follow_move_threshold_default))
         cfg.set("FollowRuntime", "follow_move_threshold_combat", float(HeroAI_BaseUI.follow_move_threshold_combat))
         cfg.set("FollowRuntime", "follow_move_threshold_flagged", float(HeroAI_BaseUI.follow_move_threshold_flagged))
-        cfg.set("FollowRuntime", "follow_move_threshold_default_mode", str(HeroAI_BaseUI.follow_move_threshold_default_mode))
-        cfg.set("FollowRuntime", "follow_move_threshold_combat_mode", str(HeroAI_BaseUI.follow_move_threshold_combat_mode))
-        cfg.set("FollowRuntime", "follow_move_threshold_flagged_mode", str(HeroAI_BaseUI.follow_move_threshold_flagged_mode))
+        cfg.set(
+            "FollowRuntime", "follow_move_threshold_default_mode", str(HeroAI_BaseUI.follow_move_threshold_default_mode)
+        )
+        cfg.set(
+            "FollowRuntime", "follow_move_threshold_combat_mode", str(HeroAI_BaseUI.follow_move_threshold_combat_mode)
+        )
+        cfg.set(
+            "FollowRuntime", "follow_move_threshold_flagged_mode", str(HeroAI_BaseUI.follow_move_threshold_flagged_mode)
+        )
         from HeroAI.follow.smart_unstuck import SMART_UNSTUCK_CFG
+
         cfg.set("FollowRuntime", "waypoint_smoothing", float(SMART_UNSTUCK_CFG.waypoint_smoothing))
         cfg.set("FollowRuntime", "stuck_touch_radius", float(SMART_UNSTUCK_CFG.touch_radius))
         cfg.set("FollowRuntime", "stuck_enemy_detection_range", float(SMART_UNSTUCK_CFG.enemy_detection_range))
         cfg.set("FollowRuntime", "stuck_sample_count", int(SMART_UNSTUCK_CFG.stuck_sample_count))
-        cfg.set("FollowRuntime", "min_distance_activate_unstuck", float(SMART_UNSTUCK_CFG.min_distance_activate_unstuck))
+        cfg.set(
+            "FollowRuntime", "min_distance_activate_unstuck", float(SMART_UNSTUCK_CFG.min_distance_activate_unstuck)
+        )
         cfg.set("FollowRuntime", "no_progress_move_units", float(SMART_UNSTUCK_CFG.no_progress_move_units))
         cfg.set("FollowRuntime", "no_progress_close_units", float(SMART_UNSTUCK_CFG.no_progress_close_units))
         cfg.set("FollowRuntime", "obstacle_cleared_delta", float(SMART_UNSTUCK_CFG.obstacle_cleared_delta))
@@ -1736,12 +2074,9 @@ class HeroAI_BaseUI:
             if options is None:
                 continue
 
-            personal_flag_active = (
-                bool(getattr(options, "IsFlagged", False))
-                and (
-                    abs(float(getattr(options.FlagPos, "x", 0.0))) > 0.001
-                    or abs(float(getattr(options.FlagPos, "y", 0.0))) > 0.001
-                )
+            personal_flag_active = bool(getattr(options, "IsFlagged", False)) and (
+                abs(float(getattr(options.FlagPos, "x", 0.0))) > 0.001
+                or abs(float(getattr(options.FlagPos, "y", 0.0))) > 0.001
             )
 
             if personal_flag_active or leader_all_flag_active:
@@ -1797,8 +2132,12 @@ class HeroAI_BaseUI:
                             z1 = Overlay().FindZ(float(p1[0]), float(p1[1]), 0)
                             z2 = Overlay().FindZ(float(p2[0]), float(p2[1]), 0)
                             Overlay().DrawLine3D(
-                                float(p1[0]), float(p1[1]), z1,
-                                float(p2[0]), float(p2[1]), z2,
+                                float(p1[0]),
+                                float(p1[1]),
+                                z1,
+                                float(p2[0]),
+                                float(p2[1]),
+                                z2,
                                 line_color,
                                 2.5,
                             )
@@ -1810,7 +2149,9 @@ class HeroAI_BaseUI:
                         cx, cy = float(circle[0]), float(circle[1])
                         cz = Overlay().FindZ(cx, cy, 0)
                         Overlay().DrawPoly3D(
-                            cx, cy, cz,
+                            cx,
+                            cy,
+                            cz,
                             radius=radius,
                             color=Utils.RGBToColor(255, 0, 255, 140),
                             numsegments=32,
@@ -1820,8 +2161,8 @@ class HeroAI_BaseUI:
             for wi, wp in enumerate(waypoints):
                 wx, wy = float(wp[0]), float(wp[1])
                 wz = Overlay().FindZ(wx, wy, 0)
-                is_current = (wi == current_idx)
-                is_done = (wi < current_idx)
+                is_current = wi == current_idx
+                is_done = wi < current_idx
                 # current = yellow > done = gray > upcoming = green.
                 if is_current:
                     color = Utils.RGBToColor(255, 255, 0, 240)
@@ -1830,7 +2171,9 @@ class HeroAI_BaseUI:
                 else:
                     color = Utils.RGBToColor(0, 255, 0, 220)
                 Overlay().DrawPoly3D(
-                    wx, wy, wz,
+                    wx,
+                    wy,
+                    wz,
                     radius=22.0,
                     color=color,
                     numsegments=12,
@@ -1838,7 +2181,9 @@ class HeroAI_BaseUI:
                 )
                 # Faint outer reference ring at the overlay touch threshold.
                 Overlay().DrawPoly3D(
-                    wx, wy, wz,
+                    wx,
+                    wy,
+                    wz,
                     radius=touch_radius,
                     color=Utils.RGBToColor(180, 180, 180, 80),
                     numsegments=16,
@@ -1876,29 +2221,43 @@ class HeroAI_BaseUI:
             PyImGui.table_next_row()
             PyImGui.table_next_column()
             if party_size >= 2:
-                HeroAI_BaseUI.HeroFlags[0] = ImGui.toggle_button("1", HeroAI_BaseUI._is_flag_display_slot_flagged(1), 30, 30)
+                HeroAI_BaseUI.HeroFlags[0] = ImGui.toggle_button(
+                    "1", HeroAI_BaseUI._is_flag_display_slot_flagged(1), 30, 30
+                )
             PyImGui.table_next_column()
             if party_size >= 3:
-                HeroAI_BaseUI.HeroFlags[1] = ImGui.toggle_button("2", HeroAI_BaseUI._is_flag_display_slot_flagged(2), 30, 30)
+                HeroAI_BaseUI.HeroFlags[1] = ImGui.toggle_button(
+                    "2", HeroAI_BaseUI._is_flag_display_slot_flagged(2), 30, 30
+                )
             PyImGui.table_next_column()
             if party_size >= 4:
-                HeroAI_BaseUI.HeroFlags[2] = ImGui.toggle_button("3", HeroAI_BaseUI._is_flag_display_slot_flagged(3), 30, 30)
+                HeroAI_BaseUI.HeroFlags[2] = ImGui.toggle_button(
+                    "3", HeroAI_BaseUI._is_flag_display_slot_flagged(3), 30, 30
+                )
             PyImGui.table_next_row()
             PyImGui.table_next_column()
             if party_size >= 5:
-                HeroAI_BaseUI.HeroFlags[3] = ImGui.toggle_button("4", HeroAI_BaseUI._is_flag_display_slot_flagged(4), 30, 30)
+                HeroAI_BaseUI.HeroFlags[3] = ImGui.toggle_button(
+                    "4", HeroAI_BaseUI._is_flag_display_slot_flagged(4), 30, 30
+                )
             PyImGui.table_next_column()
             HeroAI_BaseUI.AllFlag = ImGui.toggle_button("A", HeroAI_BaseUI._is_flag_display_slot_flagged(0), 30, 30)
             PyImGui.table_next_column()
             if party_size >= 6:
-                HeroAI_BaseUI.HeroFlags[4] = ImGui.toggle_button("5", HeroAI_BaseUI._is_flag_display_slot_flagged(5), 30, 30)
+                HeroAI_BaseUI.HeroFlags[4] = ImGui.toggle_button(
+                    "5", HeroAI_BaseUI._is_flag_display_slot_flagged(5), 30, 30
+                )
             PyImGui.table_next_row()
             PyImGui.table_next_column()
             if party_size >= 7:
-                HeroAI_BaseUI.HeroFlags[5] = ImGui.toggle_button("6", HeroAI_BaseUI._is_flag_display_slot_flagged(6), 30, 30)
+                HeroAI_BaseUI.HeroFlags[5] = ImGui.toggle_button(
+                    "6", HeroAI_BaseUI._is_flag_display_slot_flagged(6), 30, 30
+                )
             PyImGui.table_next_column()
             if party_size >= 8:
-                HeroAI_BaseUI.HeroFlags[6] = ImGui.toggle_button("7", HeroAI_BaseUI._is_flag_display_slot_flagged(7), 30, 30)
+                HeroAI_BaseUI.HeroFlags[6] = ImGui.toggle_button(
+                    "7", HeroAI_BaseUI._is_flag_display_slot_flagged(7), 30, 30
+                )
             PyImGui.table_next_column()
             HeroAI_BaseUI.ClearFlags = ImGui.toggle_button("X", HeroAI_BaseUI.ClearFlags, 30, 30)
             PyImGui.end_table()
@@ -1925,7 +2284,12 @@ class HeroAI_BaseUI:
         HeroAI_BaseUI.DrawSmartUnstuck3DOverlay(cached_data)
 
         if HeroAI_BaseUI.show_follow_formations_quick_window:
-            if ImGui.Begin(ini_key=cached_data.formation_window_ini_key, name="Follow Formations Quick Settings", p_open=True, flags=PyImGui.WindowFlags.AlwaysAutoResize):
+            if ImGui.Begin(
+                ini_key=cached_data.formation_window_ini_key,
+                name="Follow Formations Quick Settings",
+                p_open=True,
+                flags=PyImGui.WindowFlags.AlwaysAutoResize,
+            ):
                 HeroAI_BaseUI._load_follow_formations_quick_data()
                 HeroAI_BaseUI._load_follow_runtime_config(cached_data.formation_window_ini_key)
                 if PyImGui.button("Refresh Formations"):
@@ -1934,15 +2298,22 @@ class HeroAI_BaseUI:
                 PyImGui.same_line(0, 6)
                 editor_label = "Close Editor" if HeroAI_BaseUI.show_follow_formations_editor_window else "Open Editor"
                 if PyImGui.button(editor_label):
-                    HeroAI_BaseUI.show_follow_formations_editor_window = not HeroAI_BaseUI.show_follow_formations_editor_window
+                    HeroAI_BaseUI.show_follow_formations_editor_window = (
+                        not HeroAI_BaseUI.show_follow_formations_editor_window
+                    )
                     if HeroAI_BaseUI.show_follow_formations_editor_window:
                         from HeroAI.follow.editor import open_editor
+
                         open_editor()
 
                 dirty_runtime_cfg = False
 
                 if HeroAI_BaseUI.follow_formations_names:
-                    idx = PyImGui.combo("Formation", HeroAI_BaseUI.follow_formations_selected_index, HeroAI_BaseUI.follow_formations_names)
+                    idx = PyImGui.combo(
+                        "Formation",
+                        HeroAI_BaseUI.follow_formations_selected_index,
+                        HeroAI_BaseUI.follow_formations_names,
+                    )
                     if idx != HeroAI_BaseUI.follow_formations_selected_index:
                         HeroAI_BaseUI._set_selected_follow_formation(idx)
                         HeroAI_BaseUI._refresh_follow_publisher_live(cached_data, reload_ini=True)
@@ -1958,7 +2329,9 @@ class HeroAI_BaseUI:
                         HeroAI_BaseUI._set_party_follow_option(cached_data, "Following", new_following)
                         HeroAI_BaseUI._refresh_follow_publisher_live(cached_data)
 
-                    new_avoidance = PyImGui.checkbox("Enable Combat Avoidance Mix", bool(cached_data.global_options.Avoidance))
+                    new_avoidance = PyImGui.checkbox(
+                        "Enable Combat Avoidance Mix", bool(cached_data.global_options.Avoidance)
+                    )
                     if new_avoidance != bool(cached_data.global_options.Avoidance):
                         HeroAI_BaseUI._set_party_follow_option(cached_data, "Avoidance", new_avoidance)
                         HeroAI_BaseUI._refresh_follow_publisher_live(cached_data)
@@ -1969,22 +2342,30 @@ class HeroAI_BaseUI:
             if PyImGui.button("Print Follow Debug"):
                 HeroAI_BaseUI._print_follow_debug_dump()
 
-            new_show_broadcast_follow_positions = PyImGui.checkbox("Draw Followers FollowPos (3D)", hero_globals.show_broadcast_follow_positions)
+            new_show_broadcast_follow_positions = PyImGui.checkbox(
+                "Draw Followers FollowPos (3D)", hero_globals.show_broadcast_follow_positions
+            )
             if new_show_broadcast_follow_positions != hero_globals.show_broadcast_follow_positions:
                 hero_globals.show_broadcast_follow_positions = new_show_broadcast_follow_positions
                 dirty_runtime_cfg = True
 
-            new_show_followers_unstuck_overlay = PyImGui.checkbox("Draw Followers Unstuck (3D)", hero_globals.show_followers_unstuck_overlay)
+            new_show_followers_unstuck_overlay = PyImGui.checkbox(
+                "Draw Followers Unstuck (3D)", hero_globals.show_followers_unstuck_overlay
+            )
             if new_show_followers_unstuck_overlay != hero_globals.show_followers_unstuck_overlay:
                 hero_globals.show_followers_unstuck_overlay = new_show_followers_unstuck_overlay
                 dirty_runtime_cfg = True
 
-            new_show_broadcast_follow_threshold_rings = PyImGui.checkbox("Draw Followers Threshold Rings (3D)", hero_globals.show_broadcast_follow_threshold_rings)
+            new_show_broadcast_follow_threshold_rings = PyImGui.checkbox(
+                "Draw Followers Threshold Rings (3D)", hero_globals.show_broadcast_follow_threshold_rings
+            )
             if new_show_broadcast_follow_threshold_rings != hero_globals.show_broadcast_follow_threshold_rings:
                 hero_globals.show_broadcast_follow_threshold_rings = new_show_broadcast_follow_threshold_rings
                 dirty_runtime_cfg = True
 
-            new_show_stuck_avoidance_debug = PyImGui.checkbox("Stuck Avoidance Verbose Logs", hero_globals.show_stuck_avoidance_debug)
+            new_show_stuck_avoidance_debug = PyImGui.checkbox(
+                "Stuck Avoidance Verbose Logs", hero_globals.show_stuck_avoidance_debug
+            )
             if new_show_stuck_avoidance_debug != hero_globals.show_stuck_avoidance_debug:
                 hero_globals.show_stuck_avoidance_debug = new_show_stuck_avoidance_debug
                 dirty_runtime_cfg = True
@@ -1992,42 +2373,63 @@ class HeroAI_BaseUI:
             presets = HeroAI_BaseUI._follow_threshold_presets()
             preset_names = [name for name, _ in presets]
 
-            d_idx = PyImGui.combo("Follow Threshold Preset", HeroAI_BaseUI._threshold_mode_index(HeroAI_BaseUI.follow_move_threshold_default_mode), preset_names)
+            d_idx = PyImGui.combo(
+                "Follow Threshold Preset",
+                HeroAI_BaseUI._threshold_mode_index(HeroAI_BaseUI.follow_move_threshold_default_mode),
+                preset_names,
+            )
             d_name, d_val = presets[d_idx]
             if d_name != HeroAI_BaseUI.follow_move_threshold_default_mode:
                 HeroAI_BaseUI.follow_move_threshold_default_mode = d_name
                 if d_val is not None:
                     HeroAI_BaseUI.follow_move_threshold_default = float(d_val)
                 dirty_runtime_cfg = True
-            new_default_thr = max(0.0, float(PyImGui.input_float("Follow Threshold", float(HeroAI_BaseUI.follow_move_threshold_default))))
+            new_default_thr = max(
+                0.0, float(PyImGui.input_float("Follow Threshold", float(HeroAI_BaseUI.follow_move_threshold_default)))
+            )
             if abs(new_default_thr - HeroAI_BaseUI.follow_move_threshold_default) > 0.0001:
                 HeroAI_BaseUI.follow_move_threshold_default = new_default_thr
                 if HeroAI_BaseUI.follow_move_threshold_default_mode != "Manual":
                     HeroAI_BaseUI.follow_move_threshold_default_mode = "Manual"
                 dirty_runtime_cfg = True
 
-            c_idx = PyImGui.combo("Combat Threshold Preset", HeroAI_BaseUI._threshold_mode_index(HeroAI_BaseUI.follow_move_threshold_combat_mode), preset_names)
+            c_idx = PyImGui.combo(
+                "Combat Threshold Preset",
+                HeroAI_BaseUI._threshold_mode_index(HeroAI_BaseUI.follow_move_threshold_combat_mode),
+                preset_names,
+            )
             c_name, c_val = presets[c_idx]
             if c_name != HeroAI_BaseUI.follow_move_threshold_combat_mode:
                 HeroAI_BaseUI.follow_move_threshold_combat_mode = c_name
                 if c_val is not None:
                     HeroAI_BaseUI.follow_move_threshold_combat = float(c_val)
                 dirty_runtime_cfg = True
-            new_combat_thr = max(0.0, float(PyImGui.input_float("Combat Follow Threshold", float(HeroAI_BaseUI.follow_move_threshold_combat))))
+            new_combat_thr = max(
+                0.0,
+                float(
+                    PyImGui.input_float("Combat Follow Threshold", float(HeroAI_BaseUI.follow_move_threshold_combat))
+                ),
+            )
             if abs(new_combat_thr - HeroAI_BaseUI.follow_move_threshold_combat) > 0.0001:
                 HeroAI_BaseUI.follow_move_threshold_combat = new_combat_thr
                 if HeroAI_BaseUI.follow_move_threshold_combat_mode != "Manual":
                     HeroAI_BaseUI.follow_move_threshold_combat_mode = "Manual"
                 dirty_runtime_cfg = True
 
-            f_idx = PyImGui.combo("Flag Threshold Preset", HeroAI_BaseUI._threshold_mode_index(HeroAI_BaseUI.follow_move_threshold_flagged_mode), preset_names)
+            f_idx = PyImGui.combo(
+                "Flag Threshold Preset",
+                HeroAI_BaseUI._threshold_mode_index(HeroAI_BaseUI.follow_move_threshold_flagged_mode),
+                preset_names,
+            )
             f_name, f_val = presets[f_idx]
             if f_name != HeroAI_BaseUI.follow_move_threshold_flagged_mode:
                 HeroAI_BaseUI.follow_move_threshold_flagged_mode = f_name
                 if f_val is not None:
                     HeroAI_BaseUI.follow_move_threshold_flagged = float(f_val)
                 dirty_runtime_cfg = True
-            new_flagged_thr = max(0.0, float(PyImGui.input_float("Flag Threshold", float(HeroAI_BaseUI.follow_move_threshold_flagged))))
+            new_flagged_thr = max(
+                0.0, float(PyImGui.input_float("Flag Threshold", float(HeroAI_BaseUI.follow_move_threshold_flagged)))
+            )
             if abs(new_flagged_thr - HeroAI_BaseUI.follow_move_threshold_flagged) > 0.0001:
                 HeroAI_BaseUI.follow_move_threshold_flagged = new_flagged_thr
                 if HeroAI_BaseUI.follow_move_threshold_flagged_mode != "Manual":
@@ -2060,30 +2462,60 @@ class HeroAI_BaseUI:
                 SMART_UNSTUCK_CFG,
                 reload_smart_unstuck_config_from_ini,
             )
-            new_waypoint_smoothing = max(1.0, float(PyImGui.input_float(
-                "Waypoint Smoothing", float(SMART_UNSTUCK_CFG.waypoint_smoothing)
-            )))
-            new_touch_radius = max(50.0, min(400.0, float(PyImGui.input_float(
-                "Stuck Circle Radius", float(SMART_UNSTUCK_CFG.touch_radius)
-            ))))
-            new_enemy_range = max(50.0, min(400.0, float(PyImGui.input_float(
-                "Enemy Detection Range", float(SMART_UNSTUCK_CFG.enemy_detection_range)
-            ))))
-            new_sample_count = max(1, min(10, int(PyImGui.input_int(
-                "Stuck Sample Count", int(SMART_UNSTUCK_CFG.stuck_sample_count)
-            ))))
-            new_min_distance = max(50.0, min(600.0, float(PyImGui.input_float(
-                "Min Distance Activate Unstuck", float(SMART_UNSTUCK_CFG.min_distance_activate_unstuck)
-            ))))
-            new_move_units = max(1.0, min(100.0, float(PyImGui.input_float(
-                "No-Progress Move Units", float(SMART_UNSTUCK_CFG.no_progress_move_units)
-            ))))
-            new_close_units = max(1.0, min(100.0, float(PyImGui.input_float(
-                "No-Progress Close Units", float(SMART_UNSTUCK_CFG.no_progress_close_units)
-            ))))
-            new_early_exit = max(50.0, min(800.0, float(PyImGui.input_float(
-                "Min Dist Early Exit", float(SMART_UNSTUCK_CFG.obstacle_cleared_delta)
-            ))))
+
+            new_waypoint_smoothing = max(
+                1.0, float(PyImGui.input_float("Waypoint Smoothing", float(SMART_UNSTUCK_CFG.waypoint_smoothing)))
+            )
+            new_touch_radius = max(
+                50.0,
+                min(400.0, float(PyImGui.input_float("Stuck Circle Radius", float(SMART_UNSTUCK_CFG.touch_radius)))),
+            )
+            new_enemy_range = max(
+                50.0,
+                min(
+                    400.0,
+                    float(PyImGui.input_float("Enemy Detection Range", float(SMART_UNSTUCK_CFG.enemy_detection_range))),
+                ),
+            )
+            new_sample_count = max(
+                1, min(10, int(PyImGui.input_int("Stuck Sample Count", int(SMART_UNSTUCK_CFG.stuck_sample_count))))
+            )
+            new_min_distance = max(
+                50.0,
+                min(
+                    600.0,
+                    float(
+                        PyImGui.input_float(
+                            "Min Distance Activate Unstuck", float(SMART_UNSTUCK_CFG.min_distance_activate_unstuck)
+                        )
+                    ),
+                ),
+            )
+            new_move_units = max(
+                1.0,
+                min(
+                    100.0,
+                    float(
+                        PyImGui.input_float("No-Progress Move Units", float(SMART_UNSTUCK_CFG.no_progress_move_units))
+                    ),
+                ),
+            )
+            new_close_units = max(
+                1.0,
+                min(
+                    100.0,
+                    float(
+                        PyImGui.input_float("No-Progress Close Units", float(SMART_UNSTUCK_CFG.no_progress_close_units))
+                    ),
+                ),
+            )
+            new_early_exit = max(
+                50.0,
+                min(
+                    800.0,
+                    float(PyImGui.input_float("Min Dist Early Exit", float(SMART_UNSTUCK_CFG.obstacle_cleared_delta))),
+                ),
+            )
             stuck_cfg_changed = (
                 abs(new_waypoint_smoothing - SMART_UNSTUCK_CFG.waypoint_smoothing) > 0.0001
                 or abs(new_touch_radius - SMART_UNSTUCK_CFG.touch_radius) > 0.0001
@@ -2115,7 +2547,9 @@ class HeroAI_BaseUI:
                 HeroAI_BaseUI._refresh_follow_publisher_live(cached_data, reload_ini=True)
 
                 if Map.IsExplorable() and Player.GetAgentID() == GLOBAL_CACHE.Party.GetPartyLeaderID():
-                    new_show_flagging_window = PyImGui.checkbox("Show Flagging Window", hero_globals.show_flagging_window)
+                    new_show_flagging_window = PyImGui.checkbox(
+                        "Show Flagging Window", hero_globals.show_flagging_window
+                    )
                     if new_show_flagging_window != hero_globals.show_flagging_window:
                         hero_globals.show_flagging_window = new_show_flagging_window
                         HeroAI_BaseUI._save_follow_runtime_config(cached_data.formation_window_ini_key)
@@ -2125,23 +2559,36 @@ class HeroAI_BaseUI:
 
         if HeroAI_BaseUI.show_follow_formations_editor_window:
             import Py4GW
+
             try:
                 from HeroAI.follow.editor import main as draw_follow_formations_editor
+
                 HeroAI_BaseUI.show_follow_formations_editor_window = bool(draw_follow_formations_editor())
             except Exception as e:
-                PySystem.Console.Log("HeroAI", f"Follow formations editor failed: {e}", PySystem.Console.MessageType.Error)
+                PySystem.Console.Log(
+                    "HeroAI", f"Follow formations editor failed: {e}", PySystem.Console.MessageType.Error
+                )
                 HeroAI_BaseUI.show_follow_formations_editor_window = False
 
-        if hero_globals.show_flagging_window and Map.IsExplorable() and Player.GetAgentID() == GLOBAL_CACHE.Party.GetPartyLeaderID():
-            if ImGui.Begin(ini_key=cached_data.flagging_window_ini_key, name="Flagging Window", p_open=True, flags=PyImGui.WindowFlags.AlwaysAutoResize):
+        if (
+            hero_globals.show_flagging_window
+            and Map.IsExplorable()
+            and Player.GetAgentID() == GLOBAL_CACHE.Party.GetPartyLeaderID()
+        ):
+            if ImGui.Begin(
+                ini_key=cached_data.flagging_window_ini_key,
+                name="Flagging Window",
+                p_open=True,
+                flags=PyImGui.WindowFlags.AlwaysAutoResize,
+            ):
                 HeroAI_BaseUI.DrawFlaggingWindow(cached_data)
             ImGui.End(ini_key=cached_data.flagging_window_ini_key)
-            
+
     @staticmethod
     def DrawFramedContent(cached_data: CacheData, content_frame):
-        from Py4GWCoreLib import Utils
-        
-        if  HeroAI_FloatingWindows.selected_tab == HeroAI_FloatingWindows.TabType.party:
+        from Core import Utils
+
+        if HeroAI_FloatingWindows.selected_tab == HeroAI_FloatingWindows.TabType.party:
             return
 
         child_left, child_top, child_right, child_bottom = content_frame.coords()
@@ -2155,31 +2602,31 @@ class HeroAI_BaseUI:
         PyImGui.set_next_window_pos(child_left, child_top)
         PyImGui.set_next_window_size(width, height)
 
-        def control_panel_case(cached_data : CacheData):
+        def control_panel_case(cached_data: CacheData):
             from HeroAI.ui_base import HeroAI_BaseUI
 
             own_party_number = GLOBAL_CACHE.Party.GetOwnPartyNumber()
-            
+
             if own_party_number == 0:
                 # leader control panel
-                
+
                 HeroAI_BaseUI.DrawPanelButtons("global", cached_data.global_options, set_global=True)
-                
+
                 if PyImGui.collapsing_header("Player Control"):
                     for index in range(MAX_NUM_PLAYERS):
                         account = GLOBAL_CACHE.ShMem.GetAccountDataFromPartyNumber(index)
                         options = GLOBAL_CACHE.ShMem.GetHeroAIOptionsByPartyNumber(index)
-                        
-                        if account and not account.IsHero:                            
+
+                        if account and not account.IsHero:
                             if PyImGui.tree_node(f"{account.AgentData.CharacterName}##ControlPlayer{index}"):
                                 if options is not None:
                                     HeroAI_BaseUI.DrawPanelButtons(account.AccountEmail, options)
-                                
+
                                 PyImGui.tree_pop()
             else:
                 # follower control panel
                 options = GLOBAL_CACHE.ShMem.GetHeroAIOptionsFromEmail(cached_data.account_email)
-                
+
                 if options is not None:
                     HeroAI_BaseUI.DrawPanelButtons(cached_data.account_email, options)
 
@@ -2201,10 +2648,10 @@ class HeroAI_BaseUI:
         PyImGui.pop_style_var(1)
 
     @staticmethod
-    def DrawEmbeddedWindow(cached_data: CacheData):         
-        if not HeroAI_FloatingWindows.settings.ShowPartyPanelUI:        
-             return
-         
+    def DrawEmbeddedWindow(cached_data: CacheData):
+        if not HeroAI_FloatingWindows.settings.ShowPartyPanelUI:
+            return
+
         parent_frame_id = Frame(FrameId.PartyFormation)
         outpost_content_frame_id = Frame(FrameId.PartyFormation.Outpost)
         explorable_content_frame_id = Frame(FrameId.PartyFormation.Explorable)
@@ -2254,7 +2701,7 @@ class HeroAI_BaseUI:
         PyImGui.end()
 
         ImGui.PopTransparentWindow()
-            
+
         HeroAI_BaseUI.DrawFramedContent(cached_data, content_frame)
 
     @staticmethod
@@ -2304,7 +2751,12 @@ class HeroAI_BaseUI:
             PyImGui.separator()
             PyImGui.dummy((0, 5))
 
-        if ImGui.Begin(ini_key=cached_data.ini_key, name="HeroAI Control Panel", p_open=True, flags=PyImGui.WindowFlags.AlwaysAutoResize):
+        if ImGui.Begin(
+            ini_key=cached_data.ini_key,
+            name="HeroAI Control Panel",
+            p_open=True,
+            flags=PyImGui.WindowFlags.AlwaysAutoResize,
+        ):
             if PyImGui.begin_child("ControlPanelChild", (200, 150), False, PyImGui.WindowFlags.AlwaysAutoResize):
                 style = ImGui.get_style()
                 style.ItemSpacing.push_style_var(2, 2)
@@ -2323,11 +2775,18 @@ class HeroAI_BaseUI:
                 style = ImGui.get_style()
                 style.ItemSpacing.push_style_var(2, 2)
                 style.CellPadding.push_style_var(2, 2)
-                sorted_by_party_position = sorted(cached_data.party.accounts.values(), key=lambda acc: acc.AgentPartyData.PartyPosition)
+                sorted_by_party_position = sorted(
+                    cached_data.party.accounts.values(), key=lambda acc: acc.AgentPartyData.PartyPosition
+                )
                 index = 0
 
                 for account in sorted_by_party_position:
-                    if account and account.IsSlotActive and not account.IsHero and account.AgentPartyData.PartyID == GLOBAL_CACHE.Party.GetPartyID():
+                    if (
+                        account
+                        and account.IsSlotActive
+                        and not account.IsHero
+                        and account.AgentPartyData.PartyID == GLOBAL_CACHE.Party.GetPartyID()
+                    ):
                         index += 1
                         original_game_option = cached_data.party.options.get(account.AgentData.AgentID)
                         if PyImGui.tree_node(f"{index}. {account.AgentData.CharacterName}##ControlPlayer{index}"):
@@ -2348,21 +2807,23 @@ class HeroAI_BaseUI:
         if visible and heroai_bt is not None:
             heroai_bt.draw()
         PyImGui.end()
-        
+
     @staticmethod
-    def DrawCandidateWindow(cached_data:CacheData):
+    def DrawCandidateWindow(cached_data: CacheData):
         def _OnSameMap(self_account, candidate):
-            if (candidate.MapID == self_account.MapID and
-                candidate.MapRegion == self_account.MapRegion and
-                candidate.MapDistrict == self_account.MapDistrict):
+            if (
+                candidate.MapID == self_account.MapID
+                and candidate.MapRegion == self_account.MapRegion
+                and candidate.MapDistrict == self_account.MapDistrict
+            ):
                 return True
             return False
-        
+
         def _OnSameParty(self_account, candidate):
             if self_account.PartyID == candidate.PartyID:
                 return True
             return False
-            
+
         table_flags = PyImGui.TableFlags.Sortable | PyImGui.TableFlags.Borders | PyImGui.TableFlags.RowBg
         if PyImGui.begin_table("CandidateTable", 2, table_flags):
             # Setup columns
@@ -2376,19 +2837,24 @@ class HeroAI_BaseUI:
                 PyImGui.text("No account data found.")
                 PyImGui.end_table()
                 return
-            
+
             accounts = cached_data.party.accounts.values()
-            
+
             for account in accounts:
                 if account.AccountEmail == account_email:
                     continue
-                
+
                 if _OnSameMap(self_account, account) and not _OnSameParty(self_account, account):
                     PyImGui.table_next_row()
                     PyImGui.table_next_column()
                     if PyImGui.button(f"Invite##invite_{account.AgentData.AgentID}"):
                         GLOBAL_CACHE.Party.Players.InvitePlayer(account.AgentData.CharacterName)
-                        GLOBAL_CACHE.ShMem.SendMessage(account_email, account.AccountEmail,SharedCommandType.InviteToParty, (self_account.AgentData.AgentID,0,0,0))
+                        GLOBAL_CACHE.ShMem.SendMessage(
+                            account_email,
+                            account.AccountEmail,
+                            SharedCommandType.InviteToParty,
+                            (self_account.AgentData.AgentID, 0, 0, 0),
+                        )
                     PyImGui.table_next_column()
                     PyImGui.text(f"{account.AgentData.CharacterName}")
                 else:
@@ -2420,13 +2886,13 @@ class HeroAI_BaseUI:
             PyImGui.end_table()
 
     @staticmethod
-    def DrawMultiboxTools(cached_data:CacheData):
+    def DrawMultiboxTools(cached_data: CacheData):
         global MAX_NUM_PLAYERS
         cached_data.HeroAI_windows.tools_window.initialize()
 
         if cached_data.HeroAI_windows.tools_window.begin():
             if Map.IsOutpost() and Player.GetAgentID() == GLOBAL_CACHE.Party.GetPartyLeaderID():
-                if PyImGui.collapsing_header("Party Setup",PyImGui.TreeNodeFlags.DefaultOpen):
+                if PyImGui.collapsing_header("Party Setup", PyImGui.TreeNodeFlags.DefaultOpen):
                     HeroAI_BaseUI.DrawCandidateWindow(cached_data)
             if Map.IsExplorable() and Player.GetAgentID() == GLOBAL_CACHE.Party.GetPartyLeaderID():
                 if PyImGui.collapsing_header("Flagging"):
@@ -2434,11 +2900,6 @@ class HeroAI_BaseUI:
 
             if PyImGui.collapsing_header("Debug Options"):
                 HeroAI_BaseUI.draw_debug_window(cached_data)
-    
+
         cached_data.HeroAI_windows.tools_window.process_window()
-        cached_data.HeroAI_windows.tools_window.end()            
-        
-    
-
-
-        
+        cached_data.HeroAI_windows.tools_window.end()

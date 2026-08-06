@@ -23,10 +23,10 @@ from typing import Sequence
 from HeroAI.commands import Command
 from HeroAI.commands import HeroAICommands
 from HeroAI.utils import SameMapOrPartyAsAccount
-from Py4GWCoreLib.GlobalCache import GLOBAL_CACHE
-from Py4GWCoreLib.GlobalCache.SharedMemory import AccountStruct
-from Py4GWCoreLib.Map import Map
-from Py4GWCoreLib.py4gwcorelib_src.Console import ConsoleLog
+from Core.GlobalCache import GLOBAL_CACHE
+from Core.GlobalCache.SharedMemory import AccountStruct
+from Core.Map import Map
+from Core.py4gwcorelib_src.Console import ConsoleLog
 
 
 class HeroAICommandAPI:
@@ -66,11 +66,7 @@ class HeroAICommandAPI:
                 for account in GLOBAL_CACHE.ShMem.GetAllActiveSlotsData()
                 if account.IsSlotActive and SameMapOrPartyAsAccount(account)
             ]
-        return [
-            account
-            for account in GLOBAL_CACHE.ShMem.GetAllAccountData()
-            if SameMapOrPartyAsAccount(account)
-        ]
+        return [account for account in GLOBAL_CACHE.ShMem.GetAllAccountData() if SameMapOrPartyAsAccount(account)]
 
     def _run(self, command: Command) -> None:
         """Resolve the target accounts and run ``command`` against them. Never raises."""
@@ -197,9 +193,9 @@ class HeroAICommandAPI:
         time guarantees we populate the *current* catalog. The launch bar stores icons by Font
         Awesome constant *name*, while commands carry the glyph, so we reverse-map glyph → name once.
         """
-        from Py4GWCoreLib.py4gwcorelib_src.launch_bar.function_runtime import list_icons
-        from Py4GWCoreLib.py4gwcorelib_src.launch_bar.functions_catalog import LaunchFunction
-        from Py4GWCoreLib.py4gwcorelib_src.launch_bar.functions_catalog import register_function
+        from Core.py4gwcorelib_src.launch_bar.function_runtime import list_icons
+        from Core.py4gwcorelib_src.launch_bar.functions_catalog import LaunchFunction
+        from Core.py4gwcorelib_src.launch_bar.functions_catalog import register_function
 
         glyph_to_name = {glyph: name for name, glyph in list_icons()}
 
@@ -223,7 +219,7 @@ class HeroAICommandAPI:
         ``heroai.*`` function, with grid positions preserved. Empty hotbars are skipped. Triggered by
         the "Import to Launch Bar" button in HeroAI's deprecated Hotbars settings tab.
         """
-        from Py4GWCoreLib.py4gwcorelib_src.launch_bar import app as LaunchBar
+        from Core.py4gwcorelib_src.launch_bar import app as LaunchBar
 
         from HeroAI.settings import Settings
 

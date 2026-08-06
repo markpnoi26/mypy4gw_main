@@ -6,14 +6,13 @@ import uuid
 import PyImGui
 import Py4GW
 
-from Py4GWCoreLib.ImGui import ImGui
-from Py4GWCoreLib.Agent import Agent
-from Py4GWCoreLib.Player import Player
-from Py4GWCoreLib.enums_src.GameData_enums import Range
-from Py4GWCoreLib.py4gwcorelib_src.Color import Color, ColorPalette
-from Py4GWCoreLib.Overlay import Overlay
-from Py4GWCoreLib.py4gwcorelib_src.Settings import Settings
-
+from Core.ImGui import ImGui
+from Core.Agent import Agent
+from Core.Player import Player
+from Core.enums_src.GameData_enums import Range
+from Core.py4gwcorelib_src.Color import Color, ColorPalette
+from Core.Overlay import Overlay
+from Core.py4gwcorelib_src.Settings import Settings
 
 INI_PATH = "HeroAI"
 FORMATIONS_INI_FILENAME = "FollowModule_Formations.ini"
@@ -34,6 +33,7 @@ MAX_FOLLOW_SLOTS = 11  # followers only (leader is slot 0 / skipped)
 MODULE_NAME = "Following Module"
 EXPORT_PREFIX = "PY4GWFF1:"
 MODULE_ICON = "Textures\\Module_Icons\\FollowModule.png"
+
 
 class RingConfig:
     def __init__(self, radius: Range | float, color: Color, thickness: int, show=True):
@@ -136,7 +136,7 @@ class UIState:
         self.editor_tab_index = 0
 
         self.show_canvas = True
-        self.canvas_size:tuple = (480, 480)
+        self.canvas_size: tuple = (480, 480)
         self.canvas_scale = 0.45
         self.canvas_click_add = False  # generator-first workflow
         self.canvas_drag_edit = True
@@ -230,7 +230,7 @@ def _sec_formation(name: str) -> str:
 
 
 def _safe_name(name: str) -> str:
-    return _sec_formation(name)[len(SEC_PREFIX):]
+    return _sec_formation(name)[len(SEC_PREFIX) :]
 
 
 def _safe_formation_id(value: str | None) -> str:
@@ -280,7 +280,9 @@ def _set_selected_formation(index: int):
         return
     ui.selected_formation_index = max(0, min(index, len(ui.formations) - 1))
     ui.formation_name_input = _current_formation().name
-    ui.selected_slot_index = max(0, min(ui.selected_slot_index, len(_resolved_points()) - 1 if _resolved_points() else 0))
+    ui.selected_slot_index = max(
+        0, min(ui.selected_slot_index, len(_resolved_points()) - 1 if _resolved_points() else 0)
+    )
 
 
 def _next_unique_name(base: str) -> str:
@@ -302,8 +304,17 @@ def _snap(v: float) -> float:
 
 def _slot_color(slot_index: int) -> Color:
     palette = [
-        "gw_white", "gw_blue", "gw_green", "gold", "gw_purple", "firebrick",
-        "gw_assassin", "aqua", "orange", "pink", "light_green"
+        "gw_white",
+        "gw_blue",
+        "gw_green",
+        "gold",
+        "gw_purple",
+        "firebrick",
+        "gw_assassin",
+        "aqua",
+        "orange",
+        "pink",
+        "light_green",
     ]
     return ColorPalette.GetColor(palette[slot_index % len(palette)]).copy()
 
@@ -493,9 +504,9 @@ def _set_slot_point(slot_index: int, x: float, y: float, color: Color | None = N
     current_pt = pts[slot_index]
     current_color = current_pt.color if color is None else color
     if (
-        abs(current_pt.x - x) <= 1e-6 and
-        abs(current_pt.y - y) <= 1e-6 and
-        _color_to_str(current_pt.color) == _color_to_str(current_color)
+        abs(current_pt.x - x) <= 1e-6
+        and abs(current_pt.y - y) <= 1e-6
+        and _color_to_str(current_pt.color) == _color_to_str(current_color)
     ):
         return
 
@@ -595,13 +606,17 @@ def _load_from_ini():
         f.notes = cfg_form.get_str(src_sec, "notes", "")
 
         g = f.generator
-        g.preset_index = max(0, min(len(GeneratorConfig.PRESETS) - 1, cfg_form.get_int(src_sec, "g_preset_index", g.preset_index)))
+        g.preset_index = max(
+            0, min(len(GeneratorConfig.PRESETS) - 1, cfg_form.get_int(src_sec, "g_preset_index", g.preset_index))
+        )
         g.slot_count = max(0, min(MAX_FOLLOW_SLOTS, cfg_form.get_int(src_sec, "g_slot_count", g.slot_count)))
         g.base_radius = cfg_form.get_float(src_sec, "g_base_radius", g.base_radius)
         g.radius_step = cfg_form.get_float(src_sec, "g_radius_step", g.radius_step)
         g.base_angle_deg = cfg_form.get_float(src_sec, "g_base_angle_deg", g.base_angle_deg)
         g.angle_step_deg = cfg_form.get_float(src_sec, "g_angle_step_deg", g.angle_step_deg)
-        g.symmetry_index = max(0, min(len(GeneratorConfig.SYMMETRIES) - 1, cfg_form.get_int(src_sec, "g_symmetry_index", g.symmetry_index)))
+        g.symmetry_index = max(
+            0, min(len(GeneratorConfig.SYMMETRIES) - 1, cfg_form.get_int(src_sec, "g_symmetry_index", g.symmetry_index))
+        )
         g.snap_to_grid = cfg_form.get_bool(src_sec, "g_snap_to_grid", g.snap_to_grid)
         g.rank1_count = cfg_form.get_int(src_sec, "g_rank1_count", g.rank1_count)
         g.rank2_count = cfg_form.get_int(src_sec, "g_rank2_count", g.rank2_count)
@@ -708,7 +723,11 @@ def _save_to_ini():
         _ini_write_now(FORMATIONS_INI_KEY, sec, "g_rank2_count", g.rank2_count)
         _ini_write_now(FORMATIONS_INI_KEY, sec, "g_rank3_count", g.rank3_count)
 
-        pts = _resolved_points() if f is _current_formation() else (f.points if f.mode == "freeform" else _generate_points(f.generator))
+        pts = (
+            _resolved_points()
+            if f is _current_formation()
+            else (f.points if f.mode == "freeform" else _generate_points(f.generator))
+        )
         if f.mode == "generated_with_overrides":
             pts = _generate_points(f.generator)
             for k, p in f.slot_overrides.items():
@@ -793,10 +812,7 @@ def _formation_to_export_dict(f: Formation) -> dict:
             "rank2_count": int(f.generator.rank2_count),
             "rank3_count": int(f.generator.rank3_count),
         },
-        "points": [
-            {"x": float(p.x), "y": float(p.y), "c": _color_to_str(p.color)}
-            for p in pts
-        ],
+        "points": [{"x": float(p.x), "y": float(p.y), "c": _color_to_str(p.color)} for p in pts],
         "overrides": [
             {"slot": int(slot), "x": float(p.x), "y": float(p.y), "c": _color_to_str(p.color)}
             for slot, p in sorted(f.slot_overrides.items())
@@ -824,7 +840,7 @@ def _import_formation_from_string(payload: str) -> bool:
 
     try:
         if payload.startswith(EXPORT_PREFIX):
-            encoded = payload[len(EXPORT_PREFIX):].strip()
+            encoded = payload[len(EXPORT_PREFIX) :].strip()
             # tolerate missing '=' padding
             if encoded:
                 encoded += "=" * ((4 - (len(encoded) % 4)) % 4)
@@ -854,7 +870,9 @@ def _import_formation_from_string(payload: str) -> bool:
     g.radius_step = float(g_data.get("radius_step", g.radius_step))
     g.base_angle_deg = float(g_data.get("base_angle_deg", g.base_angle_deg))
     g.angle_step_deg = float(g_data.get("angle_step_deg", g.angle_step_deg))
-    g.symmetry_index = max(0, min(len(GeneratorConfig.SYMMETRIES) - 1, int(g_data.get("symmetry_index", g.symmetry_index))))
+    g.symmetry_index = max(
+        0, min(len(GeneratorConfig.SYMMETRIES) - 1, int(g_data.get("symmetry_index", g.symmetry_index)))
+    )
     g.snap_to_grid = bool(g_data.get("snap_to_grid", g.snap_to_grid))
     g.rank1_count = int(g_data.get("rank1_count", g.rank1_count))
     g.rank2_count = int(g_data.get("rank2_count", g.rank2_count))
@@ -865,11 +883,13 @@ def _import_formation_from_string(payload: str) -> bool:
         for i, item in enumerate(points_data[:MAX_FOLLOW_SLOTS]):
             if not isinstance(item, dict):
                 continue
-            f.points.append(FollowerPoint(
-                float(item.get("x", 0.0)),
-                float(item.get("y", 0.0)),
-                _color_from_str(str(item.get("c", "")), _slot_color(i))
-            ))
+            f.points.append(
+                FollowerPoint(
+                    float(item.get("x", 0.0)),
+                    float(item.get("y", 0.0)),
+                    _color_from_str(str(item.get("c", "")), _slot_color(i)),
+                )
+            )
 
     overrides_data = data.get("overrides", [])
     if isinstance(overrides_data, list):
@@ -881,7 +901,7 @@ def _import_formation_from_string(payload: str) -> bool:
                 f.slot_overrides[slot] = FollowerPoint(
                     float(item.get("x", 0.0)),
                     float(item.get("y", 0.0)),
-                    _color_from_str(str(item.get("c", "")), _slot_color(slot))
+                    _color_from_str(str(item.get("c", "")), _slot_color(slot)),
                 )
 
     if f.mode == "freeform":
@@ -943,7 +963,9 @@ def _draw_canvas_content():
     if ui.draw_area_rings:
         for ring in ui.area_rings:
             if ring.show:
-                PyImGui.draw_list_add_circle(center_x, center_y, ring.radius * ui.canvas_scale, ring.color.to_color(), 32, ring.thickness)
+                PyImGui.draw_list_add_circle(
+                    center_x, center_y, ring.radius * ui.canvas_scale, ring.color.to_color(), 32, ring.thickness
+                )
 
     pts = _resolved_points()
     point_r = (Range.Touch.value / 2) * ui.canvas_scale
@@ -961,7 +983,7 @@ def _draw_canvas_content():
     io = PyImGui.get_io()
     mx = io.mouse_pos_x
     my = io.mouse_pos_y
-    inside = (left <= mx <= right and top <= my <= bottom and PyImGui.is_window_hovered())
+    inside = left <= mx <= right and top <= my <= bottom and PyImGui.is_window_hovered()
     if not inside and PyImGui.is_mouse_released(0):
         ui.dragging_slot_index = -1
 
@@ -1132,9 +1154,12 @@ def _draw_slots_tab():
         PyImGui.table_headers_row()
         for i, p in enumerate(_resolved_points()):
             PyImGui.table_next_row()
-            PyImGui.table_next_column(); PyImGui.text(str(i + 1))
-            PyImGui.table_next_column(); PyImGui.text(f"{p.x:.1f}")
-            PyImGui.table_next_column(); PyImGui.text(f"{p.y:.1f}")
+            PyImGui.table_next_column()
+            PyImGui.text(str(i + 1))
+            PyImGui.table_next_column()
+            PyImGui.text(f"{p.x:.1f}")
+            PyImGui.table_next_column()
+            PyImGui.text(f"{p.y:.1f}")
             PyImGui.table_next_column()
             mode_label = "base"
             if f.mode == "freeform":
@@ -1166,8 +1191,10 @@ def _draw_preview_tab():
         f = _current_formation()
         for idx, p in enumerate(pts):
             PyImGui.table_next_row()
-            PyImGui.table_next_column(); PyImGui.text(str(idx + 1))
-            PyImGui.table_next_column(); PyImGui.text(f"({p.x:.1f}, {p.y:.1f})")
+            PyImGui.table_next_column()
+            PyImGui.text(str(idx + 1))
+            PyImGui.table_next_column()
+            PyImGui.text(f"({p.x:.1f}, {p.y:.1f})")
             PyImGui.table_next_column()
             mode_label = "base"
             if f.mode == "freeform":
@@ -1184,7 +1211,9 @@ def _draw_preview_tab():
 def _draw_canvas_tab():
     f = _current_formation()
     PyImGui.text(f"Mode: {f.mode}")
-    PyImGui.text_wrapped("Left-click point to select/drag. Right-click point removes freeform point or clears generated override.")
+    PyImGui.text_wrapped(
+        "Left-click point to select/drag. Right-click point removes freeform point or clears generated override."
+    )
     _draw_canvas_content()
 
 
@@ -1274,7 +1303,9 @@ def _draw_control_window():
                 ui.last_status = f"Export failed: {e}"
                 _log_action(f"Export failed for '{_current_formation().name}': {e}")
         if PyImGui.is_item_hovered():
-            PyImGui.set_tooltip("Exported formation data is copied to clipboard in a compact format. It can be imported back or shared with others.")
+            PyImGui.set_tooltip(
+                "Exported formation data is copied to clipboard in a compact format. It can be imported back or shared with others."
+            )
         PyImGui.same_line(0, 6)
         if PyImGui.button("Import"):
             try:
@@ -1294,7 +1325,9 @@ def _draw_control_window():
                 ui.last_status = "Import failed: clipboard is empty."
                 _log_action("Import failed: clipboard was empty.")
         if PyImGui.is_item_hovered():
-            PyImGui.set_tooltip("Import formation data from clipboard. Accepts both the compact exported format and older raw JSON format. Current clipboard content will be used if the field is empty.")
+            PyImGui.set_tooltip(
+                "Import formation data from clipboard. Accepts both the compact exported format and older raw JSON format. Current clipboard content will be used if the field is empty."
+            )
 
         if PyImGui.button("New"):
             new_name = _next_unique_name(ui.formation_name_input or "Formation")
@@ -1388,16 +1421,22 @@ def _draw_3d_overlay():
             origin_y = round(player_y / step) * step
             y = origin_y - grid_extent
             while y <= origin_y + grid_extent:
-                Overlay().DrawLine3D(origin_x - grid_extent, y, player_z, origin_x + grid_extent, y, player_z, grid_color.to_color(), 1)
+                Overlay().DrawLine3D(
+                    origin_x - grid_extent, y, player_z, origin_x + grid_extent, y, player_z, grid_color.to_color(), 1
+                )
                 y += step
             x = origin_x - grid_extent
             while x <= origin_x + grid_extent:
-                Overlay().DrawLine3D(x, origin_y - grid_extent, player_z, x, origin_y + grid_extent, player_z, grid_color.to_color(), 1)
+                Overlay().DrawLine3D(
+                    x, origin_y - grid_extent, player_z, x, origin_y + grid_extent, player_z, grid_color.to_color(), 1
+                )
                 x += step
 
             for ring in ui.area_rings:
                 if ring.show:
-                    Overlay().DrawPoly3D(player_x, player_y, player_z, ring.radius, ring.color.to_color(), 64, ring.thickness * 2)
+                    Overlay().DrawPoly3D(
+                        player_x, player_y, player_z, ring.radius, ring.color.to_color(), 64, ring.thickness * 2
+                    )
 
         angle = Agent.GetRotationAngle(player_id) - math.pi / 2
         c = -math.cos(angle)

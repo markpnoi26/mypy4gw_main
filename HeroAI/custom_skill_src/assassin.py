@@ -1,11 +1,11 @@
-
-from Py4GWCoreLib import GLOBAL_CACHE, Range
+from Core import GLOBAL_CACHE, Range
 from HeroAI.types import SkillNature, Skilltarget, SkillType
 from HeroAI.custom_skill import CustomSkill
 
+
 class AssassinSkills:
     def __init__(self, skill_data):
-        #region CRITICAL_STRIKES
+        # region CRITICAL_STRIKES
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Assassins_Remedy")
@@ -137,7 +137,7 @@ class AssassinSkills:
         skill.Conditions.IsOutOfCombat = True
         skill_data[skill.SkillID] = skill
 
-        #region DAGGER_MASTERY
+        # region DAGGER_MASTERY
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Black_Mantis_Thrust")
@@ -378,7 +378,7 @@ class AssassinSkills:
         skill.Conditions.RequireWeapon = "Daggers"
         skill_data[skill.SkillID] = skill
 
-        #region DEADLY_ARTS
+        # region DEADLY_ARTS
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Assassins_Promise")
@@ -595,7 +595,7 @@ class AssassinSkills:
         skill.Conditions.IsOutOfCombat = True
         skill_data[skill.SkillID] = skill
 
-        #region SHADOW_ARTS
+        # region SHADOW_ARTS
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Beguiling_Haze")
@@ -767,7 +767,7 @@ class AssassinSkills:
         skill.Conditions.IsOutOfCombat = True
         skill_data[skill.SkillID] = skill
 
-        #region NO_ATTRIBUTE
+        # region NO_ATTRIBUTE
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Assault_Enchantments")

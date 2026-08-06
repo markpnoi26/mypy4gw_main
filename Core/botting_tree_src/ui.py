@@ -1,0 +1,769 @@
+import math
+import os
+import re
+from typing import TYPE_CHECKING, Callable, Protocol, cast
+
+import PySystem
+import PyImGui
+
+from ..DXOverlay import DXOverlay
+from ..GlobalCache import GLOBAL_CACHE
+from ..ImGui import ImGui
+from ..Overlay import Overlay
+from ..Player import Player
+from ..py4gwcorelib_src.Color import Color, ColorPalette
+from ..py4gwcorelib_src.Settings import Settings
+
+if TYPE_CHECKING:
+    from ..BottingTree import BottingTree
+
+
+# One long-lived DXOverlay for the occluded variant, built on first use so nothing is
+# constructed while that option is off. It must outlive the frame: a DXOverlay that draws
+# in 3D registers a world-pass callback for its own draw list, so building one per frame
+# would register one per frame.
+# Ground sampling for terrain-hugging path lines: one height sample per this many world
+# units, capped so a very long segment cannot explode into hundreds of pieces.
+_GROUND_SAMPLE_UNITS = 100.0
+_GROUND_SAMPLE_MAX_STEPS = 24
+
+# How far to lift the occluded lines off the ground. Smaller z is up, and DXOverlay's
+# floor_offset subtracts, so a positive value raises them. Needed because occluded draws
+# keep the depth test on (Setup3DView leaves ZFUNC LESSEQUAL): a line sitting exactly on the
+# terrain is coplanar with it and z-fights, which on something this thin reads as missing
+# rather than flickering. The other path drawers in the repo lift for the same reason -
+# SulfurousRunner by 50, Outpostrunner by 125.
+_OCCLUDED_FLOOR_OFFSET = 15.0
+
+# Occluded markers are bounded by COUNT, not by detail. DXOverlay issues one
+# DrawPrimitiveUP per ring sub-segment, so every marker costs _OCCLUDED_MARKER_SEGMENTS
+# draw calls no matter how small it is. Measured on a 50-waypoint route: lines alone are
+# ~200 calls per drain and run fine; adding a marker to every waypoint took it past ~600 and
+# tanked the framerate. Tuning the segment count cannot fix that - 50 markers at even 4
+# segments is another 200 - so only the nearest few get drawn, which is also the only place
+# occlusion is legible anyway.
+#
+# Set _OCCLUDED_MARKER_LIMIT = 0 to put markers back on the ImGui list entirely (batched,
+# free) and keep only the lines occluded.
+_OCCLUDED_MARKER_SEGMENTS = 8
+_OCCLUDED_MARKER_LIMIT = 10
+
+_occlusion_overlay: DXOverlay | None = None
+
+
+def _get_occlusion_overlay() -> DXOverlay:
+    global _occlusion_overlay
+    if _occlusion_overlay is None:
+        _occlusion_overlay = DXOverlay()
+    return _occlusion_overlay
+
+
+class _BottingTreeUIMovePathHost(Protocol):
+    class _DrawableTree(Protocol):
+        def draw(self) -> None: ...
+
+    blackboard: dict
+    draw_move_path_enabled: bool
+    draw_move_path_labels: bool
+    draw_move_path_directx: bool
+    draw_move_path_occluded: bool
+    draw_move_path_thickness: float
+    draw_move_waypoint_radius: float
+    draw_move_current_waypoint_radius: float
+    tree: _DrawableTree
+
+    def DrawMovePath(
+        self,
+        draw_labels: bool = False,
+        draw_directx: bool = False,
+        use_occlusion: bool = False,
+        player_to_waypoint_color: Color = ColorPalette.GetColor('aqua'),
+        remaining_path_color: Color = ColorPalette.GetColor('orange'),
+        waypoint_color: Color = ColorPalette.GetColor('dodger_blue'),
+        current_waypoint_color: Color = ColorPalette.GetColor('tomato'),
+        player_marker_color: Color = ColorPalette.GetColor('white'),
+        path_thickness: float = 4.0,
+        waypoint_radius: float = 15.0,
+        current_waypoint_radius: float = 20.0,
+    ) -> None: ...
+
+    def GetMoveData(self) -> dict: ...
+
+
+class BottingTreeUIMovePathMixin:
+    def GetMoveData(self) -> dict:
+        host = cast(_BottingTreeUIMovePathHost, self)
+        bb = host.blackboard
+        path_points_raw = bb.get('move_path_points', [])
+        path_points: list[tuple[float, float]] = []
+        if isinstance(path_points_raw, list):
+            for point in path_points_raw:
+                if isinstance(point, tuple) and len(point) == 2:
+                    path_points.append((float(point[0]), float(point[1])))
+
+        current_waypoint_raw = bb.get('move_current_waypoint')
+        current_waypoint: tuple[float, float] | None = None
+        if isinstance(current_waypoint_raw, tuple) and len(current_waypoint_raw) == 2:
+            current_waypoint = (float(current_waypoint_raw[0]), float(current_waypoint_raw[1]))
+
+        target_raw = bb.get('move_target')
+        move_target: tuple[float, float] | None = None
+        if isinstance(target_raw, tuple) and len(target_raw) == 2:
+            move_target = (float(target_raw[0]), float(target_raw[1]))
+
+        last_move_point_raw = bb.get('move_last_move_point')
+        last_move_point: tuple[float, float] | None = None
+        if isinstance(last_move_point_raw, tuple) and len(last_move_point_raw) == 2:
+            last_move_point = (float(last_move_point_raw[0]), float(last_move_point_raw[1]))
+
+        return {
+            'state': str(bb.get('move_state', '')),
+            'reason': str(bb.get('move_reason', '')),
+            'target': move_target,
+            'path_points': path_points,
+            'path_index': int(bb.get('move_path_index', 0) or 0),
+            'path_count': int(bb.get('move_path_count', len(path_points)) or 0),
+            'current_waypoint': current_waypoint,
+            'current_waypoint_index': int(bb.get('move_current_waypoint_index', -1) or -1),
+            'last_move_point': last_move_point,
+            'resume_recovery_active': bool(bb.get('move_resume_recovery_active', False)),
+        }
+
+    def SetMovePathDrawingEnabled(self, enabled: bool) -> None:
+        host = cast(_BottingTreeUIMovePathHost, self)
+        host.draw_move_path_enabled = bool(enabled)
+
+    def IsMovePathDrawingEnabled(self) -> bool:
+        host = cast(_BottingTreeUIMovePathHost, self)
+        return bool(host.draw_move_path_enabled)
+
+    def DrawMovePathDebugOptions(self, label: str = 'Draw Move Path Debug Options') -> None:
+        host = cast(_BottingTreeUIMovePathHost, self)
+        if PyImGui.collapsing_header(label):
+            host.draw_move_path_enabled = PyImGui.checkbox(
+                'Draw Move Path',
+                host.draw_move_path_enabled,
+            )
+            host.draw_move_path_labels = PyImGui.checkbox(
+                'Draw Path Labels',
+                host.draw_move_path_labels,
+            )
+            # Two independent switches so the surface and the depth test can be tested apart:
+            # ImGui, DirectX without occlusion, DirectX with occlusion. Geometry is identical
+            # in both DirectX modes, so the second checkbox changes only the depth test.
+            host.draw_move_path_directx = PyImGui.checkbox(
+                'Draw with DirectX',
+                host.draw_move_path_directx,
+            )
+            host.draw_move_path_occluded = PyImGui.checkbox(
+                'Use Occlusion (DirectX only)',
+                host.draw_move_path_occluded,
+            )
+            host.draw_move_path_thickness = PyImGui.slider_float(
+                'Path Thickness',
+                host.draw_move_path_thickness,
+                1.0,
+                6.0,
+            )
+            host.draw_move_waypoint_radius = PyImGui.slider_float(
+                'Waypoint Radius',
+                host.draw_move_waypoint_radius,
+                15.0,
+                100.0,
+            )
+            host.draw_move_current_waypoint_radius = PyImGui.slider_float(
+                'Current Waypoint Radius',
+                host.draw_move_current_waypoint_radius,
+                20.0,
+                120.0,
+            )
+
+    def DrawMovePathIfEnabled(self) -> None:
+        host = cast(_BottingTreeUIMovePathHost, self)
+        if not host.draw_move_path_enabled:
+            return
+        host.DrawMovePath(
+            draw_labels=host.draw_move_path_labels,
+            draw_directx=host.draw_move_path_directx,
+            use_occlusion=host.draw_move_path_occluded,
+            path_thickness=host.draw_move_path_thickness,
+            waypoint_radius=host.draw_move_waypoint_radius,
+            current_waypoint_radius=host.draw_move_current_waypoint_radius,
+        )
+
+    def DrawMovePath(
+        self,
+        draw_labels: bool = False,
+        draw_directx: bool = False,
+        use_occlusion: bool = False,
+        player_to_waypoint_color: Color = ColorPalette.GetColor('aqua'),
+        remaining_path_color: Color = ColorPalette.GetColor('orange'),
+        waypoint_color: Color = ColorPalette.GetColor('dodger_blue'),
+        current_waypoint_color: Color = ColorPalette.GetColor('tomato'),
+        player_marker_color: Color = ColorPalette.GetColor('white'),
+        path_thickness: float = 4.0,
+        waypoint_radius: float = 15.0,
+        current_waypoint_radius: float = 20.0,
+    ) -> None:
+        host = cast(_BottingTreeUIMovePathHost, self)
+        move_data = host.GetMoveData()
+        move_state = move_data['state']
+        path_points = move_data['path_points']
+        if move_state not in ('running', 'paused') or not path_points:
+            return
+
+        path_index = move_data['path_index']
+        current_waypoint = move_data['current_waypoint']
+        player_x, player_y = Player.GetXY()
+        overlay = Overlay()
+
+        # Player coords: the plane is the player's, so no multi-plane search. Everything
+        # else below has an unknown plane and keeps multi_plane on.
+        player_z = float(Overlay.FindZ(float(player_x), float(player_y), multi_plane=False))
+
+        def _ground_z(x: float, y: float) -> float:
+            """Height of a route point. Its plane is unknown, so this is the multi-plane one."""
+            return float(Overlay.FindZ(float(x), float(y)))
+
+        def _is_visible(x: float, y: float) -> bool:
+            return bool(GLOBAL_CACHE.Camera.IsPointInFOV(float(x), float(y)))
+
+        # ImGui projects world points to screen and has no depth test, so it can never be
+        # hidden by terrain. DXOverlay draws inside the world pass where GW's depth buffer is
+        # still live, which is the only way to actually occlude.
+        #
+        # Only the LINES switch. DXOverlay is an immediate per-triangle renderer -
+        # DrawPolyFilled3D issues one DrawPrimitiveUP per triangle, so a 24-segment marker is
+        # 24 draw calls and a 50-waypoint route would be 1200 of them, replayed on every
+        # world pass. A line is a single call, so the path itself costs about as much as the
+        # DXOverlay demo does. Markers and labels stay on the ImGui list, which batches them.
+        dx = _get_occlusion_overlay() if draw_directx else None
+        # Budget for occluded markers, spent nearest-first as the waypoint loop walks
+        # forward from the current one. Anything past it falls back to the batched ImGui
+        # marker, so the DX draw-call count stays fixed no matter how long the route is.
+        occluded_markers_left = [_OCCLUDED_MARKER_LIMIT if dx is not None else 0]
+
+        def _line3d(
+            x1: float, y1: float, z1: float, x2: float, y2: float, z2: float, color: int, thickness: float
+        ) -> None:
+            if dx is not None:
+                # floor_offset stays on with occlusion off too: it changes the geometry, and
+                # the point of the two DirectX modes is that only the depth test differs.
+                dx.DrawLine3D(x1, y1, z1, x2, y2, z2, color, use_occlusion, 1, _OCCLUDED_FLOOR_OFFSET)
+            else:
+                overlay.DrawLine3D(x1, y1, z1, x2, y2, z2, color, thickness)
+
+        def _ground_line(x1: float, y1: float, x2: float, y2: float, color: int, thickness: float) -> None:
+            """A line that follows the ground instead of cutting straight through it.
+
+            A single line between two waypoints is straight in 3D, so it buries itself in
+            any rise between them. Sampling the height along the way and drawing the pieces
+            makes it hug the terrain. Cheap on both counts: FindZ is cached natively, and
+            ImGui batches the pieces into one vertex buffer.
+            """
+            length = math.hypot(x2 - x1, y2 - y1)
+            steps = max(1, min(int(length / _GROUND_SAMPLE_UNITS), _GROUND_SAMPLE_MAX_STEPS))
+            prev_x, prev_y = x1, y1
+            prev_z = _ground_z(x1, y1)
+            for step in range(1, steps + 1):
+                t = step / steps
+                next_x = x1 + (x2 - x1) * t
+                next_y = y1 + (y2 - y1) * t
+                next_z = _ground_z(next_x, next_y)
+                _line3d(prev_x, prev_y, prev_z, next_x, next_y, next_z, color, thickness)
+                prev_x, prev_y, prev_z = next_x, next_y, next_z
+
+        def _draw_waypoint_marker(point_x: float, point_y: float, radius: float, color: int) -> None:
+            if not _is_visible(point_x, point_y):
+                return
+            point_z = _ground_z(point_x, point_y)
+            if dx is not None and occluded_markers_left[0] > 0:
+                occluded_markers_left[0] -= 1
+                # A ring rather than a filled disc: DrawPolyFilled3D costs a draw call per
+                # TRIANGLE where the outline costs one per sub-segment, and auto_z keeps the
+                # whole ring a uniform floor_offset above the ground (the filled variant
+                # offsets the rim but not the centre, which domes it).
+                dx.DrawPoly3D(
+                    point_x,
+                    point_y,
+                    point_z,
+                    radius,
+                    color,
+                    _OCCLUDED_MARKER_SEGMENTS,
+                    use_occlusion,
+                    1,
+                    _OCCLUDED_FLOOR_OFFSET,
+                    True,
+                )
+                return
+            # autoz=False: the marker is a flat disc at the waypoint's height. With autoz on,
+            # the overlay resolves the ground at all 24 segment vertices - 24 FindZ per
+            # marker instead of the one already done for point_z.
+            overlay.DrawPolyFilled3D(point_x, point_y, point_z, radius, color, 24, False)
+
+        overlay.BeginDraw()
+        try:
+            if current_waypoint is not None:
+                current_x, current_y = current_waypoint
+                if _is_visible(player_x, player_y) and _is_visible(current_x, current_y):
+                    _ground_line(
+                        player_x,
+                        player_y,
+                        current_x,
+                        current_y,
+                        player_to_waypoint_color.to_color(),
+                        path_thickness,
+                    )
+
+            start_index = max(0, min(path_index, len(path_points) - 1))
+            for i in range(start_index, len(path_points) - 1):
+                x1, y1 = path_points[i]
+                x2, y2 = path_points[i + 1]
+                if not (_is_visible(x1, y1) and _is_visible(x2, y2)):
+                    continue
+                _ground_line(x1, y1, x2, y2, remaining_path_color.to_color(), path_thickness)
+
+            for i, (point_x, point_y) in enumerate(path_points[start_index:], start=start_index):
+                is_current = i == move_data['current_waypoint_index']
+                marker_color = current_waypoint_color if is_current else waypoint_color
+                marker_radius = current_waypoint_radius if is_current else waypoint_radius
+                _draw_waypoint_marker(point_x, point_y, marker_radius, marker_color.to_color())
+                if draw_labels and _is_visible(point_x, point_y):
+                    point_z = _ground_z(point_x, point_y)
+                    overlay.DrawText3D(
+                        point_x, point_y, point_z - 100.0, str(i), marker_color.to_color(), False, True, 2.0
+                    )
+
+            if _is_visible(player_x, player_y):
+                if dx is not None:
+                    dx.DrawPoly3D(
+                        player_x,
+                        player_y,
+                        player_z,
+                        waypoint_radius,
+                        player_marker_color.to_color(),
+                        _OCCLUDED_MARKER_SEGMENTS,
+                        use_occlusion,
+                        1,
+                        _OCCLUDED_FLOOR_OFFSET,
+                        True,
+                    )
+                else:
+                    overlay.DrawPoly3D(
+                        player_x, player_y, player_z, waypoint_radius, player_marker_color.to_color(), 24, 2.0, False
+                    )
+        finally:
+            overlay.EndDraw()
+
+    def Draw(self):
+        host = cast(_BottingTreeUIMovePathHost, self)
+        host.tree.draw()
+
+
+class _BottingTreeUI:
+    def __init__(self, parent: 'BottingTree'):
+        self.parent = parent
+        self.draw_texture_fn: Callable[[], None] | None = None
+        self.draw_config_fn: Callable[[], None] | None = None
+        self.draw_help_fn: Callable[[], None] | None = None
+        self._selected_start_index = 0
+        self._show_tree = True
+        self._debug_console_height = 200.0
+        self._main_ini_name: str = ''
+        self._floating_ini_name: str = ''
+        self._floating_button: ImGui.FloatingIcon | None = None
+        self._window_paths_ready = False
+        self._window_args: dict[str, object] = {
+            'main_child_dimensions': (350, 325),
+            'icon_path': '',
+            'iconwidth': 96,
+            'additional_ui': None,
+            'extra_tabs': None,
+        }
+
+    @staticmethod
+    def _sanitize_identifier(value: str) -> str:
+        return re.sub(r'[^A-Za-z0-9_-]+', '_', value).strip('_') or 'BottingTree'
+
+    def _default_icon_path(self) -> str:
+        return os.path.join(PySystem.Console.get_projects_path(), 'python_icon_round.png')
+
+    def _ensure_window_paths(self) -> bool:
+        # The window documents are process-wide Settings singletons; we only need
+        # their names (constructing Settings(name) binds/loads them on demand). No
+        # factory, no per-window registration, no position ini — ImGui persists
+        # window placement itself.
+        if self._window_paths_ready:
+            return True
+        safe_name = self._sanitize_identifier(self.parent.bot_name)
+        ini_path = f'Widgets/Automation/BottingTree/{safe_name}'
+        self._main_ini_name = f'{ini_path}/BottingTreeUI.ini'
+        self._floating_ini_name = f'{ini_path}/BottingTreeFloating.ini'
+        self._window_paths_ready = True
+        return True
+
+    def _ensure_floating_button(self, icon_path: str = '') -> ImGui.FloatingIcon | None:
+        if not self._ensure_window_paths():
+            return None
+
+        resolved_icon_path = icon_path or self._default_icon_path()
+        if self._floating_button is None:
+            safe_name = self._sanitize_identifier(self.parent.bot_name)
+            self._floating_button = ImGui.FloatingIcon(
+                icon_path=resolved_icon_path,
+                window_id=f'##{safe_name}_floating_toggle_button',
+                window_name=f'{self.parent.bot_name} Toggle',
+                tooltip_visible=f'Hide {self.parent.bot_name}',
+                tooltip_hidden=f'Show {self.parent.bot_name}',
+                toggle_ini_key=self._main_ini_name,
+                toggle_var_name='show_main_window',
+                toggle_default=True,
+                draw_callback=self._draw_managed_window,
+            )
+            self._floating_button.load_visibility()
+            self._floating_button.load_config(self._floating_ini_name)
+        else:
+            self._floating_button.icon_path = resolved_icon_path
+            self._floating_button.draw_callback = self._draw_managed_window
+
+        return self._floating_button
+
+    def _draw_managed_window(self) -> None:
+        if not self._ensure_window_paths():
+            return
+
+        p_open = (
+            self._floating_button.visible
+            if self._floating_button is not None
+            else Settings(self._main_ini_name, "account").get_bool("Configuration", "show_main_window", True)
+        )
+        expanded, open_ = ImGui.begin_with_close(
+            self.parent.bot_name,
+            p_open,
+            PyImGui.WindowFlags(PyImGui.WindowFlags.AlwaysAutoResize),
+        )
+        if self._floating_button is not None:
+            self._floating_button.sync_begin_with_close(open_)
+
+        if expanded:
+            main_child_dimensions = cast(tuple[int, int], self._window_args['main_child_dimensions'])
+            icon_path = cast(str, self._window_args['icon_path'])
+            iconwidth = cast(int, self._window_args['iconwidth'])
+            additional_ui = cast(Callable[[], None] | None, self._window_args['additional_ui'])
+            extra_tabs = cast(list[tuple[str, Callable[[], None]]] | None, self._window_args['extra_tabs'])
+
+            if PyImGui.begin_tab_bar(self.parent.bot_name + '_tabs'):
+                if PyImGui.begin_tab_item('Main'):
+                    if PyImGui.begin_child(
+                        f'{self.parent.bot_name} - Main', main_child_dimensions, True, PyImGui.WindowFlags.NoFlag
+                    ):
+                        self._draw_main_child(main_child_dimensions, icon_path, iconwidth)
+                        if additional_ui is not None:
+                            PyImGui.separator()
+                            additional_ui()
+                    PyImGui.end_child()
+                    PyImGui.end_tab_item()
+
+                if PyImGui.begin_tab_item('Navigation'):
+                    self._draw_navigation_child(main_child_dimensions)
+                    PyImGui.end_tab_item()
+
+                if PyImGui.begin_tab_item('Settings'):
+                    self._draw_settings_child()
+                    PyImGui.end_tab_item()
+
+                if PyImGui.begin_tab_item('Help'):
+                    self._draw_help_child()
+                    PyImGui.end_tab_item()
+
+                if PyImGui.begin_tab_item('Debug'):
+                    self.draw_debug_window()
+                    PyImGui.end_tab_item()
+
+                if extra_tabs:
+                    for tab_label, tab_draw_fn in extra_tabs:
+                        if PyImGui.begin_tab_item(tab_label):
+                            if callable(tab_draw_fn):
+                                tab_draw_fn()
+                            PyImGui.end_tab_item()
+
+                PyImGui.end_tab_bar()
+
+        ImGui.end()
+
+    def override_draw_texture(self, draw_fn: Callable[[], None] | None = None) -> None:
+        self.draw_texture_fn = draw_fn
+
+    def override_draw_config(self, draw_fn: Callable[[], None] | None = None) -> None:
+        self.draw_config_fn = draw_fn
+
+    def override_draw_help(self, draw_fn: Callable[[], None] | None = None) -> None:
+        self.draw_help_fn = draw_fn
+
+    def PrintMessageToConsole(self, source: str, message: str) -> None:
+        PySystem.Console.Log(source, message, PySystem.Console.MessageType.Info)
+
+    def _draw_texture(self, icon_path: str = '', size: tuple[float, float] = (96.0, 96.0)) -> None:
+        if self.draw_texture_fn is not None:
+            self.draw_texture_fn()
+            return
+        if not icon_path:
+            return
+
+        try:
+            from ..ImGui import ImGui
+
+            ImGui.DrawTextureExtended(
+                texture_path=icon_path,
+                size=size,
+                uv0=(0.0, 0.0),
+                uv1=(1.0, 1.0),
+                tint=(255, 255, 255, 255),
+                border_color=(0, 0, 0, 0),
+            )
+        except Exception:
+            PyImGui.text(icon_path)
+
+    def _colored_bool(self, label: str, value: bool) -> None:
+        color = (0, 255, 0, 255) if value else (255, 80, 80, 255)
+        PyImGui.text_colored(f'{label}: {value}', color)
+
+    def _build_headless_heroai_option_snapshot(self):
+        from ..GlobalCache.shared_memory_src.HeroAIOptionStruct import HeroAIOptionStruct
+
+        snapshot = HeroAIOptionStruct()
+        snapshot.reset()
+
+        options_source = 'defaults'
+        cached_data = getattr(self.parent.headless_heroai, 'cached_data', None)
+        source_options = getattr(cached_data, 'account_options', None)
+        if source_options is not None:
+            options_source = 'headless cache'
+        else:
+            account_email = str(Player.GetAccountEmail() or '').strip()
+            if account_email:
+                shared_options = GLOBAL_CACHE.ShMem.GetHeroAIOptionsFromEmail(account_email)
+                if shared_options is not None:
+                    source_options = shared_options
+                    options_source = 'shared memory'
+
+        if source_options is not None:
+            snapshot.Following = bool(source_options.Following)
+            snapshot.Avoidance = bool(source_options.Avoidance)
+            snapshot.Targeting = bool(source_options.Targeting)
+            snapshot.Combat = bool(source_options.Combat)
+            for i in range(len(snapshot.Skills)):
+                snapshot.Skills[i] = bool(source_options.Skills[i])
+
+        snapshot.Looting = bool(self.parent.headless_heroai.IsLootingEnabled())
+        resurrection_scroll_enabled = bool(self.parent.IsResurrectionScrollEnabled())
+        return snapshot, options_source, resurrection_scroll_enabled
+
+    def _draw_headless_heroai_panel(self) -> None:
+        if not PyImGui.collapsing_header('Headless HeroAI'):
+            return
+
+        from HeroAI.ui_base import HeroAI_BaseUI
+
+        option_snapshot, options_source, resurrection_scroll_enabled = self._build_headless_heroai_option_snapshot()
+
+        if PyImGui.begin_child('BottingTreeHeadlessHeroAIPanel', (0, 0), True, PyImGui.WindowFlags.NoFlag):
+            PyImGui.text(f'Options source: {options_source}')
+            PyImGui.text(f"Looting source: {'headless runtime'}")
+            PyImGui.text(f"Resurrection Scroll source: {'headless runtime'}")
+            PyImGui.text_wrapped(
+                'This preview reflects the headless HeroAI runtime. It does not write to the user-facing HeroAI looting or resurrection scroll toggles.'
+            )
+            PyImGui.text(f'Resurrection Scroll Enabled: {resurrection_scroll_enabled}')
+            PyImGui.separator()
+            PyImGui.begin_disabled(True)
+            HeroAI_BaseUI.DrawPanelButtons('botting_tree_headless_preview', option_snapshot, set_global=False)
+            PyImGui.end_disabled()
+        PyImGui.end_child()
+
+    def _current_step_name(self) -> str:
+        current_step_name = str(self.parent.GetBlackboardValue('current_step_name', '') or '')
+        if current_step_name:
+            return current_step_name
+        planner_status = str(self.parent.GetBlackboardValue('PLANNER_STATUS', '') or '')
+        return planner_status or 'Idle'
+
+    def _main_status_snapshot(self) -> dict[str, bool]:
+        combat_active = False
+        looting_active = False
+        try:
+            if self.parent.IsHeadlessHeroAIEnabled():
+                combat_active = bool(self.parent.headless_heroai.cached_data.IsHeadlessCombatPauseActive())
+                looting_active = bool(self.parent.headless_heroai.IsLootingActive())
+        except Exception:
+            combat_active = False
+            looting_active = False
+
+        return {
+            'started': self.parent.IsStarted(),
+            'paused': self.parent.IsPaused(),
+            'headless_heroai_enabled': self.parent.IsHeadlessHeroAIEnabled(),
+            'looting_enabled': self.parent.IsLootingEnabled(),
+            'resurrection_scroll_enabled': self.parent.IsResurrectionScrollEnabled(),
+            'account_isolation_enabled': self.parent.IsIsolationEnabled(),
+            'pause_on_combat_enabled': bool(self.parent.pause_on_combat),
+            'combat_active': combat_active,
+            'looting_active': looting_active,
+        }
+
+    def _draw_main_child(
+        self,
+        main_child_dimensions: tuple[int, int] = (350, 300),
+        icon_path: str = '',
+        iconwidth: int = 96,
+    ) -> None:
+        status = self._main_status_snapshot()
+        if PyImGui.begin_table(
+            'botting_tree_header_table', 2, PyImGui.TableFlags.RowBg | PyImGui.TableFlags.BordersOuterH
+        ):
+            PyImGui.table_setup_column('Icon', PyImGui.TableColumnFlags.WidthFixed, iconwidth)
+            PyImGui.table_setup_column(
+                'Status', PyImGui.TableColumnFlags.WidthFixed, main_child_dimensions[0] - iconwidth
+            )
+            PyImGui.table_next_row()
+            PyImGui.table_set_column_index(0)
+            self._draw_texture(icon_path, (float(iconwidth), float(iconwidth)))
+            PyImGui.table_set_column_index(1)
+            PyImGui.text(self.parent.bot_name)
+            PyImGui.text(f'Current: {self._current_step_name()}')
+            PyImGui.text(f"HeroAI: {self.parent.GetBlackboardValue('HEROAI_STATUS', 'Idle')}")
+            PyImGui.text(f"Planner: {self.parent.GetBlackboardValue('PLANNER_STATUS', 'Idle')}")
+            PyImGui.end_table()
+
+        if self.parent.IsStarted():
+            if PyImGui.button('Stop##BottingTreeStop'):
+                self.parent.Stop()
+            PyImGui.same_line(0, -1)
+            if self.parent.IsPaused():
+                if PyImGui.button('Resume##BottingTreePause'):
+                    self.parent.Pause(False)
+            else:
+                if PyImGui.button('Pause##BottingTreePause'):
+                    self.parent.Pause(True)
+        else:
+            step_names = self.parent.GetNamedPlannerStepNames()
+            if step_names:
+                self._selected_start_index = max(0, min(self._selected_start_index, len(step_names) - 1))
+                self._selected_start_index = PyImGui.combo('Start At', self._selected_start_index, step_names)
+                if PyImGui.button('Start##BottingTreeStart'):
+                    self.parent.RestartFromNamedPlannerStep(step_names[self._selected_start_index], auto_start=True)
+            else:
+                if PyImGui.button('Start##BottingTreeStart'):
+                    self.parent.Start()
+
+        PyImGui.separator()
+        self._colored_bool('Started', status['started'])
+        self._colored_bool('Paused', status['paused'])
+        self._colored_bool('Headless HeroAI Enabled', status['headless_heroai_enabled'])
+        self._colored_bool('Looting Enabled', status['looting_enabled'])
+        self._colored_bool('Resurrection Scroll Enabled', status['resurrection_scroll_enabled'])
+        self._colored_bool('Account Isolation Enabled', status['account_isolation_enabled'])
+        self._colored_bool('Pause On Combat Enabled', status['pause_on_combat_enabled'])
+        self._colored_bool('Combat Routine Active', status['combat_active'])
+        self._colored_bool('Loot Routine Active', status['looting_active'])
+
+    def _draw_navigation_child(self, child_size: tuple[int, int] = (350, 275)) -> None:
+        step_names = self.parent.GetNamedPlannerStepNames()
+        if not step_names:
+            PyImGui.text('No named planner steps configured.')
+            return
+
+        self._selected_start_index = max(0, min(self._selected_start_index, len(step_names) - 1))
+        self._selected_start_index = PyImGui.combo('Restart From', self._selected_start_index, step_names)
+        if PyImGui.button('Restart Selected'):
+            self.parent.RestartFromNamedPlannerStep(step_names[self._selected_start_index], auto_start=True)
+
+        PyImGui.separator()
+        if PyImGui.begin_child('BottingTreeNamedSteps', child_size, True, PyImGui.WindowFlags.HorizontalScrollbar):
+            for index, step_name in enumerate(step_names):
+                marker = '>' if index == self._selected_start_index else ' '
+                PyImGui.text(f'{marker} {index}: {step_name}')
+        PyImGui.end_child()
+
+    def _draw_settings_child(self) -> None:
+        if self.draw_config_fn is not None:
+            self.draw_config_fn()
+            return
+
+        self.parent.pause_on_combat = PyImGui.checkbox('Pause Planner On Combat', self.parent.pause_on_combat)
+        headless_heroai_enabled = PyImGui.checkbox('Headless HeroAI', self.parent.IsHeadlessHeroAIEnabled())
+        if headless_heroai_enabled != self.parent.IsHeadlessHeroAIEnabled():
+            self.parent.SetHeadlessHeroAIEnabled(headless_heroai_enabled, reset_runtime=False)
+
+        looting_enabled = PyImGui.checkbox('Looting', self.parent.IsLootingEnabled())
+        if looting_enabled != self.parent.IsLootingEnabled():
+            self.parent.SetLootingEnabled(looting_enabled)
+
+        resurrection_scroll_enabled = PyImGui.checkbox('Resurrection Scroll', self.parent.IsResurrectionScrollEnabled())
+        if resurrection_scroll_enabled != self.parent.IsResurrectionScrollEnabled():
+            self.parent.SetResurrectionScrollEnabled(resurrection_scroll_enabled)
+
+        isolation_enabled = PyImGui.checkbox('Account Isolation', self.parent.IsIsolationEnabled())
+        if isolation_enabled != self.parent.IsIsolationEnabled():
+            self.parent.SetIsolationEnabled(isolation_enabled)
+        PyImGui.separator()
+        self.parent.DrawMovePathDebugOptions()
+
+    def _draw_help_child(self) -> None:
+        if self.draw_help_fn is not None:
+            self.draw_help_fn()
+            return
+
+        PyImGui.text('BottingTree default UI')
+        PyImGui.separator()
+        PyImGui.text('Use SetMainRoutine(...) with a BehaviorTree, node, callable, child list, or named step list.')
+        PyImGui.text('Call tick() every frame, then draw_window(...).')
+
+    def draw_debug_window(self) -> None:
+        if PyImGui.collapsing_header('Runtime'):
+            PyImGui.text(f"HeroAI Status: {self.parent.GetBlackboardValue('HEROAI_STATUS', '')}")
+            PyImGui.text(f"Planner Status: {self.parent.GetBlackboardValue('PLANNER_STATUS', '')}")
+            PyImGui.text(f'Last UI Log: {self.parent.GetDebugConsoleLastMessage()}')
+
+        self._draw_headless_heroai_panel()
+
+        if PyImGui.collapsing_header('Blackboard'):
+            for key in sorted(self.parent.blackboard.keys()):
+                value = self.parent.blackboard.get(key)
+                PyImGui.text_wrapped(f'{key}: {value}')
+
+        if PyImGui.collapsing_header('Debug Console'):
+            self.parent.DrawDebugConsole(height=self._debug_console_height)
+
+        if PyImGui.collapsing_header('Behavior Tree'):
+            self._show_tree = PyImGui.checkbox('Show Tree', self._show_tree)
+            if self._show_tree:
+                self.parent.Draw()
+
+    def draw_window(
+        self,
+        main_child_dimensions: tuple[int, int] = (350, 325),
+        icon_path: str = '',
+        iconwidth: int = 96,
+        additional_ui: Callable[[], None] | None = None,
+        extra_tabs: list[tuple[str, Callable[[], None]]] | None = None,
+    ) -> bool:
+        self._window_args = {
+            'main_child_dimensions': main_child_dimensions,
+            'icon_path': icon_path,
+            'iconwidth': iconwidth,
+            'additional_ui': additional_ui,
+            'extra_tabs': extra_tabs,
+        }
+
+        floating_button = self._ensure_floating_button(icon_path)
+        if floating_button is not None and self._floating_ini_name:
+            floating_button.draw(self._floating_ini_name)
+        else:
+            self._draw_managed_window()
+
+        self.parent.DrawMovePathIfEnabled()
+        return True
+
+    DrawWindow = draw_window
+    DrawDebugWindow = draw_debug_window

@@ -68,9 +68,7 @@ def RayCastTerrain(start: List[float], end: List[float]) -> Tuple[bool, float]:
     """
     ...
 
-def RayCastInteractive(
-    start: List[float], unit_dir: List[float], max_range: float
-) -> Tuple[bool, float, int, int]:
+def RayCastInteractive(start: List[float], unit_dir: List[float], max_range: float) -> Tuple[bool, float, int, int]:
     """RAW interactive-object mesh probe along start + t*unit_dir, t in [0, max_range].
 
     Returns (has_hit, dist, prop_id, n_scanned). n_scanned == -1 means the probe could not run
@@ -88,7 +86,12 @@ def GetProps() -> List[Tuple[int, float, float, float, bool, int]]:
 
 def GetPropGeometry(
     prop_id: int,
-) -> List[Tuple[Tuple[float, float, float, float, float, float, float, float, float, float, float, float], List[Tuple[float, float, float, float, float, float, float, float, float]]]]:
+) -> List[
+    Tuple[
+        Tuple[float, float, float, float, float, float, float, float, float, float, float, float],
+        List[Tuple[float, float, float, float, float, float, float, float, float]],
+    ]
+]:
     """RAW collision MESH of one prop, for wireframe drawing.
 
     Returns a list of (matrix12, tris_local) per submodel, where matrix12 is 12 floats

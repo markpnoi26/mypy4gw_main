@@ -2,26 +2,26 @@ import Py4GW
 import PyImGui
 
 from HeroAI.settings import Settings
-from Py4GWCoreLib import Agent
-from Py4GWCoreLib import GLOBAL_CACHE
-from Py4GWCoreLib import ImGui
-from Py4GWCoreLib import Map
-from Py4GWCoreLib import ModelID
-from Py4GWCoreLib import Player
-from Py4GWCoreLib import Range
-from Py4GWCoreLib import Routines
-from Py4GWCoreLib import SharedCommandType
-from Py4GWCoreLib import Skill
-from Py4GWCoreLib import SkillBar
-from Py4GWCoreLib import ThrottledTimer
-from Py4GWCoreLib import Timer
-from Py4GWCoreLib.GlobalCache.SharedMemory import AccountStruct
-from Py4GWCoreLib.GlobalCache.WhiteboardLocks import claim_resurrection_target
-from Py4GWCoreLib.GlobalCache.WhiteboardLocks import publish_resurrection_scroll_state
-from Py4GWCoreLib.GlobalCache.WhiteboardLocks import read_resurrection_scroll_states
-from Py4GWCoreLib.ImGui_src.IconsFontAwesome5 import IconsFontAwesome5
-from Py4GWCoreLib.py4gwcorelib_src.Console import Console
-from Py4GWCoreLib.py4gwcorelib_src.Console import ConsoleLog
+from Core import Agent
+from Core import GLOBAL_CACHE
+from Core import ImGui
+from Core import Map
+from Core import ModelID
+from Core import Player
+from Core import Range
+from Core import Routines
+from Core import SharedCommandType
+from Core import Skill
+from Core import SkillBar
+from Core import ThrottledTimer
+from Core import Timer
+from Core.GlobalCache.SharedMemory import AccountStruct
+from Core.GlobalCache.WhiteboardLocks import claim_resurrection_target
+from Core.GlobalCache.WhiteboardLocks import publish_resurrection_scroll_state
+from Core.GlobalCache.WhiteboardLocks import read_resurrection_scroll_states
+from Core.ImGui_src.IconsFontAwesome5 import IconsFontAwesome5
+from Core.py4gwcorelib_src.Console import Console
+from Core.py4gwcorelib_src.Console import ConsoleLog
 
 MODULE_NAME = "HeroAI Resurrection Scroll"
 
@@ -100,7 +100,12 @@ def _build_res_cache() -> None:
             player_skills = SkillBar.GetSkillbar()
             player_name = Agent.GetNameByID(player_id) or "Player"
             if not player_skills:
-                ConsoleLog(MODULE_NAME, f"[Cache] {player_name}: skillbar empty (not loaded yet?)", Console.MessageType.Warning, log=False)
+                ConsoleLog(
+                    MODULE_NAME,
+                    f"[Cache] {player_name}: skillbar empty (not loaded yet?)",
+                    Console.MessageType.Warning,
+                    log=False,
+                )
                 return
 
             for skill_id in player_skills:
@@ -119,12 +124,19 @@ def _build_res_cache() -> None:
             if account_agent_id == 0 or account_agent_id == player_id:
                 continue
 
-            char_name = getattr(account_agent_data, "CharacterName", "") or getattr(account, "AccountEmail", "") or "Account"
+            char_name = (
+                getattr(account_agent_data, "CharacterName", "") or getattr(account, "AccountEmail", "") or "Account"
+            )
             skillbar = getattr(account_agent_data, "Skillbar", None)
             skills = getattr(skillbar, "Skills", []) if skillbar is not None else []
             account_skill_ids = [int(skill.Id) for skill in skills if int(skill.Id) != 0]
             if not account_skill_ids:
-                ConsoleLog(MODULE_NAME, f"[Cache] {char_name}: shared memory skillbar empty (not synced yet?)", Console.MessageType.Warning, log=False)
+                ConsoleLog(
+                    MODULE_NAME,
+                    f"[Cache] {char_name}: shared memory skillbar empty (not synced yet?)",
+                    Console.MessageType.Warning,
+                    log=False,
+                )
                 return
 
             for skill_id in account_skill_ids:
@@ -139,7 +151,9 @@ def _build_res_cache() -> None:
     if not _res_cache:
         ConsoleLog(MODULE_NAME, "[Cache] No party members have a res skill equipped", Console.MessageType.Info)
     else:
-        ConsoleLog(MODULE_NAME, f"[Cache] {len(_res_cache)} party member(s) with res skills cached", Console.MessageType.Info)
+        ConsoleLog(
+            MODULE_NAME, f"[Cache] {len(_res_cache)} party member(s) with res skills cached", Console.MessageType.Info
+        )
 
     _cache_built = True
 
@@ -207,7 +221,9 @@ def _consume_toggle_messages() -> None:
             continue
         if str(getattr(message, "ReceiverEmail", "") or "").strip() != account_email:
             continue
-        if int(getattr(message, "Command", SharedCommandType.NoCommand)) != int(SharedCommandType.SetResurrectionScroll):
+        if int(getattr(message, "Command", SharedCommandType.NoCommand)) != int(
+            SharedCommandType.SetResurrectionScroll
+        ):
             continue
 
         params = getattr(message, "Params", (0, 0, 0, 0)) or (0, 0, 0, 0)
@@ -361,7 +377,9 @@ def tick() -> None:
         return
 
     Player.ChangeTarget(dead_ally_id)
-    ConsoleLog(MODULE_NAME, f"Party member dead, using Scroll of Resurrection on {dead_ally_id}", Console.MessageType.Info)
+    ConsoleLog(
+        MODULE_NAME, f"Party member dead, using Scroll of Resurrection on {dead_ally_id}", Console.MessageType.Info
+    )
     GLOBAL_CACHE.Inventory.UseItem(item_id)
     _aftercast_timer.Reset()
     _on_cooldown = True

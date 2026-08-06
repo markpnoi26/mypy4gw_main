@@ -7,7 +7,6 @@
 
 from typing import List, Optional
 
-
 class DialogInfo:
     dialog_id: int
     flags: int
@@ -20,7 +19,6 @@ class DialogInfo:
 
     def __init__(self) -> None: ...
 
-
 class ActiveDialogInfo:
     dialog_id: int
     context_dialog_id: int
@@ -29,7 +27,6 @@ class ActiveDialogInfo:
     message: str
 
     def __init__(self) -> None: ...
-
 
 class DialogButtonInfo:
     dialog_id: int
@@ -40,14 +37,12 @@ class DialogButtonInfo:
 
     def __init__(self) -> None: ...
 
-
 class DialogTextDecodedInfo:
     dialog_id: int
     text: str
     pending: bool
 
     def __init__(self) -> None: ...
-
 
 class DialogEventLog:
     tick: int
@@ -59,7 +54,6 @@ class DialogEventLog:
     l_bytes: List[int]
 
     def __init__(self) -> None: ...
-
 
 class DialogCallbackJournalEntry:
     tick: int
@@ -78,10 +72,8 @@ class DialogCallbackJournalEntry:
 
     def __init__(self) -> None: ...
 
-
 class PyDialog:
     def __init__(self) -> None: ...
-
     @staticmethod
     def is_dialog_available(dialog_id: int) -> bool: ...
     @staticmethod

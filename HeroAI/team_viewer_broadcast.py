@@ -3,9 +3,8 @@ from ctypes import Structure, c_wchar, sizeof
 from multiprocessing import shared_memory
 from typing import Optional
 
-from Py4GWCoreLib import GLOBAL_CACHE, Routines, ThrottledTimer, Utils
-from Py4GWCoreLib.Player import Player
-
+from Core import GLOBAL_CACHE, Routines, ThrottledTimer, Utils
+from Core.Player import Player
 
 MAX_TEAM_VIEWER_SLOTS = 12
 MAX_EMAIL_LEN = 64

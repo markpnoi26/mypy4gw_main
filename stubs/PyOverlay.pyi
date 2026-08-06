@@ -72,22 +72,52 @@ class Overlay:
     # can only be passed positionally; spelled from_ here.
     def DrawLine(self, from_: Vec2f, to: Vec2f, color: int = 0xFFFFFFFF, thickness: float = 1.0) -> None: ...
     def DrawLine3D(self, from_: Vec3f, to: Vec3f, color: int = 0xFFFFFFFF, thickness: float = 1.0) -> None: ...
-    def DrawTriangle(self, p1: Vec2f, p2: Vec2f, p3: Vec2f, color: int = 0xFFFFFFFF, thickness: float = 1.0) -> None: ...
-    def DrawTriangle3D(self, p1: Vec3f, p2: Vec3f, p3: Vec3f, color: int = 0xFFFFFFFF, thickness: float = 1.0) -> None: ...
+    def DrawTriangle(
+        self, p1: Vec2f, p2: Vec2f, p3: Vec2f, color: int = 0xFFFFFFFF, thickness: float = 1.0
+    ) -> None: ...
+    def DrawTriangle3D(
+        self, p1: Vec3f, p2: Vec3f, p3: Vec3f, color: int = 0xFFFFFFFF, thickness: float = 1.0
+    ) -> None: ...
     def DrawTriangleFilled(self, p1: Vec2f, p2: Vec2f, p3: Vec2f, color: int = 0xFFFFFFFF) -> None: ...
     def DrawTriangleFilled3D(self, p1: Vec3f, p2: Vec3f, p3: Vec3f, color: int = 0xFFFFFFFF) -> None: ...
-    def DrawQuad(self, p1: Vec2f, p2: Vec2f, p3: Vec2f, p4: Vec2f, color: int = 0xFFFFFFFF, thickness: float = 1.0) -> None: ...
-    def DrawQuad3D(self, p1: Vec3f, p2: Vec3f, p3: Vec3f, p4: Vec3f, color: int = 0xFFFFFFFF, thickness: float = 1.0) -> None: ...
+    def DrawQuad(
+        self, p1: Vec2f, p2: Vec2f, p3: Vec2f, p4: Vec2f, color: int = 0xFFFFFFFF, thickness: float = 1.0
+    ) -> None: ...
+    def DrawQuad3D(
+        self, p1: Vec3f, p2: Vec3f, p3: Vec3f, p4: Vec3f, color: int = 0xFFFFFFFF, thickness: float = 1.0
+    ) -> None: ...
     def DrawQuadFilled(self, p1: Vec2f, p2: Vec2f, p3: Vec2f, p4: Vec2f, color: int = 0xFFFFFFFF) -> None: ...
     def DrawQuadFilled3D(self, p1: Vec3f, p2: Vec3f, p3: Vec3f, p4: Vec3f, color: int = 0xFFFFFFFF) -> None: ...
-    def DrawPoly(self, center: Vec2f, radius: float, color: int = 0xFFFFFFFF, numSegments: int = 12, thickness: float = 1.0) -> None: ...
-    def DrawPoly3D(self, center: Vec3f, radius: float, color: int = 0xFFFFFFFF, numSegments: int = 12, thickness: float = 1.0, autoZ: bool = True) -> None: ...
+    def DrawPoly(
+        self, center: Vec2f, radius: float, color: int = 0xFFFFFFFF, numSegments: int = 12, thickness: float = 1.0
+    ) -> None: ...
+    def DrawPoly3D(
+        self,
+        center: Vec3f,
+        radius: float,
+        color: int = 0xFFFFFFFF,
+        numSegments: int = 12,
+        thickness: float = 1.0,
+        autoZ: bool = True,
+    ) -> None: ...
     def DrawPolyFilled(self, center: Vec2f, radius: float, color: int = 0xFFFFFFFF, numSegments: int = 12) -> None: ...
-    def DrawPolyFilled3D(self, center: Vec3f, radius: float, color: int = 0xFFFFFFFF, numSegments: int = 12, autoZ: bool = True) -> None: ...
+    def DrawPolyFilled3D(
+        self, center: Vec3f, radius: float, color: int = 0xFFFFFFFF, numSegments: int = 12, autoZ: bool = True
+    ) -> None: ...
     def DrawCubeOutline(self, center: Vec3f, size: float, color: int = 0xFFFFFFFF, thickness: float = 1.0) -> None: ...
     def DrawCubeFilled(self, center: Vec3f, size: float, color: int = 0xFFFFFFFF) -> None: ...
-    def DrawText(self, position: Vec2f, text: str, color: int = 0xFFFFFFFF, centered: bool = True, scale: float = 1.0) -> None: ...
-    def DrawText3D(self, position3D: Vec3f, text: str, color: int = 0xFFFFFFFF, autoZ: bool = True, centered: bool = True, scale: float = 1.0) -> None: ...
+    def DrawText(
+        self, position: Vec2f, text: str, color: int = 0xFFFFFFFF, centered: bool = True, scale: float = 1.0
+    ) -> None: ...
+    def DrawText3D(
+        self,
+        position3D: Vec3f,
+        text: str,
+        color: int = 0xFFFFFFFF,
+        autoZ: bool = True,
+        centered: bool = True,
+        scale: float = 1.0,
+    ) -> None: ...
     def GetDisplaySize(self) -> Vec2f: ...
     def IsMouseClicked(self, button: int = 0) -> bool: ...
     def PushClipRect(self, x: float, y: float, x2: float, y2: float) -> None: ...
@@ -97,42 +127,62 @@ class Overlay:
     @overload
     def DrawTexture(self, path: str, width: float = 32.0, height: float = 32.0) -> None: ...
     @overload
-    def DrawTexture(self, path: str,
-                    size: Tuple[float, float] = (32.0, 32.0),
-                    uv0: Tuple[float, float] = (0.0, 0.0),
-                    uv1: Tuple[float, float] = (1.0, 1.0),
-                    tint: Tuple[int, int, int, int] = (255, 255, 255, 255),
-                    border_col: Tuple[int, int, int, int] = (0, 0, 0, 0)) -> None: ...
+    def DrawTexture(
+        self,
+        path: str,
+        size: Tuple[float, float] = (32.0, 32.0),
+        uv0: Tuple[float, float] = (0.0, 0.0),
+        uv1: Tuple[float, float] = (1.0, 1.0),
+        tint: Tuple[int, int, int, int] = (255, 255, 255, 255),
+        border_col: Tuple[int, int, int, int] = (0, 0, 0, 0),
+    ) -> None: ...
     @overload
     def DrawTexturedRect(self, x: float, y: float, width: float, height: float, texture_path: str) -> None: ...
     @overload
-    def DrawTexturedRect(self, pos: Tuple[float, float], size: Tuple[float, float], texture_path: str,
-                         uv0: Tuple[float, float] = (0.0, 0.0),
-                         uv1: Tuple[float, float] = (1.0, 1.0),
-                         tint: Tuple[int, int, int, int] = (255, 255, 255, 255)) -> None: ...
+    def DrawTexturedRect(
+        self,
+        pos: Tuple[float, float],
+        size: Tuple[float, float],
+        texture_path: str,
+        uv0: Tuple[float, float] = (0.0, 0.0),
+        uv1: Tuple[float, float] = (1.0, 1.0),
+        tint: Tuple[int, int, int, int] = (255, 255, 255, 255),
+    ) -> None: ...
     def UpkeepTextures(self, timeout: int = 30) -> None: ...
     @overload
-    def ImageButton(self, caption: str, file_path: str, width: float = 32.0, height: float = 32.0, frame_padding: int = 0) -> bool: ...
+    def ImageButton(
+        self, caption: str, file_path: str, width: float = 32.0, height: float = 32.0, frame_padding: int = 0
+    ) -> bool: ...
     @overload
-    def ImageButton(self, caption: str, file_path: str,
-                    size: Tuple[float, float] = (32.0, 32.0),
-                    uv0: Tuple[float, float] = (0.0, 0.0),
-                    uv1: Tuple[float, float] = (1.0, 1.0),
-                    bg_color: Tuple[int, int, int, int] = (0, 0, 0, 0),
-                    tint_color: Tuple[int, int, int, int] = (255, 255, 255, 255),
-                    frame_padding: int = 0) -> bool: ...
-    def DrawTextureInForegound(self, pos: Tuple[float, float] = (0.0, 0.0),
-                               size: Tuple[float, float] = (100.0, 100.0),
-                               texture_path: str = "",
-                               uv0: Tuple[float, float] = (0.0, 0.0),
-                               uv1: Tuple[float, float] = (1.0, 1.0),
-                               tint: Tuple[int, int, int, int] = (255, 255, 255, 255)) -> None: ...
-    def DrawTextureInDrawlist(self, pos: Tuple[float, float] = (0.0, 0.0),
-                              size: Tuple[float, float] = (100.0, 100.0),
-                              texture_path: str = "",
-                              uv0: Tuple[float, float] = (0.0, 0.0),
-                              uv1: Tuple[float, float] = (1.0, 1.0),
-                              tint: Tuple[int, int, int, int] = (255, 255, 255, 255)) -> None: ...
+    def ImageButton(
+        self,
+        caption: str,
+        file_path: str,
+        size: Tuple[float, float] = (32.0, 32.0),
+        uv0: Tuple[float, float] = (0.0, 0.0),
+        uv1: Tuple[float, float] = (1.0, 1.0),
+        bg_color: Tuple[int, int, int, int] = (0, 0, 0, 0),
+        tint_color: Tuple[int, int, int, int] = (255, 255, 255, 255),
+        frame_padding: int = 0,
+    ) -> bool: ...
+    def DrawTextureInForegound(
+        self,
+        pos: Tuple[float, float] = (0.0, 0.0),
+        size: Tuple[float, float] = (100.0, 100.0),
+        texture_path: str = "",
+        uv0: Tuple[float, float] = (0.0, 0.0),
+        uv1: Tuple[float, float] = (1.0, 1.0),
+        tint: Tuple[int, int, int, int] = (255, 255, 255, 255),
+    ) -> None: ...
+    def DrawTextureInDrawlist(
+        self,
+        pos: Tuple[float, float] = (0.0, 0.0),
+        size: Tuple[float, float] = (100.0, 100.0),
+        texture_path: str = "",
+        uv0: Tuple[float, float] = (0.0, 0.0),
+        uv1: Tuple[float, float] = (1.0, 1.0),
+        tint: Tuple[int, int, int, int] = (255, 255, 255, 255),
+    ) -> None: ...
 
 # Desktop-level (GDI+) overlay: transparent, click-through, topmost layered window
 # spanning the monitor; independent of the game window and Direct3D.
@@ -150,8 +200,19 @@ class ScreenOverlay:
     def draw_rect_filled(self, x: int, y: int, w: int, h: int, argb: int) -> None: ...
     # Text within a rectangle in desktop pixels; clipped/ellipsized if too long.
     # px_size is in pixels.
-    def draw_text_box(self, x: int, y: int, w: int, h: int, text: str, argb: int, px_size: float,
-                      family: str = "Segoe UI", hcenter: bool = False, vcenter: bool = False) -> None: ...
+    def draw_text_box(
+        self,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+        text: str,
+        argb: int,
+        px_size: float,
+        family: str = "Segoe UI",
+        hcenter: bool = False,
+        vcenter: bool = False,
+    ) -> None: ...
     # Present the frame to the desktop using UpdateLayeredWindow.
     def end(self) -> None: ...
     # Size of the entire virtual desktop (all monitors) -> (width, height).

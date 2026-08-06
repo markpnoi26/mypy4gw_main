@@ -1,9 +1,10 @@
 from HeroAI.commands import HeroAICommands
 from HeroAI.types import Docked
-from Py4GWCoreLib.Player import Player
-from Py4GWCoreLib.ImGui_src.types import Alignment
-from Py4GWCoreLib.py4gwcorelib_src.Console import ConsoleLog
-from Py4GWCoreLib.py4gwcorelib_src.Settings import Settings as NativeSettings
+from Core.Player import Player
+from Core.ImGui_src.types import Alignment
+from Core.py4gwcorelib_src.Console import ConsoleLog
+from Core.py4gwcorelib_src.Settings import Settings as NativeSettings
+
 
 class Settings:
     COMBAT_RANGE_MODE_PARTY_AGGRO = "party_aggro"
@@ -19,37 +20,37 @@ class Settings:
             self.y: int = y
             self.collapsed: bool = collapsed
             self.open: bool = visible
-            
+
     class CommandHotBar:
         def __init__(self, identifier: str = ""):
             self.identifier: str = identifier
             self.name: str = identifier
             self.commands: dict[int, dict[int, str]] = {0: {0: HeroAICommands().Empty.name}}
-            self.position: tuple[int, int] = (0, 0)   
+            self.position: tuple[int, int] = (0, 0)
             self.visible: bool = True
             self.button_size: int = 32
             self.docked: Docked = Docked.Freely
             self.alignment: Alignment = Alignment.TopCenter
-        
+
         def to_ini_string(self) -> str:
-            #save the position, visible state and combine commands into string into a single row
+            # save the position, visible state and combine commands into string into a single row
             ini_string = ""
             ini_string += f"{self.name};"
             ini_string += f"{self.docked.name};"
             ini_string += f"{self.alignment.name};"
             ini_string += f"{self.visible};"
             ini_string += f"{self.button_size};"
-            
-            #combine commands into rows
+
+            # combine commands into rows
             for row in sorted(self.commands.keys()):
                 cmd_row = self.commands[row]
                 row_str = "|".join(cmd_row.get(col, HeroAICommands().Empty.name) for col in sorted(cmd_row.keys()))
                 ini_string += f"{row_str};"
-            
+
             return ini_string
-        
+
         def to_pos_string(self) -> str:
-            #save the position, visible state and combine commands into string into a single row
+            # save the position, visible state and combine commands into string into a single row
             return f"{self.position[0]},{self.position[1]}"
 
         @staticmethod
@@ -57,13 +58,13 @@ class Settings:
             hotbar = Settings.CommandHotBar()
             hotbar.identifier = identifier
             hotbar.commands = {}
-            
+
             try:
                 if ini_string.startswith("True") or ini_string.startswith("False"):
                     ini_string = f"Hotbar;{Docked.Freely.name};{Alignment.TopCenter.name};{ini_string}"
-                    
-                name, docked_str, aligned_str, visible_str, button_size_str, *command_rows_str = ini_string.split(";")     
-                hotbar.name = name                           
+
+                name, docked_str, aligned_str, visible_str, button_size_str, *command_rows_str = ini_string.split(";")
+                hotbar.name = name
                 hotbar.docked = Docked[docked_str]
                 hotbar.alignment = Alignment[aligned_str]
                 hotbar.visible = visible_str.lower() == "true"
@@ -72,20 +73,20 @@ class Settings:
                 row = 0
                 if command_rows_str:
                     for row_str in command_rows_str:
-                        command_names = {col: cmd_name for col, cmd_name in enumerate(row_str.split("|"))}  
+                        command_names = {col: cmd_name for col, cmd_name in enumerate(row_str.split("|"))}
 
                         if any(name for name in command_names.values()):
                             hotbar.commands[row] = command_names
                             row += 1
-                
+
                 if len(hotbar.commands) == 0:
                     hotbar.commands = {0: {0: HeroAICommands().Empty.name}}
                 else:
                     pass
-                    
+
             except Exception as e:
                 ConsoleLog("HeroAI", f"Error parsing CommandHotBar from ini string: {e}")
-                
+
             return hotbar
 
     _instance = None
@@ -112,9 +113,9 @@ class Settings:
         # path to compute, no existence check, and no save loop to run here.
         self.save_requested = False
 
-        self.account_ini_handler : NativeSettings | None = None
+        self.account_ini_handler: NativeSettings | None = None
         self.ini_handler = NativeSettings("Widgets/Config/HeroAI.ini", "global")
-        
+
         self.PrintDebug = False
         self.ShowDebugWindow = False
         self.Anonymous_PanelNames = False
@@ -122,12 +123,12 @@ class Settings:
         self.ShowPartyOverlay = True
         self.ShowPartySearchOverlay = True
         self.ShowCommandPanelOnlyOnLeaderAccount = True
-        
+
         self.ShowPanelOnlyOnLeaderAccount = True
-        
+
         self.ShowDialogOverlay = True
         self.ShowControlPanelWindow = True
-        
+
         self.CombinePanels = False
         self.ShowLeaderPanel = False
         self.ShowHeroPanels = True
@@ -136,7 +137,7 @@ class Settings:
         self.ShowShortEffectDurations = True
         self.ShowHeroUpkeeps = True
         self.MaxEffectRows = 2
-        
+
         self.ShowHeroButtons = True
         self.ShowHeroBars = True
         self.ShowHeroSkills = True
@@ -145,10 +146,10 @@ class Settings:
         self.CombatRangeMode = self.COMBAT_RANGE_MODE_PARTY_AGGRO
         self._combat_range_mode_override: str | None = None
         self.ShowPartyPanelUI = True
-        self.HeroPanelPositions : dict[str, Settings.HeroPanelInfo] = {}
-        
+        self.HeroPanelPositions: dict[str, Settings.HeroPanelInfo] = {}
+
         default_hotbar = Settings.CommandHotBar("hotbar_1")
-        
+
         commands = HeroAICommands()
         default_hotbar.commands = {
             0: {
@@ -170,15 +171,12 @@ class Settings:
                 5: "Empty",
                 6: "Empty",
                 7: commands.OpenConsumables.name,
-            }
+            },
         }
-        
-        self.CommandHotBars : dict[str, Settings.CommandHotBar] = {
-            "hotbar_1": default_hotbar
-        }
-        
-        self.ConfirmFollowPoint = False
 
+        self.CommandHotBars: dict[str, Settings.CommandHotBar] = {"hotbar_1": default_hotbar}
+
+        self.ConfirmFollowPoint = False
 
         self.account_email = ""
         self._initialized = False
@@ -188,9 +186,9 @@ class Settings:
         # The account part is loaded later, once the account anchor resolves (initialize_account_config).
         self.load_global_settings()
 
-    def reset(self): 
+    def reset(self):
         self.account_email = ""
-        pass 
+        pass
 
     @classmethod
     def normalize_combat_range_mode(cls, mode: str | None) -> str:
@@ -206,7 +204,7 @@ class Settings:
 
     def set_runtime_combat_range_mode_override(self, mode: str | None) -> None:
         self._combat_range_mode_override = None if mode is None else self.normalize_combat_range_mode(mode)
-    
+
     def ensure_initialized(self) -> bool:
         account_email = Player.GetAccountEmail()
 
@@ -239,49 +237,51 @@ class Settings:
 
     def save_settings(self):
         self.save_requested = True
-    
+
     def delete_hotbar(self, hotbar_id: str):
         if hotbar_id in self.CommandHotBars:
             del self.CommandHotBars[hotbar_id]
-            
+
             if self.ini_handler is not None:
                 self.ini_handler.delete("CommandHotBars", hotbar_id)
-    
-    def write_settings(self):               
+
+    def write_settings(self):
         if not self.save_requested:
             return
-        
+
         # ConsoleLog("HeroAI", "Saving HeroAI settings...")
-        
+
         self.ini_handler.set("General", "ShowCommandPanel", str(self.ShowCommandPanel))
         self.ini_handler.set("General", "PrintDebug", str(self.PrintDebug))
         self.ini_handler.set("General", "ShowDebug", str(self.ShowDebugWindow))
-        self.ini_handler.set("General", "ShowCommandPanelOnlyOnLeaderAccount", str(self.ShowCommandPanelOnlyOnLeaderAccount))
+        self.ini_handler.set(
+            "General", "ShowCommandPanelOnlyOnLeaderAccount", str(self.ShowCommandPanelOnlyOnLeaderAccount)
+        )
         self.ini_handler.set("General", "Anonymous_PanelNames", str(self.Anonymous_PanelNames))
-        
+
         self.ini_handler.set("General", "ShowPartyOverlay", str(self.ShowPartyOverlay))
         self.ini_handler.set("General", "ShowPartySearchOverlay", str(self.ShowPartySearchOverlay))
-        
+
         self.ini_handler.set("General", "ShowPanelOnlyOnLeaderAccount", str(self.ShowPanelOnlyOnLeaderAccount))
         self.ini_handler.set("General", "ShowDialogOverlay", str(self.ShowDialogOverlay))
-        
+
         self.ini_handler.set("General", "CombinePanels", str(self.CombinePanels))
         self.ini_handler.set("General", "ShowHeroPanels", str(self.ShowHeroPanels))
-        self.ini_handler.set("General", "ShowLeaderPanel", str(self.ShowLeaderPanel))        
-        
+        self.ini_handler.set("General", "ShowLeaderPanel", str(self.ShowLeaderPanel))
+
         self.ini_handler.set("General", "ShowHeroEffects", str(self.ShowHeroEffects))
         self.ini_handler.set("General", "ShowEffectDurations", str(self.ShowEffectDurations))
         self.ini_handler.set("General", "ShowShortEffectDurations", str(self.ShowShortEffectDurations))
         self.ini_handler.set("General", "ShowHeroUpkeeps", str(self.ShowHeroUpkeeps))
         self.ini_handler.set("General", "MaxEffectRows", str(self.MaxEffectRows))
-        
+
         self.ini_handler.set("General", "ShowHeroButtons", str(self.ShowHeroButtons))
         self.ini_handler.set("General", "ShowHeroBars", str(self.ShowHeroBars))
         self.ini_handler.set("General", "ShowFloatingTargets", str(self.ShowFloatingTargets))
         self.ini_handler.set("General", "AutoCallTargets", str(self.AutoCallTargets))
         self.ini_handler.set("General", "CombatRangeMode", self.normalize_combat_range_mode(self.CombatRangeMode))
         self.ini_handler.set("General", "ShowHeroSkills", str(self.ShowHeroSkills))
-        
+
         self.ini_handler.set("General", "ShowPartyPanelUI", str(self.ShowPartyPanelUI))
         self.ini_handler.set("General", "ShowControlPanelWindow", str(self.ShowControlPanelWindow))
 
@@ -289,16 +289,18 @@ class Settings:
 
         for hotbar_id, hotbar in self.CommandHotBars.items():
             self.ini_handler.set("CommandHotBars", hotbar_id, hotbar.to_ini_string())
-            
+
         if self.account_ini_handler is not None:
             for hero_email, info in self.HeroPanelPositions.items():
-                self.account_ini_handler.set("HeroPanelPositions", hero_email, f"{info.x},{info.y},{info.collapsed},{info.open}")
-                            
+                self.account_ini_handler.set(
+                    "HeroPanelPositions", hero_email, f"{info.x},{info.y},{info.collapsed},{info.open}"
+                )
+
             for hotbar_id, hotbar in self.CommandHotBars.items():
                 self.account_ini_handler.set("CommandHotBars", hotbar_id, hotbar.to_pos_string())
-            
+
         self.save_requested = False
-        
+
     def load_settings(self):
         ConsoleLog("HeroAI", "Loading HeroAI settings...")
         # Global part ([General] + hotbar definitions) always available; account part loaded after.
@@ -311,25 +313,27 @@ class Settings:
         self.ShowCommandPanel = self.ini_handler.get_bool("General", "ShowCommandPanel", True)
         self.PrintDebug = self.ini_handler.get_bool("General", "PrintDebug", False)
         self.ShowDebugWindow = self.ini_handler.get_bool("General", "ShowDebug", False)
-        self.ShowCommandPanelOnlyOnLeaderAccount = self.ini_handler.get_bool("General", "ShowCommandPanelOnlyOnLeaderAccount", True)
+        self.ShowCommandPanelOnlyOnLeaderAccount = self.ini_handler.get_bool(
+            "General", "ShowCommandPanelOnlyOnLeaderAccount", True
+        )
         self.Anonymous_PanelNames = self.ini_handler.get_bool("General", "Anonymous_PanelNames", False)
-        
+
         self.ShowPartyOverlay = self.ini_handler.get_bool("General", "ShowPartyOverlay", True)
         self.ShowPartySearchOverlay = self.ini_handler.get_bool("General", "ShowPartySearchOverlay", True)
-        
+
         self.ShowPanelOnlyOnLeaderAccount = self.ini_handler.get_bool("General", "ShowPanelOnlyOnLeaderAccount", True)
         self.ShowDialogOverlay = self.ini_handler.get_bool("General", "ShowDialogOverlay", True)
-        
+
         self.CombinePanels = self.ini_handler.get_bool("General", "CombinePanels", False)
         self.ShowHeroPanels = self.ini_handler.get_bool("General", "ShowHeroPanels", True)
         self.ShowLeaderPanel = self.ini_handler.get_bool("General", "ShowLeaderPanel", False)
-        
+
         self.ShowHeroEffects = self.ini_handler.get_bool("General", "ShowHeroEffects", True)
         self.ShowEffectDurations = self.ini_handler.get_bool("General", "ShowEffectDurations", True)
         self.ShowShortEffectDurations = self.ini_handler.get_bool("General", "ShowShortEffectDurations", True)
         self.ShowHeroUpkeeps = self.ini_handler.get_bool("General", "ShowHeroUpkeeps", True)
         self.MaxEffectRows = self.ini_handler.get_int("General", "MaxEffectRows", 2)
-        
+
         self.ShowHeroButtons = self.ini_handler.get_bool("General", "ShowHeroButtons", True)
         self.ShowHeroBars = self.ini_handler.get_bool("General", "ShowHeroBars", True)
         self.ShowFloatingTargets = self.ini_handler.get_bool("General", "ShowFloatingTargets", True)
@@ -338,10 +342,10 @@ class Settings:
             self.ini_handler.get_str("General", "CombatRangeMode", self.COMBAT_RANGE_MODE_PARTY_AGGRO)
         )
         self.ShowHeroSkills = self.ini_handler.get_bool("General", "ShowHeroSkills", True)
-        
+
         self.ShowPartyPanelUI = self.ini_handler.get_bool("General", "ShowPartyPanelUI", True)
         self.ShowControlPanelWindow = self.ini_handler.get_bool("General", "ShowControlPanelWindow", True)
-        
+
         self.ConfirmFollowPoint = self.ini_handler.get_bool("General", "ConfirmFollowPoint", False)
 
         # Only replace the in-memory hotbars when the document actually has stored ones; otherwise
@@ -353,7 +357,7 @@ class Settings:
     def import_hero_panel_positions(self, ini_handler: NativeSettings | None):
         if ini_handler is None:
             return
-        
+
         items = ini_handler.items("HeroPanelPositions")
         request_save = False
 
@@ -362,54 +366,61 @@ class Settings:
                 parts = value.split(",")
                 if len(parts) != 4:
                     ConsoleLog("HeroAI", f"Legacy HeroPanelPosition format detected for {key}, upgrading...")
-                    x_str, y_str, collapsed_str, visible_str = parts[0] if len(parts) > 0 else "200", parts[1] if len(parts) > 1 else "200", "false", "true"
+                    x_str, y_str, collapsed_str, visible_str = (
+                        parts[0] if len(parts) > 0 else "200",
+                        parts[1] if len(parts) > 1 else "200",
+                        "false",
+                        "true",
+                    )
                 else:
                     x_str, y_str, collapsed_str, visible_str = parts
-                    
+
                 x = int(x_str)
                 y = int(y_str)
                 collapsed = collapsed_str.lower() == "true"
-                visible = visible_str and visible_str.lower() == "true" 
+                visible = visible_str and visible_str.lower() == "true"
                 request_save = key not in self.HeroPanelPositions or request_save
                 self.HeroPanelPositions[key] = Settings.HeroPanelInfo(x, y, collapsed, visible)
-                
+
             except Exception as e:
                 ConsoleLog("HeroAI", f"Invalid format for Hero Panel of {key}. Using default.")
                 self.HeroPanelPositions[key] = Settings.HeroPanelInfo()
-        
+
         if request_save:
             self.save_requested = True
-    
-    def import_command_hotbars(self):        
-        items = self.ini_handler.items("CommandHotBars")        
+
+    def import_command_hotbars(self):
+        items = self.ini_handler.items("CommandHotBars")
         positions = self.account_ini_handler.items("CommandHotBars") if self.account_ini_handler is not None else {}
-        
+
         request_save = False
 
         for key, value in items.items():
             try:
                 hotbar = Settings.CommandHotBar.from_ini_string(key, value)
                 self.CommandHotBars[key] = hotbar
-                
+
                 if key in positions:
                     x_str, y_str = positions[key].split(",")
                     x = int(x_str)
                     y = int(y_str)
-                    hotbar.position = (x, y)                
-                
+                    hotbar.position = (x, y)
+
             except Exception as e:
                 ConsoleLog("HeroAI", f"Error loading CommandHotBar for {key}: {e}")
-        
+
         if request_save:
-            self.save_requested = True  
+            self.save_requested = True
 
     def get_hero_panel_info(self, account_email: str) -> 'Settings.HeroPanelInfo':
-        info = self.HeroPanelPositions.get(account_email, self.HeroPanelPositions.get(account_email.lower(), Settings.HeroPanelInfo()))
-        
+        info = self.HeroPanelPositions.get(
+            account_email, self.HeroPanelPositions.get(account_email.lower(), Settings.HeroPanelInfo())
+        )
+
         if account_email not in self.HeroPanelPositions:
             self.HeroPanelPositions[account_email] = info
             self.save_requested = True
-        
+
         return info
 
     def _get_account_settings_handler(self) -> NativeSettings | None:

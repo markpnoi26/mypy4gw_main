@@ -13,9 +13,8 @@ import os
 from enum import IntEnum
 from dataclasses import dataclass, field
 from typing import Optional
-from Py4GWCoreLib.enums_src.Item_enums import ItemType
-from Py4GWCoreLib.enums import Attribute
-
+from Core.enums_src.Item_enums import ItemType
+from Core.enums import Attribute
 
 # ══════════════════════════════════════════════
 # Enums

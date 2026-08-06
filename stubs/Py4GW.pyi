@@ -7,11 +7,9 @@
 # process/game helpers -> PySystem / PyGameThread. Only version() and the
 # SharedMemory submodule are registered here.
 
-
 def version() -> str:
     """Runtime version string of the injected Py4GW DLL."""
     ...
-
 
 class SharedMemory:
     """Shared memory publisher bindings (def_submodule)."""

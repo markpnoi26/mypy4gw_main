@@ -15,10 +15,10 @@ cornerstone UI — from rendering.
 
 import os
 
-from Py4GWCoreLib.py4gwcorelib_src.Settings import Settings
-from Py4GWCoreLib.py4gwcorelib_src.WidgetManager import WidgetHandler
-from Py4GWCoreLib.py4gwcorelib_src.WidgetManager import get_widget_handler
-from Py4GWCoreLib.py4gwcorelib_src.launch_bar.launchpad import register_launchpad_once
+from Core.py4gwcorelib_src.Settings import Settings
+from Core.py4gwcorelib_src.WidgetManager import WidgetHandler
+from Core.py4gwcorelib_src.WidgetManager import get_widget_handler
+from Core.py4gwcorelib_src.launch_bar.launchpad import register_launchpad_once
 
 MODULE_NAME = "Widget Manager"
 

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from Py4GWCoreLib import ActionQueueManager, Agent, GLOBAL_CACHE, Range, SharedCommandType, Utils, Weapon
-from Py4GWCoreLib.Map import Map
-from Py4GWCoreLib.Player import Player
-from Py4GWCoreLib.enums_src.UI_enums import ControlAction
-from Py4GWCoreLib.UIManager import UIManager
-from Py4GWCoreLib.py4gwcorelib_src.BehaviorTree import BehaviorTree
+from Core import ActionQueueManager, Agent, GLOBAL_CACHE, Range, SharedCommandType, Utils, Weapon
+from Core.Map import Map
+from Core.Player import Player
+from Core.enums_src.UI_enums import ControlAction
+from Core.UIManager import UIManager
+from Core.py4gwcorelib_src.BehaviorTree import BehaviorTree
 
 from ..cache_data import CacheData
 from .smart_unstuck import (
@@ -238,8 +238,7 @@ def execute_follower_follow(
     leader_options = GLOBAL_CACHE.ShMem.GetHeroAIOptionsByPartyNumber(0)
     all_flag_active = (
         leader_signature_matches_local
-        and
-        leader_options is not None
+        and leader_options is not None
         and bool(getattr(leader_options, "IsFlagged", False))
         and _is_nonzero_xy(float(leader_options.AllFlag.x), float(leader_options.AllFlag.y))
     )
@@ -319,7 +318,9 @@ def execute_follower_follow(
     # Upstream "follow recovery": when the follower is far from its destination,
     # tighten the tolerance to FOLLOW_RECOVERY_RELEASE_DISTANCE so it keeps
     # closing the gap instead of stopping at the normal slot threshold.
-    effective_follow_distance = min(follow_distance, FOLLOW_RECOVERY_RELEASE_DISTANCE) if recovery_active else follow_distance
+    effective_follow_distance = (
+        min(follow_distance, FOLLOW_RECOVERY_RELEASE_DISTANCE) if recovery_active else follow_distance
+    )
     # When flagged the published threshold is 0.0 (hold position exactly), which
     # makes the arrival check below impossible to satisfy and permanently blocks
     # HandleCombat in the headless tree selector.  Enforce a minimum arrival
@@ -404,7 +405,9 @@ def execute_follower_follow(
             cached_data.follow_throttle_timer.Reset()
             return follow_active_state
         if ActionQueueManager().IsEmpty("ACTION"):
-            ActionQueueManager().AddAction("ACTION", UIManager.Keypress, ControlAction.ControlAction_TargetPartyMember1.value, 0)
+            ActionQueueManager().AddAction(
+                "ACTION", UIManager.Keypress, ControlAction.ControlAction_TargetPartyMember1.value, 0
+            )
             ActionQueueManager().AddAction("ACTION", UIManager.Keypress, ControlAction.ControlAction_Follow.value, 0)
             state.last_recovery_follow_command_ms = now_ms
         cached_data.follow_throttle_timer.Reset()
@@ -424,7 +427,9 @@ def execute_follower_follow(
     if follow_z == 0 or own_flag_active or all_flag_active:
         Player.Move(xx, yy)
     else:
-        ActionQueueManager().AddAction("ACTION", UIManager.Keypress, ControlAction.ControlAction_TargetPartyMember1.value, 0)
+        ActionQueueManager().AddAction(
+            "ACTION", UIManager.Keypress, ControlAction.ControlAction_TargetPartyMember1.value, 0
+        )
         ActionQueueManager().AddAction("ACTION", UIManager.Keypress, ControlAction.ControlAction_Follow.value, 0)
 
     state.last_follow_move_point = (xx, yy)

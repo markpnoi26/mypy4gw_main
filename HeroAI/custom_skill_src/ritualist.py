@@ -1,11 +1,11 @@
-
-from Py4GWCoreLib import GLOBAL_CACHE, Range
+from Core import GLOBAL_CACHE, Range
 from HeroAI.types import SkillNature, Skilltarget, SkillType
 from HeroAI.custom_skill import CustomSkill
 
+
 class RitualistSkills:
     def __init__(self, skill_data):
-        #region SPAWNING_POWER
+        # region SPAWNING_POWER
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Anguished_Was_Lingwah")
@@ -206,7 +206,7 @@ class RitualistSkills:
         skill.Conditions.IsOutOfCombat = True
         skill_data[skill.SkillID] = skill
 
-        #region CHANNELLING_MAGIC
+        # region CHANNELLING_MAGIC
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Agony")
@@ -429,7 +429,7 @@ class RitualistSkills:
         skill.Nature = SkillNature.Offensive.value
         skill_data[skill.SkillID] = skill
 
-        #region COMMUNING
+        # region COMMUNING
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Anguish")
@@ -601,7 +601,7 @@ class RitualistSkills:
         skill.Conditions.TargetingStrict = True
         skill_data[skill.SkillID] = skill
 
-        #region RESTORATION_MAGIC
+        # region RESTORATION_MAGIC
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Blind_Was_Mingson")
@@ -864,7 +864,7 @@ class RitualistSkills:
         skill.Nature = SkillNature.Buff.value
         skill_data[skill.SkillID] = skill
 
-        #region NO_ATTRIBUTE
+        # region NO_ATTRIBUTE
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Draw_Spirit")

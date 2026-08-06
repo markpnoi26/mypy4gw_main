@@ -3,7 +3,7 @@ PROPOSAL SKETCH -- the shape of the mod-definition table (NOT the final system).
 ================================================================================
 
 This is 4 real mods written in the agreed design, so you can read one end to end and
-we lock the shape before scaling to all 62. Nothing here is wired into Py4GWCoreLib yet.
+we lock the shape before scaling to all 62. Nothing here is wired into Core yet.
 
 The design, in one screen:
   - CATALOGS are the existing enums (Attribute, DamageType, ...) -- the lookup tables.
@@ -25,8 +25,8 @@ from typing import Optional
 from typing import Type
 
 # Catalogs already exist as game-native enums; in the real module this is the only import.
-from Py4GWCoreLib.enums import Attribute
-from Py4GWCoreLib.enums import DamageType
+from Core.enums import Attribute
+from Core.enums import DamageType
 
 
 # ── how to read ONE arg ────────────────────────────────────────────────────────

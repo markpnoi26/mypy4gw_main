@@ -1,12 +1,12 @@
-from Py4GWCoreLib.Agent import Agent
-from Py4GWCoreLib.GlobalCache import GLOBAL_CACHE
-from Py4GWCoreLib.Map import Map
-from Py4GWCoreLib.Player import Player
-from Py4GWCoreLib.Routines import Routines
-from Py4GWCoreLib.Builds.Any.HeroAI import HeroAI_Build
-from Py4GWCoreLib.routines_src.BehaviourTrees import BehaviorTree
-from Py4GWCoreLib import ActionQueueManager, Range, SharedCommandType, ThrottledTimer, Utils
-from Py4GWCoreLib.py4gwcorelib_src.loot_filters import LootFilters
+from Core.Agent import Agent
+from Core.GlobalCache import GLOBAL_CACHE
+from Core.Map import Map
+from Core.Player import Player
+from Core.Routines import Routines
+from Core.Builds.Any.HeroAI import HeroAI_Build
+from Core.routines_src.BehaviourTrees import BehaviorTree
+from Core import ActionQueueManager, Range, SharedCommandType, ThrottledTimer, Utils
+from Core.py4gwcorelib_src.loot_filters import LootFilters
 
 from .cache_data import CacheData
 from .follow.follower_runtime import (
@@ -58,7 +58,9 @@ class HeroAIHeadlessTree:
                 continue
             if str(getattr(message, 'ReceiverEmail', '') or '').strip() != account_email:
                 continue
-            if int(getattr(message, 'Command', SharedCommandType.NoCommand)) != int(SharedCommandType.SetHeadlessLooting):
+            if int(getattr(message, 'Command', SharedCommandType.NoCommand)) != int(
+                SharedCommandType.SetHeadlessLooting
+            ):
                 continue
             latest_enabled = bool(int(getattr(message, 'Params', (1, 0, 0, 0))[0] or 0))
             GLOBAL_CACHE.ShMem.MarkMessageAsFinished(account_email, message_index)
@@ -268,7 +270,9 @@ class HeroAIHeadlessTree:
     def _build_tree(self):
         self._looting_node = BehaviorTree.ActionNode(
             name="LootingRoutine",
-            action_fn=lambda: self._handle_looting() if self._headless_looting_enabled else BehaviorTree.NodeState.FAILURE,
+            action_fn=lambda: (
+                self._handle_looting() if self._headless_looting_enabled else BehaviorTree.NodeState.FAILURE
+            ),
         )
         self._status_selector = BehaviorTree.SelectorNode(
             name="HeadlessHeroAI_UpdateStatusSelector",
@@ -289,8 +293,7 @@ class HeroAIHeadlessTree:
                 BehaviorTree.ActionNode(
                     name="HandleCombat",
                     action_fn=lambda: (
-                        self.cached_data.auto_attack_timer.Reset()
-                        or BehaviorTree.NodeState.SUCCESS
+                        self.cached_data.auto_attack_timer.Reset() or BehaviorTree.NodeState.SUCCESS
                         if self._handle_combat()
                         else BehaviorTree.NodeState.FAILURE
                     ),

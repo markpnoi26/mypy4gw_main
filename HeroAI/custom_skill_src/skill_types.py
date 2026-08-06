@@ -1,8 +1,9 @@
-from Py4GWCoreLib import Range
+from Core import Range
 
 from ..types import SkillNature
 from ..types import Skilltarget
 from ..types import SkillType
+
 
 class CastConditions:
     def __init__(self):
@@ -99,6 +100,7 @@ class CastConditions:
     @EnemiesInRangeArea.setter
     def EnemiesInRangeArea(self, value):
         self.EnemiesInRange = value
+
 
 class CustomSkill:
     def __init__(self):

@@ -1,4 +1,4 @@
-from Py4GWCoreLib import Agent, Player
+from Core import Agent, Player
 
 
 def CallTarget(agent_id: int, interact: bool = False) -> bool:

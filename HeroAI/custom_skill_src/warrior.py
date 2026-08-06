@@ -1,11 +1,11 @@
-
-from Py4GWCoreLib import GLOBAL_CACHE, Range
+from Core import GLOBAL_CACHE, Range
 from HeroAI.types import SkillNature, Skilltarget, SkillType
 from HeroAI.custom_skill import CustomSkill
 
+
 class WarriorSkills:
     def __init__(self, skill_data):
-        #region STRENGTH
+        # region STRENGTH
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("I_Meant_to_Do_That")
@@ -287,7 +287,7 @@ class WarriorSkills:
         skill.Conditions.LessEnergy = 0.75
         skill_data[skill.SkillID] = skill
 
-        #region AXE_MASTERY
+        # region AXE_MASTERY
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Agonizing_Chop")
@@ -447,7 +447,7 @@ class WarriorSkills:
         skill.Conditions.RequireWeapon = "Axe"
         skill_data[skill.SkillID] = skill
 
-        #region HAMMER_MASTERY
+        # region HAMMER_MASTERY
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Auspicious_Blow")
@@ -634,7 +634,7 @@ class WarriorSkills:
         skill.Conditions.HasCondition = True
         skill_data[skill.SkillID] = skill
 
-        #region SWORDSMANSHIP
+        # region SWORDSMANSHIP
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Barbarous_Slice")
@@ -794,7 +794,7 @@ class WarriorSkills:
         skill.Conditions.RequireWeapon = "Sword"
         skill_data[skill.SkillID] = skill
 
-        #region TACTICS
+        # region TACTICS
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Charge")
@@ -1019,7 +1019,7 @@ class WarriorSkills:
         skill.Nature = SkillNature.Buff.value
         skill_data[skill.SkillID] = skill
 
-        #region NO_ATTRIBUTE
+        # region NO_ATTRIBUTE
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Coward")
@@ -1119,5 +1119,3 @@ class WarriorSkills:
         skill.TargetAllegiance = Skilltarget.Enemy.value
         skill.Nature = SkillNature.Offensive.value
         skill_data[skill.SkillID] = skill
-
-    

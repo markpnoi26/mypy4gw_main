@@ -6,18 +6,15 @@
 from enum import IntEnum
 from typing import Any, Callable, List, Tuple
 
-
 class Phase(IntEnum):
     PreUpdate = 0
     Data = 1
     Update = 2
 
-
 class Context(IntEnum):
     Update = 0
     Draw = 1
     Main = 2
-
 
 # Both enums are registered with .export_values(), so their value names are also
 # module-level attributes. NOTE the collision: Phase.Update and Context.Update
@@ -28,7 +25,6 @@ Data: Phase
 Update: Context
 Draw: Context
 Main: Context
-
 
 class PyCallback:
     # NOTE: the C++ py::arg() labels are mis-ordered relative to the underlying
@@ -45,25 +41,18 @@ class PyCallback:
         priority: int = 99,
         context: Context = Context.Draw,
     ) -> int: ...
-
     @staticmethod
     def RemoveById(id: int) -> bool: ...
-
     @staticmethod
     def RemoveByName(name: str) -> bool: ...
-
     @staticmethod
     def PauseById(id: int) -> bool: ...
-
     @staticmethod
     def ResumeById(id: int) -> bool: ...
-
     @staticmethod
     def IsPaused(id: int) -> bool: ...
-
     @staticmethod
     def IsRegistered(id: int) -> bool: ...
-
     @staticmethod
     def Clear() -> None: ...
 

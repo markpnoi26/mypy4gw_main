@@ -17,7 +17,6 @@ current on-disk tree, so concurrent accounts do not clobber each other.
 
 from typing import Any
 
-
 class JsonFile:
     def __init__(self, name: str, scope: str = "account") -> None:
         """Bind to a named JSON document.
@@ -76,9 +75,7 @@ class JsonFile:
         ...
 
     def is_array(self, path: str = "") -> bool: ...
-
     def is_object(self, path: str = "") -> bool: ...
-
     def save(self) -> bool:
         """Force an immediate save (escape hatch; not required in normal flow)."""
         ...
@@ -88,7 +85,6 @@ class JsonFile:
         ...
 
     def is_dirty(self) -> bool: ...
-
     def is_bound(self) -> bool:
         """Whether the document is attached to disk yet."""
         ...
@@ -97,26 +93,21 @@ class JsonFile:
         """Absolute on-disk path of this document (empty until bound)."""
         ...
 
-
 def copy_document_to_account(name: str, target_email: str) -> bool:
     """Merge an entire document into another account's file on disk."""
     ...
-
 
 def copy_path_to_account(name: str, path: str, target_email: str) -> bool:
     """Merge one subtree into another account's file on disk."""
     ...
 
-
 def apply_to_account(name: str, path: str, value: Any, target_email: str) -> bool:
     """Merge a caller-supplied subtree at ``path`` into another account's file on disk."""
     ...
 
-
 def is_anchored() -> bool:
     """Whether account-scoped documents are bound to disk yet."""
     ...
-
 
 def get_json_directory() -> str:
     """Per-account JSON directory (empty until the anchor resolves)."""

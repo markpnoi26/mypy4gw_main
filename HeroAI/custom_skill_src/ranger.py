@@ -1,11 +1,11 @@
-
-from Py4GWCoreLib import GLOBAL_CACHE, Range
+from Core import GLOBAL_CACHE, Range
 from HeroAI.types import SkillNature, Skilltarget, SkillType
 from HeroAI.custom_skill import CustomSkill
 
+
 class RangerSkills:
     def __init__(self, skill_data):
-         #region EXPERTISE
+        # region EXPERTISE
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Archers_Signet")
@@ -157,7 +157,7 @@ class RangerSkills:
         skill.Conditions.RequireWeapon = "Bow"
         skill_data[skill.SkillID] = skill
 
-        #region BEAST_MASTERY
+        # region BEAST_MASTERY
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Bestial_Fury")
@@ -212,7 +212,7 @@ class RangerSkills:
         skill.TargetAllegiance = Skilltarget.Pet.value
         skill.Nature = SkillNature.Offensive.value
         skill.Conditions.IsOutOfCombat = True
-        skill.Conditions.LessLife = 0.01 #skill effectively disabled
+        skill.Conditions.LessLife = 0.01  # skill effectively disabled
         skill_data[skill.SkillID] = skill
 
         skill = CustomSkill()
@@ -462,7 +462,7 @@ class RangerSkills:
         skill.Nature = SkillNature.Offensive.value
         skill_data[skill.SkillID] = skill
 
-        #region MARKSMANSHIP
+        # region MARKSMANSHIP
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Arcing_Shot")
@@ -741,7 +741,7 @@ class RangerSkills:
         skill.Conditions.RequireWeapon = "Bow"
         skill_data[skill.SkillID] = skill
 
-        #region WILDERNESS_SURVIVAL
+        # region WILDERNESS_SURVIVAL
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Apply_Poison")
@@ -1034,7 +1034,7 @@ class RangerSkills:
         skill.Nature = SkillNature.Buff.value
         skill_data[skill.SkillID] = skill
 
-        #region NO_ATTRIBUTE
+        # region NO_ATTRIBUTE
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Antidote_Signet")

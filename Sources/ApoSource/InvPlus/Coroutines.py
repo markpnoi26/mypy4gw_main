@@ -3,21 +3,20 @@ import PyItem
 
 from typing import Dict
 
-from Py4GWCoreLib import Inventory, UIManager
-from Py4GWCoreLib import ActionQueueManager
-from Py4GWCoreLib import Routines
-from Py4GWCoreLib import ConsoleLog
-from Py4GWCoreLib import Item
-from Py4GWCoreLib import ItemArray
-from Py4GWCoreLib import Bags
-from Py4GWCoreLib import Trading
-from Py4GWCoreLib import ModelID
-from Py4GWCoreLib import GLOBAL_CACHE
-from Py4GWCoreLib.FrameTree import Frame, FrameId
+from Core import Inventory, UIManager
+from Core import ActionQueueManager
+from Core import Routines
+from Core import ConsoleLog
+from Core import Item
+from Core import ItemArray
+from Core import Bags
+from Core import Trading
+from Core import ModelID
+from Core import GLOBAL_CACHE
+from Core.FrameTree import Frame, FrameId
 
 
-
-#region IdentifyCheckedItems         
+# region IdentifyCheckedItems
 def IdentifyCheckedItems(id_checkboxes: Dict[int, bool]):
     MODULE_NAME = "Inventory + Identify Items"
     identified_items = 0
@@ -27,13 +26,13 @@ def IdentifyCheckedItems(id_checkboxes: Dict[int, bool]):
             if first_id_kit == 0:
                 PySystem.Console.Log(MODULE_NAME, "No ID Kit found in inventory.", PySystem.Console.MessageType.Warning)
                 return
-            
+
             item_instance = PyItem.PyItem(item_id)
             if item_instance.is_identified:
                 id_checkboxes[item_id] = False
                 continue
-            
-            ActionQueueManager().AddAction("ACTION", Inventory.IdentifyItem,item_id, first_id_kit)
+
+            ActionQueueManager().AddAction("ACTION", Inventory.IdentifyItem, item_id, first_id_kit)
             identified_items += 1
             while True:
                 yield from Routines.Yield.wait(50)
@@ -42,7 +41,7 @@ def IdentifyCheckedItems(id_checkboxes: Dict[int, bool]):
                     break
             id_checkboxes[item_id] = False
         yield from Routines.Yield.wait(50)
-        
+
     ConsoleLog(MODULE_NAME, f"Identified {identified_items} items.", PySystem.Console.MessageType.Info)
 
 
@@ -51,15 +50,11 @@ def get_first_full_material_stack():
     item_array = ItemArray.GetItemArray(bags_to_check)
 
     # Filter items that are materials
-    materials = ItemArray.Filter.ByCondition(
-        item_array,
-        lambda item_id: Item.Type.IsMaterial(item_id)
-    )
+    materials = ItemArray.Filter.ByCondition(item_array, lambda item_id: Item.Type.IsMaterial(item_id))
 
     # Further filter for materials with quantity == 250
     full_stack_materials = ItemArray.Filter.ByCondition(
-        materials,
-        lambda item_id: Item.Properties.GetQuantity(item_id) == 250
+        materials, lambda item_id: Item.Properties.GetQuantity(item_id) == 250
     )
 
     if not full_stack_materials:
@@ -67,22 +62,22 @@ def get_first_full_material_stack():
 
     return full_stack_materials[0]  # First one found
 
+
 def count_stacks_of_model(model_id: int) -> int:
     bags_to_check = ItemArray.CreateBagList(1, 2, 3, 4)
     item_array = ItemArray.GetItemArray(bags_to_check)
 
     # Filter items by the given model_id
-    matching_items = ItemArray.Filter.ByCondition(
-        item_array,
-        lambda item_id: Item.GetModelID(item_id) == model_id
-    )
+    matching_items = ItemArray.Filter.ByCondition(item_array, lambda item_id: Item.GetModelID(item_id) == model_id)
 
     # Return the number of stacks found (full or partial)
     return len(matching_items)
 
 
-#region SalvageCheckedItems         
-def SalvageCheckedItems(salvage_checkboxes: Dict[int, bool], keep_salvage_kits: int = 0, deposit_materials: bool = False):
+# region SalvageCheckedItems
+def SalvageCheckedItems(
+    salvage_checkboxes: Dict[int, bool], keep_salvage_kits: int = 0, deposit_materials: bool = False
+):
     MODULE_NAME = "Inventory + Salvage Items"
     salvaged_items = 0
     items_to_salvage = list(salvage_checkboxes.items())
@@ -103,7 +98,9 @@ def SalvageCheckedItems(salvage_checkboxes: Dict[int, bool], keep_salvage_kits: 
         while checked:
             first_salv_kit = Inventory.GetFirstSalvageKit(use_lesser=True)
             if first_salv_kit == 0:
-                PySystem.Console.Log(MODULE_NAME, "No Salvage Kit found in inventory.", PySystem.Console.MessageType.Warning)
+                PySystem.Console.Log(
+                    MODULE_NAME, "No Salvage Kit found in inventory.", PySystem.Console.MessageType.Warning
+                )
                 return
 
             quantity = Item.Properties.GetQuantity(item_id)
@@ -167,7 +164,7 @@ def SalvageCheckedItems(salvage_checkboxes: Dict[int, bool], keep_salvage_kits: 
                     if elapsed >= CONSUME_TIMEOUT_MS:
                         break
 
-            #deposit Full Material Stacks
+            # deposit Full Material Stacks
             if deposit_materials:
                 deposited = 0
                 while True:
@@ -177,7 +174,6 @@ def SalvageCheckedItems(salvage_checkboxes: Dict[int, bool], keep_salvage_kits: 
                     GLOBAL_CACHE.Inventory.DepositItemToStorage(first_stack)
                     deposited += 1
                     yield from Routines.Yield.wait(POST_ACTION_MS)
-
 
             if keep_salvage_kits > 0:
                 MERCHANT_FRAME = 3613855137
@@ -200,11 +196,14 @@ def SalvageCheckedItems(salvage_checkboxes: Dict[int, bool], keep_salvage_kits: 
             checked = salvage_checkboxes.get(item_id, False)
 
     ConsoleLog(MODULE_NAME, f"Salvaged {salvaged_items} items.", PySystem.Console.MessageType.Info)
-    
-#region MerchantCheckedItems
-    
+
+
+# region MerchantCheckedItems
+
+
 def MerchantCheckedItems(merchant_checkboxes: Dict[int, bool]):
     MODULE_NAME = "Inventory + Merchant Sell Items"
+
     def _is_merchant():
         merchant_item_list = Trading.Trader.GetOfferedItems()
         merchant_item_models = [Item.GetModelID(item_id) for item_id in merchant_item_list]
@@ -219,7 +218,9 @@ def MerchantCheckedItems(merchant_checkboxes: Dict[int, bool]):
         return 10 if _is_material_trader() else 1
 
     if _is_merchant():
-        ConsoleLog(MODULE_NAME, "Selling to regular merchants is not yet supported.", PySystem.Console.MessageType.Warning)
+        ConsoleLog(
+            MODULE_NAME, "Selling to regular merchants is not yet supported.", PySystem.Console.MessageType.Warning
+        )
         return
 
     if not merchant_checkboxes:
@@ -238,13 +239,13 @@ def MerchantCheckedItems(merchant_checkboxes: Dict[int, bool]):
         while True:
             item_array = ItemArray.GetItemArray(bag_list)
             if item_id not in item_array:
-                #ConsoleLog(MODULE_NAME, f"Item {item_id} no longer in inventory.", PySystem.Console.MessageType.Info)
+                # ConsoleLog(MODULE_NAME, f"Item {item_id} no longer in inventory.", PySystem.Console.MessageType.Info)
                 merchant_checkboxes[item_id] = False
                 break
 
             quantity = Item.Properties.GetQuantity(item_id)
             if quantity < required_quantity:
-                #ConsoleLog(MODULE_NAME, f"Item {item_id} has quantity {quantity} which is below required {required_quantity}.", PySystem.Console.MessageType.Info)
+                # ConsoleLog(MODULE_NAME, f"Item {item_id} has quantity {quantity} which is below required {required_quantity}.", PySystem.Console.MessageType.Info)
                 merchant_checkboxes[item_id] = False
                 break
 
@@ -263,7 +264,7 @@ def MerchantCheckedItems(merchant_checkboxes: Dict[int, bool]):
 
             # Proceed with sale
             GLOBAL_CACHE.Trading.Trader.SellItem(item_id, quoted_value)
-            #ConsoleLog(MODULE_NAME, f"Sold item {item_id} for {quoted_value}.", PySystem.Console.MessageType.Success)
+            # ConsoleLog(MODULE_NAME, f"Sold item {item_id} for {quoted_value}.", PySystem.Console.MessageType.Success)
 
             # Wait for confirmation
             while True:
@@ -274,16 +275,19 @@ def MerchantCheckedItems(merchant_checkboxes: Dict[int, bool]):
             sold_items += required_quantity  # Assumed fixed chunk sold
             ammount_sold += quoted_value * required_quantity
 
-    ConsoleLog(MODULE_NAME, f"Merchant sold {sold_items} items for a total of {ammount_sold} gold.", PySystem.Console.MessageType.Info)
+    ConsoleLog(
+        MODULE_NAME,
+        f"Merchant sold {sold_items} items for a total of {ammount_sold} gold.",
+        PySystem.Console.MessageType.Info,
+    )
 
-#region BuyMerchantItems
+
+# region BuyMerchantItems
 def BuyMerchantItems(merchant_item_list, selected_index, quantity):
     MODULE_NAME = "Inventory + Buy Merchant Items"
+
     def _is_material_trader():
-        merchant_models = [
-            Item.GetModelID(item_id)
-            for item_id in Trading.Trader.GetOfferedItems()
-        ]
+        merchant_models = [Item.GetModelID(item_id) for item_id in Trading.Trader.GetOfferedItems()]
         return ModelID.Wood_Plank.value in merchant_models
 
     def _get_minimum_quantity():
@@ -298,9 +302,7 @@ def BuyMerchantItems(merchant_item_list, selected_index, quantity):
 
     if quantity < required_quantity:
         ConsoleLog(
-            MODULE_NAME,
-            f"Minimum quantity required is {required_quantity}.",
-            PySystem.Console.MessageType.Warning
+            MODULE_NAME, f"Minimum quantity required is {required_quantity}.", PySystem.Console.MessageType.Warning
         )
         return
 
@@ -321,7 +323,7 @@ def BuyMerchantItems(merchant_item_list, selected_index, quantity):
             return
 
         GLOBAL_CACHE.Trading.Trader.BuyItem(item_id, cost)
-        #ConsoleLog(MODULE_NAME,f"Bought {required_quantity} units of item {item_id} for {cost}g.", PySystem.Console.MessageType.Success)
+        # ConsoleLog(MODULE_NAME,f"Bought {required_quantity} units of item {item_id} for {cost}g.", PySystem.Console.MessageType.Success)
 
         while True:
             yield from Routines.Yield.wait(50)
@@ -335,6 +337,5 @@ def BuyMerchantItems(merchant_item_list, selected_index, quantity):
     ConsoleLog(
         MODULE_NAME,
         f"Purchase complete: {total_items_bought} items bought for a total of {total_gold_spent} gold.",
-        PySystem.Console.MessageType.Info
+        PySystem.Console.MessageType.Info,
     )
-

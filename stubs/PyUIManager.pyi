@@ -187,6 +187,7 @@ class UIManager:
     def get_window_position(window_id: int) -> Optional[Tuple[float, float, float, float]]:
         """Get a built-in window rect as (left, top, right, bottom), or None."""
         ...
+
     @staticmethod
     def set_window_visible(window_id: int, is_visible: bool) -> bool: ...
     @staticmethod
@@ -224,6 +225,7 @@ class UIManager:
         """Traverses the frame tree by relation kind:
         0=first child, 1=last child, 2=next sibling, 3=prev sibling."""
         ...
+
     @staticmethod
     def get_first_child_frame_id(parent_frame_id: int) -> int: ...
     @staticmethod
@@ -251,7 +253,6 @@ class UIManager:
         """Snapshot of a live frame (replaces the legacy UIFrame class): dict
         with named fields, position (incl. on-screen coords) and relation."""
         ...
-
     # ---- Frame metadata / geometry ----
     @staticmethod
     def get_frame_context(frame_id: int) -> int: ...

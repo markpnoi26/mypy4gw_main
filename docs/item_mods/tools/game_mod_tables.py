@@ -2,7 +2,7 @@
 # Source: Guild Wars client image (Gw.wasm). DO NOT EDIT BY HAND.
 #
 # Label-table values are ETextStr string-table IDs. Resolve to display text via
-#   from Py4GWCoreLib.native_src.internals import string_table
+#   from Core.native_src.internals import string_table
 #   string_table.decode(bytes(<encoded-ref built from the id>))
 # or map to your taxonomy labels directly by enum index.
 

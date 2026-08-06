@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from Py4GWCoreLib import (
+from Core import (
     ActionQueueManager,
     Agent,
     AgentArray,
@@ -18,7 +18,7 @@ from Py4GWCoreLib import (
     Routines,
     Utils,
 )
-from Py4GWCoreLib.enums import ModelID, Range
+from Core.enums import ModelID, Range
 
 BOT_NAME = "Dragon Moss Fiber Farmer"
 
@@ -149,7 +149,9 @@ class DragonMossRangerAssassin(BuildMgr):
 
         has_shadow_form = GLOBAL_CACHE.Effects.HasEffect(player_id, SHADOW_FORM_SKILL_ID)
         shadow_form_remaining = GLOBAL_CACHE.Effects.GetEffectTimeRemaining(player_id, SHADOW_FORM_SKILL_ID)
-        if (not has_shadow_form or shadow_form_remaining <= 3500) and Routines.Checks.Skills.IsSkillSlotReady(SHADOW_FORM_SLOT):
+        if (not has_shadow_form or shadow_form_remaining <= 3500) and Routines.Checks.Skills.IsSkillSlotReady(
+            SHADOW_FORM_SLOT
+        ):
             if (
                 yield from Routines.Yield.Skills.CastSkillSlot(
                     SHADOW_FORM_SLOT,
@@ -294,7 +296,11 @@ def _recover_from_failure(bot_instance: Botting, reason: str):
     yield from Routines.Yield.wait(DEATH_RECOVERY_SETTLE_MS)
     ConsoleLog(BOT_NAME, f"Recovery settle wait finished for {reason}.", PySystem.Console.MessageType.Info)
     yield from recover_to_anjekas(resign_if_alive=False)
-    ConsoleLog(BOT_NAME, f"Recovery path returned to outpost for {reason}; jumping to Ensure Anjeka.", PySystem.Console.MessageType.Info)
+    ConsoleLog(
+        BOT_NAME,
+        f"Recovery path returned to outpost for {reason}; jumping to Ensure Anjeka.",
+        PySystem.Console.MessageType.Info,
+    )
     bot_instance.config.FSM.jump_to_state_by_name("Ensure Anjeka")
     ConsoleLog(BOT_NAME, f"Resuming FSM after recovery for {reason}.", PySystem.Console.MessageType.Info)
     bot_instance.config.FSM.resume()
@@ -350,7 +356,11 @@ def recover_to_anjekas(resign_if_alive: bool):
     arrived_in_anjeka = Map.IsMapIDMatch(Map.GetMapID(), ANJEKAS_SHRINE)
     if Map.IsExplorable():
         if player_id and Agent.IsDead(player_id):
-            ConsoleLog(BOT_NAME, "Player is dead during recovery; waiting briefly before returning to outpost.", PySystem.Console.MessageType.Info)
+            ConsoleLog(
+                BOT_NAME,
+                "Player is dead during recovery; waiting briefly before returning to outpost.",
+                PySystem.Console.MessageType.Info,
+            )
             yield from Routines.Yield.wait(4000)
         elif resign_if_alive:
             yield from Routines.Yield.Player.Resign(log=False)
@@ -381,11 +391,7 @@ def recover_to_anjekas(resign_if_alive: bool):
             f"Finished post-ReturnToOutpost wait. loading={Map.IsMapLoading()} explorable={Map.IsExplorable()} outpost={Map.IsOutpost()} map={Map.GetMapID()}",
             PySystem.Console.MessageType.Info,
         )
-        transition_started = (
-            Map.IsMapLoading()
-            or Map.IsOutpost()
-            or Map.IsMapIDMatch(Map.GetMapID(), ANJEKAS_SHRINE)
-        )
+        transition_started = Map.IsMapLoading() or Map.IsOutpost() or Map.IsMapIDMatch(Map.GetMapID(), ANJEKAS_SHRINE)
         if transition_started:
             ConsoleLog(
                 BOT_NAME,
@@ -532,7 +538,9 @@ def run_dragon_moss_farm(bot_instance: Botting):
                 timeout_ms=6000,
             )
         ):
-            ConsoleLog(BOT_NAME, "Failed to move into Return cast range. Aborting run.", PySystem.Console.MessageType.Warning)
+            ConsoleLog(
+                BOT_NAME, "Failed to move into Return cast range. Aborting run.", PySystem.Console.MessageType.Warning
+            )
             return
 
         if not (
@@ -544,7 +552,11 @@ def run_dragon_moss_farm(bot_instance: Botting):
                 aftercast_delay=2500,
             )
         ):
-            ConsoleLog(BOT_NAME, "Return failed to cast on the gate anchor. Aborting run.", PySystem.Console.MessageType.Warning)
+            ConsoleLog(
+                BOT_NAME,
+                "Return failed to cast on the gate anchor. Aborting run.",
+                PySystem.Console.MessageType.Warning,
+            )
             return
         ConsoleLog(BOT_NAME, f"Return completed. Player now at {Player.GetXY()}.", PySystem.Console.MessageType.Info)
 
@@ -633,13 +645,21 @@ def run_dragon_moss_farm(bot_instance: Botting):
             )
         kill_window_completed = yield from wait_for_kill_window()
         if not kill_window_completed:
-            ConsoleLog(BOT_NAME, "Kill window did not finish cleanly. Marking run as failed.", PySystem.Console.MessageType.Warning)
+            ConsoleLog(
+                BOT_NAME,
+                "Kill window did not finish cleanly. Marking run as failed.",
+                PySystem.Console.MessageType.Warning,
+            )
             return
 
         yield from Routines.Yield.wait(LOOT_SETTLE_MS)
         loot_completed = yield from loot_run_drops()
         if not loot_completed:
-            ConsoleLog(BOT_NAME, "Loot phase ended with pending drops. Marking run as failed.", PySystem.Console.MessageType.Warning)
+            ConsoleLog(
+                BOT_NAME,
+                "Loot phase ended with pending drops. Marking run as failed.",
+                PySystem.Console.MessageType.Warning,
+            )
             return
 
         runtime.last_run_succeeded = not Agent.IsDead(Player.GetAgentID())
@@ -653,7 +673,9 @@ def reset_run():
         ConsoleLog(BOT_NAME, f"Run {runtime.completed_runs} completed.", PySystem.Console.MessageType.Success)
     else:
         runtime.failed_runs += 1
-        ConsoleLog(BOT_NAME, f"Run failed ({runtime.failed_runs} total failures).", PySystem.Console.MessageType.Warning)
+        ConsoleLog(
+            BOT_NAME, f"Run failed ({runtime.failed_runs} total failures).", PySystem.Console.MessageType.Warning
+        )
 
     build.EnableUpkeep(False)
 
@@ -713,7 +735,11 @@ def cast_targeted_skill_when_ready(
         if Agent.IsDead(Player.GetAgentID()):
             return False
         if target_agent_id == 0 or not Agent.IsValid(target_agent_id) or not Agent.IsAlive(target_agent_id):
-            ConsoleLog(BOT_NAME, f"{skill_name} target {target_agent_id} is no longer valid.", PySystem.Console.MessageType.Warning)
+            ConsoleLog(
+                BOT_NAME,
+                f"{skill_name} target {target_agent_id} is no longer valid.",
+                PySystem.Console.MessageType.Warning,
+            )
             return False
 
         if Routines.Checks.Skills.IsSkillSlotReady(slot) and Routines.Checks.Skills.CanCast():
@@ -725,11 +751,17 @@ def cast_targeted_skill_when_ready(
                     target_agent_id=target_agent_id,
                 )
             ):
-                ConsoleLog(BOT_NAME, f"Casted {skill_name} on target {target_agent_id}.", PySystem.Console.MessageType.Info)
+                ConsoleLog(
+                    BOT_NAME, f"Casted {skill_name} on target {target_agent_id}.", PySystem.Console.MessageType.Info
+                )
                 return True
         yield from Routines.Yield.wait(100)
 
-    ConsoleLog(BOT_NAME, f"{skill_name} was not ready to cast on target {target_agent_id} in time.", PySystem.Console.MessageType.Warning)
+    ConsoleLog(
+        BOT_NAME,
+        f"{skill_name} was not ready to cast on target {target_agent_id} in time.",
+        PySystem.Console.MessageType.Warning,
+    )
     return False
 
 
@@ -740,7 +772,11 @@ def ensure_target_in_skill_range(
     timeout_ms: int = 6000,
 ):
     if target_agent_id == 0 or not Agent.IsValid(target_agent_id) or not Agent.IsAlive(target_agent_id):
-        ConsoleLog(BOT_NAME, f"{skill_name} target {target_agent_id} is invalid before range check.", PySystem.Console.MessageType.Warning)
+        ConsoleLog(
+            BOT_NAME,
+            f"{skill_name} target {target_agent_id} is invalid before range check.",
+            PySystem.Console.MessageType.Warning,
+        )
         return False
 
     target_xy = Agent.GetXY(target_agent_id)
@@ -815,7 +851,9 @@ def cast_skill_slot_when_ready(
 
 
 def cast_post_return_setup():
-    ConsoleLog(BOT_NAME, "Post-Return setup: casting Winnowing then Serpent's Quickness.", PySystem.Console.MessageType.Info)
+    ConsoleLog(
+        BOT_NAME, "Post-Return setup: casting Winnowing then Serpent's Quickness.", PySystem.Console.MessageType.Info
+    )
     if not (
         yield from cast_skill_slot_when_ready(
             WINNOWING_SLOT,
@@ -913,7 +951,11 @@ def wait_for_kill_window():
         if nearby_moss_count == 0:
             clear_polls += 1
             if clear_polls >= KILL_CLEAR_POLLS_REQUIRED:
-                ConsoleLog(BOT_NAME, "Kill window completed. No nearby Dragon Moss remain.", PySystem.Console.MessageType.Success)
+                ConsoleLog(
+                    BOT_NAME,
+                    "Kill window completed. No nearby Dragon Moss remain.",
+                    PySystem.Console.MessageType.Success,
+                )
                 return True
         else:
             clear_polls = 0
@@ -947,7 +989,9 @@ def loot_run_drops():
         if loot_agent_ids:
             seen_loot = True
             clear_polls = 0
-            ConsoleLog(BOT_NAME, f"Attempting to loot {len(loot_agent_ids)} item(s).", PySystem.Console.MessageType.Info)
+            ConsoleLog(
+                BOT_NAME, f"Attempting to loot {len(loot_agent_ids)} item(s).", PySystem.Console.MessageType.Info
+            )
             runtime.failed_loot_agent_ids = yield from Routines.Yield.Items.LootItemsWithMaxAttempts(
                 loot_agent_ids,
                 log=True,
@@ -961,7 +1005,9 @@ def loot_run_drops():
         clear_polls += 1
         if seen_loot and clear_polls >= LOOT_CLEAR_POLLS_REQUIRED:
             runtime.failed_loot_agent_ids.clear()
-            ConsoleLog(BOT_NAME, "Loot phase completed. No eligible drops remain nearby.", PySystem.Console.MessageType.Success)
+            ConsoleLog(
+                BOT_NAME, "Loot phase completed. No eligible drops remain nearby.", PySystem.Console.MessageType.Success
+            )
             return True
 
         if Utils.GetBaseTimestamp() - start_time > LOOT_COMPLETION_TIMEOUT_MS:
@@ -1025,9 +1071,10 @@ def should_pick_up(agent_id: int) -> bool:
 
 create_bot_routine(bot)
 
+
 def tooltip():
     import PyImGui
-    from Py4GWCoreLib import ImGui, Color
+    from Core import ImGui, Color
 
     PyImGui.begin_tooltip()
 
@@ -1076,6 +1123,7 @@ def tooltip():
     PyImGui.bullet_text("Developed by XLeek")
 
     PyImGui.end_tooltip()
+
 
 def main():
     advance_failure_recovery(bot)

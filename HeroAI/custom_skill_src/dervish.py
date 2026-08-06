@@ -1,11 +1,11 @@
-
-from Py4GWCoreLib import GLOBAL_CACHE, Range
+from Core import GLOBAL_CACHE, Range
 from HeroAI.types import SkillNature, Skilltarget, SkillType
 from HeroAI.custom_skill import CustomSkill
 
+
 class DervishSkills:
     def __init__(self, skill_data):
-        #region MYSTICISM
+        # region MYSTICISM
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Arcane_Zeal")
@@ -217,7 +217,7 @@ class DervishSkills:
         skill.Conditions.IsOutOfCombat = True
         skill_data[skill.SkillID] = skill
 
-        #region EARTH_PRAYERS
+        # region EARTH_PRAYERS
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Armor_of_Sanctity")
@@ -351,7 +351,7 @@ class DervishSkills:
         skill.Conditions.IsOutOfCombat = False
         skill_data[skill.SkillID] = skill
 
-        #region SCYTHE_MASTERY
+        # region SCYTHE_MASTERY
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Chilling_Victory")
@@ -490,7 +490,7 @@ class DervishSkills:
         skill.Conditions.RequireWeapon = "Scythe"
         skill_data[skill.SkillID] = skill
 
-        #region WIND_PRAYERS
+        # region WIND_PRAYERS
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Attackers_Insight")
@@ -645,7 +645,7 @@ class DervishSkills:
         skill.Conditions.IsOutOfCombat = True
         skill_data[skill.SkillID] = skill
 
-        #region NO_ATTRIBUTE
+        # region NO_ATTRIBUTE
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Enchanted_Haste")

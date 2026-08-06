@@ -1,0 +1,10 @@
+{
+  "id": "heroai",
+  "name": "heroai",
+  "version": "0.1.0",
+  "requires_core": ">=2.0.0",
+  "script_roots": [
+    "scripts"
+  ],
+  "lib_root": "lib"
+}

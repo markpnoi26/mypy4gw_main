@@ -77,15 +77,17 @@ class PlayerPartyMember:
     called_target_id: int
     is_connected: bool
     is_ticked: bool
-    def __init__(self, login_number: int = 0, called_target_id: int = 0, is_connected: bool = False, is_ticked: bool = False) -> None: ...
+    def __init__(
+        self, login_number: int = 0, called_target_id: int = 0, is_connected: bool = False, is_ticked: bool = False
+    ) -> None: ...
 
 class HeroPartyMember:
     agent_id: int
     owner_player_id: int
-    hero_id: int        # NOTE: int in Reforged (was Hero object in legacy)
+    hero_id: int  # NOTE: int in Reforged (was Hero object in legacy)
     level: int
-    primary: int        # NOTE: int in Reforged (was Profession in legacy)
-    secondary: int      # NOTE: int in Reforged (was Profession in legacy)
+    primary: int  # NOTE: int in Reforged (was Profession in legacy)
+    secondary: int  # NOTE: int in Reforged (was Profession in legacy)
     def __init__(self, agent_id: int = 0, owner_player_id: int = 0, hero_id: int = 0, level: int = 0) -> None: ...
 
 class HenchmanPartyMember:

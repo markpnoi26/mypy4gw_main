@@ -1,5 +1,6 @@
 """This file contains the constants and globals used by the HeroAI module."""
-from Py4GWCoreLib import Range, GLOBAL_CACHE
+
+from Core import Range, GLOBAL_CACHE
 
 TRUE = 1
 FALSE = 0
@@ -16,8 +17,8 @@ MAX_NUM_PLAYERS = 12
 NUMBER_OF_SKILLS = 8
 MAX_NUMBER_OF_BUFFS = 240
 SHARED_MEMORY_FILE_NAME = "HeroAI_Mem"
-LOCK_MUTEX_TIMEOUT = 1 #SECONDS
-SUBSCRIBE_TIMEOUT_SECONDS = 500 # milliseconds
+LOCK_MUTEX_TIMEOUT = 1  # SECONDS
+SUBSCRIBE_TIMEOUT_SECONDS = 500  # milliseconds
 
 """ HELPER CONSTANTS """
 MELEE_RANGE_VALUE = Range.Spellcast.value

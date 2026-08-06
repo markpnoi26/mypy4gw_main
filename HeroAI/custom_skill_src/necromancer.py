@@ -1,11 +1,11 @@
-
-from Py4GWCoreLib import GLOBAL_CACHE, Range
+from Core import GLOBAL_CACHE, Range
 from HeroAI.types import SkillNature, Skilltarget, SkillType
 from HeroAI.custom_skill import CustomSkill
 
+
 class NecromancerSkills:
     def __init__(self, skill_data):
-        #region SOUL_REAPING
+        # region SOUL_REAPING
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Angorodons_Gaze")
@@ -76,7 +76,7 @@ class NecromancerSkills:
         skill.Nature = SkillNature.Offensive.value
         skill_data[skill.SkillID] = skill
 
-        #region BLOOD_MAGIC
+        # region BLOOD_MAGIC
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Awaken_the_Blood")
@@ -384,7 +384,7 @@ class NecromancerSkills:
         skill.Nature = SkillNature.Buff.value
         skill_data[skill.SkillID] = skill
 
-        #region CURSES
+        # region CURSES
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Atrophy")
@@ -746,7 +746,7 @@ class NecromancerSkills:
         skill.Nature = SkillNature.Offensive.value
         skill_data[skill.SkillID] = skill
 
-        #region DEATH_MAGIC
+        # region DEATH_MAGIC
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Animate_Bone_Fiend")
@@ -1085,7 +1085,7 @@ class NecromancerSkills:
         skill.Conditions.TargetingStrict = True
         skill_data[skill.SkillID] = skill
 
-        #region NO_ATTRIBUTE
+        # region NO_ATTRIBUTE
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Gaze_of_Contempt")
@@ -1104,5 +1104,3 @@ class NecromancerSkills:
         skill.Conditions.LessLife = 0.5
         skill.Conditions.UniqueProperty = True
         skill_data[skill.SkillID] = skill
-
-        

@@ -1,11 +1,11 @@
-
-from Py4GWCoreLib import GLOBAL_CACHE, Range
+from Core import GLOBAL_CACHE, Range
 from HeroAI.types import SkillNature, Skilltarget, SkillType
 from HeroAI.custom_skill import CustomSkill
 
+
 class ParagonSkills:
     def __init__(self, skill_data):
-        #region LEADERSHIP
+        # region LEADERSHIP
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Lead_the_Way")
@@ -180,7 +180,7 @@ class ParagonSkills:
         skill.Conditions.RequireWeapon = "Spear"
         skill_data[skill.SkillID] = skill
 
-        #region COMMAND
+        # region COMMAND
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Brace_Yourself")
@@ -330,7 +330,7 @@ class ParagonSkills:
         skill.Conditions.IsOutOfCombat = True
         skill_data[skill.SkillID] = skill
 
-        #region MOTIVATION
+        # region MOTIVATION
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Its_Just_a_Flesh_Wound")
@@ -484,7 +484,7 @@ class ParagonSkills:
         skill.Nature = SkillNature.Buff.value
         skill_data[skill.SkillID] = skill
 
-        #region SPEAR_MASTERY
+        # region SPEAR_MASTERY
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Barbed_Spear")
@@ -638,7 +638,7 @@ class ParagonSkills:
         skill.Conditions.RequireWeapon = "Spear"
         skill_data[skill.SkillID] = skill
 
-        #region NO_ATTRIBUTE
+        # region NO_ATTRIBUTE
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Cautery_Signet")

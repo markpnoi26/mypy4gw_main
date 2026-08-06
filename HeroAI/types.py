@@ -3,13 +3,9 @@ from enum import Enum, IntEnum, auto
 
 from PyUIManager import FramePosition as UIFramePosition
 
-from Py4GWCoreLib.GlobalCache.SharedMemory import SHMEM_MAX_EMAIL_LEN
+from Core.GlobalCache.SharedMemory import SHMEM_MAX_EMAIL_LEN
 
-from .constants import (
-    MAX_NUM_PLAYERS,
-    NUMBER_OF_SKILLS,
-    MAX_NUMBER_OF_BUFFS
-)
+from .constants import MAX_NUM_PLAYERS, NUMBER_OF_SKILLS, MAX_NUMBER_OF_BUFFS
 
 
 class PlayerBuff(Structure):
@@ -18,12 +14,12 @@ class PlayerBuff(Structure):
         ("Buff_id", c_int),
         ("LastUpdated", c_int),
     ]
-    
+
     # Type hints for IntelliSense
     PlayerID: int
     Buff_id: int
     LastUpdated: int
-    
+
 
 class PlayerStruct(Structure):
     _fields_ = [
@@ -39,7 +35,7 @@ class PlayerStruct(Structure):
         ("FollowAngle", c_float),
         ("LastUpdated", c_int),
     ]
-    
+
     # Type hints for IntelliSense
     AccountEmail: str
     PlayerID: int
@@ -60,17 +56,17 @@ class CandidateStruct(Structure):
         ("MapID", c_int),
         ("MapRegion", c_int),
         ("MapDistrict", c_int),
-        ("InvitedBy", c_int), 
+        ("InvitedBy", c_int),
         ("SummonedBy", c_int),
         ("LastUpdated", c_int),
     ]
-    
+
     # Type hints for IntelliSense
     PlayerID: int
     MapID: int
     MapRegion: int
     MapDistrict: int
-    InvitedBy: int 
+    InvitedBy: int
     SummonedBy: int
     LastUpdated: int
 
@@ -79,24 +75,25 @@ class MemSkill(Structure):
     _fields_ = [
         ("Active", c_bool),
     ]
-    
+
     # Type hints for IntelliSense
     Active: bool
+
 
 class GameStruct(Structure):
     _fields_ = [
         ("Players", PlayerStruct * MAX_NUM_PLAYERS),
         ("Candidates", CandidateStruct * MAX_NUM_PLAYERS),
         ("PlayerBuffs", PlayerBuff * MAX_NUMBER_OF_BUFFS),
-    ]    
-    
+    ]
+
     # Type hints for IntelliSense
     Players: list[PlayerStruct]
     Candidates: list[CandidateStruct]
     PlayerBuffs: list[PlayerBuff]
 
 
-class Skilltarget (IntEnum):
+class Skilltarget(IntEnum):
     Enemy = 0
     EnemyCaster = 1
     EnemyMartial = 2
@@ -120,7 +117,7 @@ class Skilltarget (IntEnum):
     AllyNonEnchanted = 20
     ExploitableCorpse = 21
 
-    #added targets
+    # added targets
 
     EnemyClustered = 22
     EnemyAttacking = 23
@@ -145,8 +142,7 @@ class Skilltarget (IntEnum):
     EnemyNotNearby = 42
 
 
-
-class SkillNature (Enum):
+class SkillNature(Enum):
     Offensive = 0
     Enchantment_Removal = 1
     Healing = 2
@@ -175,11 +171,9 @@ class SkillNature (Enum):
     OffensiveA = 25
     OffensiveB = 26
     OffensiveC = 27
-    
 
 
-
-class SkillType (Enum):
+class SkillType(Enum):
     Bounty = 1
     Scroll = 2
     Stance = 3
@@ -209,14 +203,14 @@ class SkillType (Enum):
     Chant = 27
     EchoRefrain = 28
     Disguise = 29
-    
 
-class Docked (IntEnum):
+
+class Docked(IntEnum):
     Freely = 0
     PartyWindow = auto()
-    Skillbar = auto()    
-    
-    
+    Skillbar = auto()
+
+
 class FramePosition:
     def __init__(self, frame):
         self.frame = frame

@@ -3,7 +3,6 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
-
 _IMPL_MODULE_NAME = 'HeroAI._enemy_party_impl'
 _IMPL_PATH = Path(__file__).resolve().parent.parent / 'Widgets' / 'Legacy' / 'Automation' / 'Helpers' / 'Enemy Party.py'
 _ENABLED = False

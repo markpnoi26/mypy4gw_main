@@ -1,0 +1,15 @@
+{
+  "System/Style Manager.py": "widgets:Panels/Style Manager.py",
+  "System/Messaging.py": "widgets:Panels/Messaging.py",
+  "System/System Settings.py": "widgets:Panels/System Settings.py",
+  "System/Frame Limiter.py": "widgets:Panels/Frame Limiter.py",
+  "System/Environment Upkeeper.py": "widgets:Upkeep/Environment Upkeeper.py",
+  "System/Enemy Tracker.py": "widgets:Overlays/Enemy Tracker.py",
+  "Guild Wars/Map Overlay.py": "widgets:Overlays/Map Overlay.py",
+  "Guild Wars/Items & Loot/TeamInventoryViewer.py": "widgets:Items/TeamInventoryViewer.py",
+  "Guild Wars/Travel.py": "widgets:World/Travel.py",
+  "Automation/Multiboxing/HeroAI.py": "widgets:Multibox/HeroAI.py",
+  "Guild Wars/Switch Character.py": "widgets:Multibox/Switch Character.py",
+  "Automation/Helpers/Elite Skills/EliteSkillsCapture.py": "scripts:py4gw-tasks/EliteSkillsCapture.py",
+  "Guild Wars/Titles.py": "widgets:Upkeep/Titles.py"
+}

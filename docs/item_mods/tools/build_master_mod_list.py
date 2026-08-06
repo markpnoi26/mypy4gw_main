@@ -33,7 +33,7 @@ def _game_ids():
 
 def _hand_ids():
     """{upgrade_id: enum_name} from item_mods_src/types.py ItemUpgradeId."""
-    path = os.path.join(ROOT, "Py4GWCoreLib", "item_mods_src", "types.py")
+    path = os.path.join(ROOT, "Core", "item_mods_src", "types.py")
     out = {}
     inblock = False
     for line in open(path, encoding="utf-8"):

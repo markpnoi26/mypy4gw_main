@@ -36,7 +36,7 @@ class Game:
         None
         """
         ...
-        
+
     @staticmethod
     def get_tick_count64() -> int:
         """
@@ -76,5 +76,3 @@ class Game:
         Get the current sequence value for the runtime shared-memory region.
         """
         ...
-
-

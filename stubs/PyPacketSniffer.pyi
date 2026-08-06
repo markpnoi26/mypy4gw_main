@@ -8,16 +8,13 @@
 from enum import IntEnum
 from typing import List
 
-
 class PacketDirection(IntEnum):
     StoC: int  # 0
     CToS: int  # 1
 
-
 # py::enum_ ... .export_values() also exports the members at module level.
 StoC: PacketDirection
 CToS: PacketDirection
-
 
 class PacketLogEntry:
     """One captured packet. All fields are read-only."""
@@ -31,13 +28,11 @@ class PacketLogEntry:
     def __init__(self) -> None: ...
     def __repr__(self) -> str: ...
 
-
 class PacketSniffer:
     """Stateless facade over GW::packet_sniffer. Not constructible — use instance()."""
 
     @staticmethod
     def instance() -> 'PacketSniffer': ...
-
     def initialize(self) -> bool: ...
     def initialize_stoc(self) -> bool: ...
     def initialize_ctos(self) -> bool: ...

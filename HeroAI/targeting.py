@@ -1,5 +1,5 @@
-from Py4GWCoreLib import GLOBAL_CACHE, Utils, AgentArray, Routines, Agent, Player
-from Py4GWCoreLib.EnemyBlacklist import EnemyBlacklist
+from Core import GLOBAL_CACHE, Utils, AgentArray, Routines, Agent, Player
+from Core.EnemyBlacklist import EnemyBlacklist
 from .constants import (
     Range,
     BLOOD_IS_POWER,
@@ -17,32 +17,35 @@ def _filter_blacklisted(agent_id: int) -> int:
         return agent_id
     return 0 if bl.is_blacklisted(agent_id) else agent_id
 
+
 def GetAllAlliesArray(distance=Range.SafeCompass.value, ordered=True):
-    #Pets are added here
+    # Pets are added here
     ally_array = Routines.Targeting.GetAllAlliesArray(distance, ordered=ordered)
     return ally_array
 
+
 def FilterAllyArray(array, distance, other_ally=False, filter_skill_id=0):
-    #this is multibox!
+    # this is multibox!
     from .utils import CheckForEffect
+
     array = AgentArray.Filter.ByDistance(array, Player.GetXY(), distance)
     array = AgentArray.Filter.ByCondition(array, lambda agent_id: Agent.IsAlive(agent_id))
-        
+
     if other_ally:
         array = AgentArray.Filter.ByCondition(array, lambda agent_id: Player.GetAgentID() != agent_id)
-    
+
     if filter_skill_id != 0:
         array = AgentArray.Filter.ByCondition(array, lambda agent_id: not CheckForEffect(agent_id, filter_skill_id))
-    
+
     return array
+
 
 def SortAlliesByLowestHp(agent_array):
     """Sort allies by current HP ascending, with party position as a stable
     tiebreak. Python's sort is stable, so equal-HP entries preserve party order
     (players -> heroes -> pet-owners)."""
     party_order = {
-        agent_id: index
-        for index, agent_id in enumerate(GetAllAlliesArray(Range.SafeCompass.value, ordered=True) or [])
+        agent_id: index for index, agent_id in enumerate(GetAllAlliesArray(Range.SafeCompass.value, ordered=True) or [])
     }
     fallback_index = len(party_order)
     return sorted(
@@ -76,6 +79,7 @@ def TargetDeadPartyMember(
         )
     return Routines.Agents.GetDeadAlly(distance)
 
+
 def TargetAllyByPredicate(
     predicate=None,
     other_ally=False,
@@ -95,16 +99,18 @@ def TargetAllyByPredicate(
 
     return Utils.GetFirstFromArray(ally_array)
 
-def TargetLowestAlly(other_ally=False,filter_skill_id=0):
+
+def TargetLowestAlly(other_ally=False, filter_skill_id=0):
     distance = Range.Spellcast.value
     ally_array = AgentArray.GetAllyArray()
-    ally_array = FilterAllyArray(ally_array, distance, other_ally, filter_skill_id) 
-     
-    
+    ally_array = FilterAllyArray(ally_array, distance, other_ally, filter_skill_id)
+
     spirit_pet_array = AgentArray.GetSpiritPetArray()
     spirit_pet_array = FilterAllyArray(spirit_pet_array, distance, other_ally, filter_skill_id)
-    spirit_pet_array = AgentArray.Filter.ByCondition(spirit_pet_array, lambda agent_id: not Agent.IsSpawned(agent_id)) #filter spirits
-    ally_array = AgentArray.Manipulation.Merge(ally_array, spirit_pet_array) #added Pets
+    spirit_pet_array = AgentArray.Filter.ByCondition(
+        spirit_pet_array, lambda agent_id: not Agent.IsSpawned(agent_id)
+    )  # filter spirits
+    ally_array = AgentArray.Manipulation.Merge(ally_array, spirit_pet_array)  # added Pets
 
     ally_array = SortAlliesByLowestHp(ally_array)
     return Utils.GetFirstFromArray(ally_array)
@@ -162,20 +168,21 @@ def TargetAllyNonWeaponSpelled(distance=Range.Earshot.value):
 
 def TargetLowestAllyEnergy(other_ally=False, filter_skill_id=0, less_energy=1.0):
     global BLOOD_IS_POWER, BLOOD_RITUAL
-    from Py4GWCoreLib.GlobalCache.WhiteboardLocks import (
+    from Core.GlobalCache.WhiteboardLocks import (
         BLOOD_ENERGY_BUFF_LOCK_KEY,
         filter_unlocked_buff_targets,
     )
-    from .utils import (CheckForEffect, GetEnergyValues, IsValidEnergyValue)
-    
-    
+    from .utils import CheckForEffect, GetEnergyValues, IsValidEnergyValue
+
     distance = Range.Spellcast.value
     ally_array = AgentArray.GetAllyArray()
     ally_array = FilterAllyArray(ally_array, distance, other_ally, filter_skill_id)
-    ally_array = AgentArray.Filter.ByCondition(ally_array, lambda agent_id: not CheckForEffect(agent_id, BLOOD_IS_POWER))
+    ally_array = AgentArray.Filter.ByCondition(
+        ally_array, lambda agent_id: not CheckForEffect(agent_id, BLOOD_IS_POWER)
+    )
     ally_array = AgentArray.Filter.ByCondition(ally_array, lambda agent_id: not CheckForEffect(agent_id, BLOOD_RITUAL))
     ally_array = filter_unlocked_buff_targets(ally_array, BLOOD_ENERGY_BUFF_LOCK_KEY)
-    
+
     ally_array = AgentArray.Filter.ByCondition(
         ally_array,
         lambda agent_id: IsValidEnergyValue(GetEnergyValues(agent_id)) and GetEnergyValues(agent_id) <= less_energy,
@@ -198,7 +205,8 @@ def TargetLowestAllyEnergy(other_ally=False, filter_skill_id=0, less_energy=1.0)
 
 
 def TargetLowestAllyCaster(other_ally=False, filter_skill_id=0):
-    from Py4GWCoreLib import Routines
+    from Core import Routines
+
     distance = Range.Spellcast.value
     ally_array = AgentArray.GetAllyArray()
     ally_array = FilterAllyArray(ally_array, distance, other_ally, filter_skill_id)
@@ -209,8 +217,9 @@ def TargetLowestAllyCaster(other_ally=False, filter_skill_id=0):
 
 
 def TargetLowestAllyMartial(other_ally=False, filter_skill_id=0):
-    from Py4GWCoreLib import Routines
+    from Core import Routines
     from .utils import HasIllusionaryWeaponry
+
     distance = Range.Spellcast.value
     ally_array = AgentArray.GetAllyArray()
     ally_array = FilterAllyArray(ally_array, distance, other_ally, filter_skill_id)
@@ -219,16 +228,19 @@ def TargetLowestAllyMartial(other_ally=False, filter_skill_id=0):
 
     spirit_pet_array = AgentArray.GetSpiritPetArray()
     spirit_pet_array = FilterAllyArray(spirit_pet_array, distance, other_ally, filter_skill_id)
-    spirit_pet_array = AgentArray.Filter.ByCondition(spirit_pet_array, lambda agent_id: not Agent.IsSpawned(agent_id)) #filter spirits
-    ally_array = AgentArray.Manipulation.Merge(ally_array, spirit_pet_array) #added Pets
+    spirit_pet_array = AgentArray.Filter.ByCondition(
+        spirit_pet_array, lambda agent_id: not Agent.IsSpawned(agent_id)
+    )  # filter spirits
+    ally_array = AgentArray.Manipulation.Merge(ally_array, spirit_pet_array)  # added Pets
 
     ally_array = SortAlliesByLowestHp(ally_array)
     return Utils.GetFirstFromArray(ally_array)
 
 
 def TargetLowestAllyMelee(other_ally=False, filter_skill_id=0):
-    from Py4GWCoreLib import Routines
+    from Core import Routines
     from .utils import HasIllusionaryWeaponry
+
     distance = Range.Spellcast.value
     ally_array = AgentArray.GetAllyArray()
     ally_array = FilterAllyArray(ally_array, distance, other_ally, filter_skill_id)
@@ -237,15 +249,18 @@ def TargetLowestAllyMelee(other_ally=False, filter_skill_id=0):
 
     spirit_pet_array = AgentArray.GetSpiritPetArray()
     spirit_pet_array = FilterAllyArray(spirit_pet_array, distance, other_ally, filter_skill_id)
-    spirit_pet_array = AgentArray.Filter.ByCondition(spirit_pet_array, lambda agent_id: not Agent.IsSpawned(agent_id)) #filter spirits
-    ally_array = AgentArray.Manipulation.Merge(ally_array, spirit_pet_array) #added Pets
+    spirit_pet_array = AgentArray.Filter.ByCondition(
+        spirit_pet_array, lambda agent_id: not Agent.IsSpawned(agent_id)
+    )  # filter spirits
+    ally_array = AgentArray.Manipulation.Merge(ally_array, spirit_pet_array)  # added Pets
 
     ally_array = SortAlliesByLowestHp(ally_array)
     return Utils.GetFirstFromArray(ally_array)
 
 
 def TargetLowestAllyRanged(other_ally=False, filter_skill_id=0):
-    from Py4GWCoreLib import Routines
+    from Core import Routines
+
     distance = Range.Spellcast.value
     ally_array = AgentArray.GetAllyArray()
     ally_array = FilterAllyArray(ally_array, distance, other_ally, filter_skill_id)
@@ -266,9 +281,7 @@ def TargetClusteredEnemy(
     cluster_radius: float | None = None,
 ):
     if not skill_id:
-        return _filter_blacklisted(
-            Routines.Targeting.TargetClusteredEnemy(area, cluster_radius=cluster_radius)
-        )
+        return _filter_blacklisted(Routines.Targeting.TargetClusteredEnemy(area, cluster_radius=cluster_radius))
 
     player_x, player_y = Player.GetXY()
     enemy_array = Routines.Agents.GetFilteredEnemyArray(player_x, player_y, area)
@@ -280,9 +293,7 @@ def TargetClusteredEnemy(
         return 0
 
     aoe_range = GLOBAL_CACHE.Skill.Data.GetAoERange(skill_id) or Range.Nearby.value
-    effective_cluster_radius = float(
-        cluster_radius if cluster_radius is not None else Range.Earshot.value
-    )
+    effective_cluster_radius = float(cluster_radius if cluster_radius is not None else Range.Earshot.value)
     player_pos = (player_x, player_y)
 
     scored: list[tuple[int, int, float, float, int]] = []
@@ -291,9 +302,7 @@ def TargetClusteredEnemy(
 
         # Use aggro area to define the local blob, then prefer the center-ish
         # target within that blob that also maximizes actual AoE hits.
-        blob = Routines.Agents.GetFilteredEnemyArray(
-            target_x, target_y, effective_cluster_radius
-        )
+        blob = Routines.Agents.GetFilteredEnemyArray(target_x, target_y, effective_cluster_radius)
         blob = AgentArray.Filter.ByCondition(
             blob,
             lambda eid: Agent.IsValid(eid) and not Agent.IsDead(eid),
@@ -312,9 +321,7 @@ def TargetClusteredEnemy(
         center_distance = Utils.Distance((target_x, target_y), (center_x, center_y))
         player_distance = Utils.Distance(player_pos, (target_x, target_y))
 
-        scored.append(
-            (len(aoe_hits), len(blob), center_distance, player_distance, agent_id)
-        )
+        scored.append((len(aoe_hits), len(blob), center_distance, player_distance, agent_id))
 
     if not scored:
         return 0
@@ -322,52 +329,68 @@ def TargetClusteredEnemy(
     scored.sort(key=lambda item: (-item[0], -item[1], item[2], item[3]))
     return _filter_blacklisted(scored[0][4])
 
-def GetEnemyAttacking(max_distance=4500.0, aggressive_only = False):
+
+def GetEnemyAttacking(max_distance=4500.0, aggressive_only=False):
     return _filter_blacklisted(Routines.Targeting.GetEnemyAttacking(max_distance, aggressive_only))
 
-def GetEnemyCasting(max_distance=4500.0, aggressive_only = False):
+
+def GetEnemyCasting(max_distance=4500.0, aggressive_only=False):
     return _filter_blacklisted(Routines.Targeting.GetEnemyCasting(max_distance, aggressive_only))
 
-def GetEnemyCastingSpell(max_distance=4500.0, aggressive_only = False):
+
+def GetEnemyCastingSpell(max_distance=4500.0, aggressive_only=False):
     return _filter_blacklisted(Routines.Targeting.GetEnemyCastingSpell(max_distance, aggressive_only))
+
 
 def GetEnemyCastingSpellOrChant(max_distance=4500.0, aggressive_only=False):
     return _filter_blacklisted(Routines.Targeting.GetEnemyCastingSpellOrChant(max_distance, aggressive_only))
 
-def GetEnemyInjured(max_distance=4500.0, aggressive_only = False):
+
+def GetEnemyInjured(max_distance=4500.0, aggressive_only=False):
     return _filter_blacklisted(Routines.Targeting.GetEnemyInjured(max_distance, aggressive_only))
 
-def GetEnemyHealthy(max_distance=4500.0, aggressive_only = False):
+
+def GetEnemyHealthy(max_distance=4500.0, aggressive_only=False):
     return _filter_blacklisted(Routines.Targeting.GetEnemyHealthy(max_distance, aggressive_only))
 
-def GetEnemyConditioned(max_distance=4500.0, aggressive_only = False):
+
+def GetEnemyConditioned(max_distance=4500.0, aggressive_only=False):
     return _filter_blacklisted(Routines.Targeting.GetEnemyConditioned(max_distance, aggressive_only))
 
-def GetEnemyBleeding(max_distance=4500.0, aggressive_only = False):
+
+def GetEnemyBleeding(max_distance=4500.0, aggressive_only=False):
     return _filter_blacklisted(Routines.Targeting.GetEnemyBleeding(max_distance, aggressive_only))
 
-def GetEnemyPoisoned(max_distance=4500.0, aggressive_only = False):
+
+def GetEnemyPoisoned(max_distance=4500.0, aggressive_only=False):
     return _filter_blacklisted(Routines.Targeting.GetEnemyPoisoned(max_distance, aggressive_only))
-    
-def GetEnemyCrippled(max_distance=4500.0, aggressive_only = False):
+
+
+def GetEnemyCrippled(max_distance=4500.0, aggressive_only=False):
     return _filter_blacklisted(Routines.Targeting.GetEnemyCrippled(max_distance, aggressive_only))
 
-def GetEnemyHexed(max_distance=4500.0, aggressive_only = False):
+
+def GetEnemyHexed(max_distance=4500.0, aggressive_only=False):
     return _filter_blacklisted(Routines.Targeting.GetEnemyHexed(max_distance, aggressive_only))
 
-def GetEnemyDegenHexed(max_distance=4500.0, aggressive_only = False):
+
+def GetEnemyDegenHexed(max_distance=4500.0, aggressive_only=False):
     return _filter_blacklisted(Routines.Targeting.GetEnemyDegenHexed(max_distance, aggressive_only))
 
-def GetEnemyEnchanted(max_distance=4500.0, aggressive_only = False):
+
+def GetEnemyEnchanted(max_distance=4500.0, aggressive_only=False):
     return _filter_blacklisted(Routines.Targeting.GetEnemyEnchanted(max_distance, aggressive_only))
 
-def GetEnemyMoving(max_distance=4500.0, aggressive_only = False):
+
+def GetEnemyMoving(max_distance=4500.0, aggressive_only=False):
     return _filter_blacklisted(Routines.Targeting.GetEnemyMoving(max_distance, aggressive_only))
 
-def GetEnemyKnockedDown(max_distance=4500.0, aggressive_only = False):
+
+def GetEnemyKnockedDown(max_distance=4500.0, aggressive_only=False):
     return _filter_blacklisted(Routines.Targeting.GetEnemyKnockedDown(max_distance, aggressive_only))
 
-def GetEnemyWithEffect(effect_skill_id, max_distance=4500.0, aggressive_only = False):
+
+def GetEnemyWithEffect(effect_skill_id, max_distance=4500.0, aggressive_only=False):
     return _filter_blacklisted(Routines.Targeting.GetEnemyWithEffect(effect_skill_id, max_distance, aggressive_only))
 
 
@@ -400,10 +423,9 @@ def TargetAllyWeaponSpell(
         return remaining_ms <= refresh_window_ms
 
     candidates = [
-        agent_id for agent_id in ally_array
-        if Agent.IsValid(agent_id)
-        and Routines.Checks.Agents.IsAlive(agent_id)
-        and _is_refresh_eligible(agent_id)
+        agent_id
+        for agent_id in ally_array
+        if Agent.IsValid(agent_id) and Routines.Checks.Agents.IsAlive(agent_id) and _is_refresh_eligible(agent_id)
     ]
     if not candidates:
         return 0
@@ -454,17 +476,13 @@ def TargetMeleeOrMartialClusterEnemy(
 
     aoe_range = GLOBAL_CACHE.Skill.Data.GetAoERange(skill_id) or Range.Nearby.value
 
-    melees_present = any(
-        Agent.IsMelee(agent_id) or Agent.IsMartial(agent_id)
-        for agent_id in enemy_array
-    )
+    melees_present = any(Agent.IsMelee(agent_id) or Agent.IsMartial(agent_id) for agent_id in enemy_array)
 
     if melees_present:
         candidates = [
-            agent_id for agent_id in enemy_array
-            if Agent.IsMelee(agent_id)
-            or Agent.IsMartial(agent_id)
-            or Agent.IsAttacking(agent_id)
+            agent_id
+            for agent_id in enemy_array
+            if Agent.IsMelee(agent_id) or Agent.IsMartial(agent_id) or Agent.IsAttacking(agent_id)
         ]
     else:
         candidates = list(enemy_array)

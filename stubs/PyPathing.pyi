@@ -18,7 +18,6 @@ Failed: PathStatus
 
 class PathPlanner:
     def __init__(self) -> None: ...
-
     def plan(
         self,
         start_x: float,

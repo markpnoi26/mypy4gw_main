@@ -1,4 +1,3 @@
-
 from .custom_skill_src.skill_types import CustomSkill
 
 from .custom_skill_src.warrior import WarriorSkills
@@ -22,7 +21,7 @@ class CustomSkillClass:
         self.skill_data = [CustomSkill() for _ in range(self.MaxSkillData)]
         self.Warrior_Skills = WarriorSkills(self.skill_data)  # Initialize WarriorSkills instance
         self.Ranger_Skills = RangerSkills(self.skill_data)  # Initialize RangerSkills instance
-        self.Monk_Skills = MonkSkills(self.skill_data) # Initialize MonkSkills instance
+        self.Monk_Skills = MonkSkills(self.skill_data)  # Initialize MonkSkills instance
         self.Necromancer_Skills = NecromancerSkills(self.skill_data)  # Initialize NecromancerSkills instance
         self.Mesmer_Skills = MesmerSkills(self.skill_data)  # Initialize MesmerSkills instance
         self.Elementalist_Skills = ElementalistSkills(self.skill_data)  # Initialize ElementalistSkills instance
@@ -31,7 +30,6 @@ class CustomSkillClass:
         self.Paragon_Skills = ParagonSkills(self.skill_data)  # Initialize ParagonSkills instance
         self.Dervish_Skills = DervishSkills(self.skill_data)  # Initialize DervishSkills instance
         self.PVE_Skills = PVESkills(self.skill_data)
-        
 
     def get_skill(self, skill_id) -> CustomSkill:
         """Fetch skill by ID."""
@@ -53,7 +51,3 @@ class CustomSkillClass:
     def load_skills(self):
         """Populate skill data using hardcoded definitions."""
         pass
-
-        
-
-       

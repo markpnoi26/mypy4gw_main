@@ -1,11 +1,11 @@
-
-from Py4GWCoreLib import GLOBAL_CACHE, Range
+from Core import GLOBAL_CACHE, Range
 from HeroAI.types import SkillNature, Skilltarget, SkillType
 from HeroAI.custom_skill import CustomSkill
 
+
 class PVESkills:
     def __init__(self, skill_data):
-         #region NO_ATTRIBUTE
+        # region NO_ATTRIBUTE
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Resurrection_Signet")
@@ -14,17 +14,17 @@ class PVESkills:
         skill.Nature = SkillNature.Resurrection.value
         skill.Conditions.IsAlive = False
         skill_data[skill.SkillID] = skill
-        
+
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Signet_of_Capture")
         skill.SkillType = SkillType.Signet.value
         skill.TargetAllegiance = Skilltarget.Self.value
         skill.Nature = SkillNature.Neutral.value
         skill.Conditions.IsOutOfCombat = True
-        skill.Conditions.LessLife = 0.01 #skill effectively disabled
+        skill.Conditions.LessLife = 0.01  # skill effectively disabled
         skill_data[skill.SkillID] = skill
 
-        #region ANNIVERSARY
+        # region ANNIVERSARY
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Together_as_one")
@@ -103,7 +103,7 @@ class PVESkills:
         skill.Conditions.AllowOverlapWeaponSpell = False
         skill_data[skill.SkillID] = skill
 
-        #region KURZICK_LUXON
+        # region KURZICK_LUXON
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Save_Yourselves_kurzick")
@@ -254,7 +254,7 @@ class PVESkills:
         skill.Nature = SkillNature.Offensive.value
         skill_data[skill.SkillID] = skill
 
-        #region SUNSPEAR
+        # region SUNSPEAR
 
         skill = CustomSkill()
         skill.SkillID = 1417  # Vial of Purified Water - priority hex vs Harbingers
@@ -354,7 +354,7 @@ class PVESkills:
         skill.Conditions.UniqueProperty = True  # Requires melee weapon (not Bow or Spear)
         skill_data[skill.SkillID] = skill
 
-        #region LIGHTBRINGER
+        # region LIGHTBRINGER
         # Lightbringer Skills
 
         skill = CustomSkill()
@@ -371,7 +371,7 @@ class PVESkills:
         skill.Nature = SkillNature.Offensive.value
         skill_data[skill.SkillID] = skill
 
-        #region ASURA
+        # region ASURA
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Air_of_Superiority")
@@ -463,7 +463,7 @@ class PVESkills:
         skill.SkillLockAftercastMs = 2000
         skill_data[skill.SkillID] = skill
 
-        #region DELDRIMOR
+        # region DELDRIMOR
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("By_Urals_Hammer")
@@ -546,11 +546,11 @@ class PVESkills:
         skill.TargetAllegiance = Skilltarget.AllyMartial.value
         skill.Nature = SkillNature.Buff.value
         skill.Conditions.AllowOverlapWeaponSpell = True
-        #skill.TargetAllegiance = Skilltarget.AllyNPCByModel.value
-        #skill.Nature = SkillNature.CustomA.value
+        # skill.TargetAllegiance = Skilltarget.AllyNPCByModel.value
+        # skill.Nature = SkillNature.CustomA.value
         skill.Conditions.TargetingStrict = True
         skill.Conditions.IsOutOfCombat = False
-        #skill.Conditions.ModelIDFilter = 5903  # Ebon Vanguard Assassin (EVAS summon); falls back to AllyMartial
+        # skill.Conditions.ModelIDFilter = 5903  # Ebon Vanguard Assassin (EVAS summon); falls back to AllyMartial
         skill_data[skill.SkillID] = skill
 
         skill = CustomSkill()
@@ -574,7 +574,7 @@ class PVESkills:
         skill.Nature = SkillNature.Offensive.value
         skill_data[skill.SkillID] = skill
 
-        #region EBON_VANGUARD
+        # region EBON_VANGUARD
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Deft_Strike")
         skill.SkillType = SkillType.Attack.value
@@ -679,7 +679,7 @@ class PVESkills:
         skill.Nature = SkillNature.Buff.value
         skill_data[skill.SkillID] = skill
 
-        #region NORN
+        # region NORN
 
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Dodge_This")
@@ -789,7 +789,7 @@ class PVESkills:
         skill.TargetAllegiance = Skilltarget.Self.value
         skill.Nature = SkillNature.Buff.value
         skill.Conditions.IsMoving = True
-        #skill.Conditions.UniqueProperty = True
+        # skill.Conditions.UniqueProperty = True
         skill_data[skill.SkillID] = skill
 
         skill = CustomSkill()
@@ -832,15 +832,15 @@ class PVESkills:
         skill.TargetAllegiance = Skilltarget.Self.value
         skill.Nature = SkillNature.Offensive.value
         skill_data[skill.SkillID] = skill
-        
-        #region KEIRANS_EOTN
+
+        # region KEIRANS_EOTN
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Keirans_Sniper_Shot_Hearts_of_the_North")
         skill.SkillType = SkillType.Attack.value
         skill.TargetAllegiance = Skilltarget.EnemyHexed.value
         skill.Nature = SkillNature.CustomA.value
         skill_data[skill.SkillID] = skill
-        
+
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Gravestone_Marker")
         skill.SkillType = SkillType.Attack.value
@@ -855,14 +855,14 @@ class PVESkills:
         skill.Nature = SkillNature.Interrupt.value
         skill.Conditions.IsCasting = True
         skill_data[skill.SkillID] = skill
-        
+
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Rain_of_Arrows")
         skill.SkillType = SkillType.Attack.value
         skill.TargetAllegiance = Skilltarget.EnemyInjured.value
         skill.Nature = SkillNature.OffensiveA.value
         skill_data[skill.SkillID] = skill
-        
+
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Relentless_Assault")
         skill.SkillType = SkillType.Attack.value
@@ -870,7 +870,7 @@ class PVESkills:
         skill.Nature = SkillNature.Healing.value
         skill.Conditions.UniqueProperty = True
         skill_data[skill.SkillID] = skill
-        
+
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Natures_Blessing")
         skill.SkillType = SkillType.Skill.value
@@ -880,7 +880,7 @@ class PVESkills:
         skill.Conditions.LessLife = 0.98
         skill.Conditions.UniqueProperty = True
         skill_data[skill.SkillID] = skill
-        
+
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Find_Their_Weakness_Thackeray")
         skill.SkillType = SkillType.Skill.value
@@ -888,7 +888,7 @@ class PVESkills:
         skill.Nature = SkillNature.Buff.value
         skill.Conditions.IsOutOfCombat = True
         skill_data[skill.SkillID] = skill
-        
+
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Theres_Nothing_to_Fear_Thackeray")
         skill.SkillType = SkillType.Skill.value
@@ -897,7 +897,7 @@ class PVESkills:
         skill.Conditions.IsOutOfCombat = True
         skill_data[skill.SkillID] = skill
 
-    #region BRAWLING
+        # region BRAWLING
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Brawling_Block")
         skill.SkillType = SkillType.Signet.value
@@ -905,7 +905,7 @@ class PVESkills:
         skill.Nature = SkillNature.SelfTargeted.value
         skill.Conditions.IsAttacking = True
         skill_data[skill.SkillID] = skill
-        
+
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Brawling_Jab")
         skill.SkillType = SkillType.Stance.value
@@ -941,22 +941,22 @@ class PVESkills:
         skill.TargetAllegiance = Skilltarget.EnemyInjured.value
         skill.Nature = SkillNature.CustomA.value
         skill_data[skill.SkillID] = skill
-        
+
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Brawling_Combo_Punch")
         skill.SkillType = SkillType.Attack.value
         skill.TargetAllegiance = Skilltarget.EnemyInjured.value
         skill.Nature = SkillNature.CustomB.value
         skill_data[skill.SkillID] = skill
-    
-    #region JUNUNDU
+
+        # region JUNUNDU
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Junundu_Strike")
         skill.SkillType = SkillType.Attack.value
         skill.TargetAllegiance = Skilltarget.Enemy.value
         skill.Nature = SkillNature.Offensive.value
         skill_data[skill.SkillID] = skill
-        
+
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Junundu_Smash")
         skill.SkillType = SkillType.Attack.value
@@ -965,7 +965,7 @@ class PVESkills:
         skill.Conditions.EnemyCount = 2
         skill.Conditions.EnemiesInRange = Range.Adjacent.value
         skill_data[skill.SkillID] = skill
-        
+
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Junundu_Bite")
         skill.SkillType = SkillType.Attack.value
@@ -988,7 +988,7 @@ class PVESkills:
         skill.Nature = SkillNature.Offensive.value
         skill.Conditions.UniqueProperty = True
         skill_data[skill.SkillID] = skill
-        
+
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Leave_Junundu")
         skill.SkillType = SkillType.Skill.value
@@ -996,7 +996,7 @@ class PVESkills:
         skill.Nature = SkillNature.Offensive.value
         skill.Conditions.UniqueProperty = True
         skill_data[skill.SkillID] = skill
-        
+
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Junundu_Tunnel")
         skill.SkillType = SkillType.Stance.value
@@ -1006,7 +1006,7 @@ class PVESkills:
         skill.Conditions.UniqueProperty = True
         skill.Conditions.IsMoving = True
         skill_data[skill.SkillID] = skill
-        
+
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Junundu_Wail")
         skill.SkillType = SkillType.Skill.value
@@ -1015,7 +1015,7 @@ class PVESkills:
         skill.Conditions.LessLife = 0.6
         skill.Conditions.UniqueProperty = True
         skill_data[skill.SkillID] = skill
-        
+
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Junundu_Feast")
         skill.SkillType = SkillType.Skill.value
@@ -1023,21 +1023,21 @@ class PVESkills:
         skill.Nature = SkillNature.Offensive.value
         skill.Conditions.IsAlive = False
         skill_data[skill.SkillID] = skill
-        
+
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Blinding_Breath")
         skill.SkillType = SkillType.Attack.value
         skill.TargetAllegiance = Skilltarget.Enemy.value
         skill.Nature = SkillNature.Offensive.value
         skill_data[skill.SkillID] = skill
-        
+
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Burning_Breath")
         skill.SkillType = SkillType.Attack.value
         skill.TargetAllegiance = Skilltarget.EnemyHealthy.value
         skill.Nature = SkillNature.Offensive.value
         skill_data[skill.SkillID] = skill
-        
+
         skill = CustomSkill()
         skill.SkillID = GLOBAL_CACHE.Skill.GetID("Choking_Breath")
         skill.SkillType = SkillType.Skill.value

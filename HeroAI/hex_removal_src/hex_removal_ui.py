@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import PyImGui
 
-from Py4GWCoreLib import GLOBAL_CACHE, ImGui
-from Py4GWCoreLib.GlobalCache.HexRemovalPriority import (
+from Core import GLOBAL_CACHE, ImGui
+from Core.GlobalCache.HexRemovalPriority import (
     HEX_REMOVAL_PRIORITY,
     HexRemovalEntry,
     HexRemovalPriority,
@@ -36,7 +36,6 @@ from .hex_removal_config import (
     set_override,
 )
 
-
 # ============================================================================
 # Constants
 # ============================================================================
@@ -48,15 +47,13 @@ _PRIORITY_VALUES: list[HexRemovalPriority] = [
     HexRemovalPriority.MEDIUM,
     HexRemovalPriority.HIGH,
 ]
-_PRIORITY_NAME_BY_VALUE: dict[HexRemovalPriority, str] = dict(
-    zip(_PRIORITY_VALUES, _PRIORITY_NAMES)
-)
+_PRIORITY_NAME_BY_VALUE: dict[HexRemovalPriority, str] = dict(zip(_PRIORITY_VALUES, _PRIORITY_NAMES))
 # Used only by the collapsed-row priority preview chips (per user request).
 _PRIORITY_COLORS: dict[HexRemovalPriority, tuple[float, float, float, float]] = {
-    HexRemovalPriority.NONE:    (0.55, 0.55, 0.55, 1.0),
-    HexRemovalPriority.LOW:     (0.85, 0.80, 0.40, 1.0),
-    HexRemovalPriority.MEDIUM:  (1.00, 0.65, 0.25, 1.0),
-    HexRemovalPriority.HIGH:    (0.95, 0.40, 0.40, 1.0),
+    HexRemovalPriority.NONE: (0.55, 0.55, 0.55, 1.0),
+    HexRemovalPriority.LOW: (0.85, 0.80, 0.40, 1.0),
+    HexRemovalPriority.MEDIUM: (1.00, 0.65, 0.25, 1.0),
+    HexRemovalPriority.HIGH: (0.95, 0.40, 0.40, 1.0),
 }
 
 # Neutral blue-gray for the active priority button. No semantic priority
@@ -90,11 +87,7 @@ _HARD_RESET_POPUP_ID = "HardResetConfirm##hex_modal"
 
 # Standard table flags for the dark-blue header bar look used in the
 # HeroAI Skill Editor (Widgets/Guild Wars/Customization/HeroAi Skill Editor.py).
-_TABLE_FLAGS = (
-    PyImGui.TableFlags.Borders
-    | PyImGui.TableFlags.RowBg
-    | PyImGui.TableFlags.SizingStretchProp
-)
+_TABLE_FLAGS = PyImGui.TableFlags.Borders | PyImGui.TableFlags.RowBg | PyImGui.TableFlags.SizingStretchProp
 # Minimal flags for plain alignment tables in the Info tab (no chrome).
 _INFO_TABLE_FLAGS = PyImGui.TableFlags.SizingStretchProp
 # Shared label-column width for every Info-tab term/description table so all
@@ -106,6 +99,7 @@ _INFO_LABEL_COL_W = 240
 # ============================================================================
 # State
 # ============================================================================
+
 
 class _State:
     search_text: dict[int, str] = {}
@@ -133,8 +127,9 @@ def _invalidate_grouped_cache() -> None:
 
 def _log(msg: str) -> None:
     try:
-        from Py4GWCoreLib import ConsoleLog
+        from Core import ConsoleLog
         import Py4GW
+
         ConsoleLog("HexRemoval", msg, PySystem.Console.MessageType.Info)
     except Exception:
         pass
@@ -143,6 +138,7 @@ def _log(msg: str) -> None:
 # ============================================================================
 # Public entry
 # ============================================================================
+
 
 def draw_tab() -> None:
     if _State.status_message:
@@ -153,6 +149,7 @@ def draw_tab() -> None:
 # ============================================================================
 # Tab bar - profession sub-tabs + Settings + Info (no profession colors)
 # ============================================================================
+
 
 def _draw_profession_and_settings_tabs() -> None:
     grouped = _ensure_grouped_cache()
@@ -190,6 +187,7 @@ def _draw_profession_and_settings_tabs() -> None:
 # ============================================================================
 # Settings sub-tab content (Import/Export + Debug + Reset config)
 # ============================================================================
+
 
 def _draw_settings_section() -> None:
     PyImGui.dummy((0, 6))
@@ -262,9 +260,7 @@ def _draw_settings_section() -> None:
 
 
 def _draw_hard_reset_modal() -> None:
-    if not PyImGui.begin_popup_modal(
-        _HARD_RESET_POPUP_ID, True, PyImGui.WindowFlags.AlwaysAutoResize
-    ):
+    if not PyImGui.begin_popup_modal(_HARD_RESET_POPUP_ID, True, PyImGui.WindowFlags.AlwaysAutoResize):
         return
 
     ImGui.push_font("Bold", 16)
@@ -278,8 +274,7 @@ def _draw_hard_reset_modal() -> None:
     PyImGui.bullet_text("Apply to every hex in every profession sub-tab")
     PyImGui.dummy((0, 4))
     PyImGui.text_colored(
-        "This action is IRREVERSIBLE. Export your config to the Desktop\n"
-        "first if you want a backup.",
+        "This action is IRREVERSIBLE. Export your config to the Desktop\n" "first if you want a backup.",
         (1.0, 0.85, 0.4, 1.0),
     )
     PyImGui.dummy((0, 8))
@@ -345,18 +340,13 @@ def _draw_import_section() -> None:
 # Info sub-tab content (aligned via 2-col tables)
 # ============================================================================
 
-def _draw_info_two_col_table(
-    table_id: str, label_col_w: int, rows: list[tuple[str, str]]
-) -> None:
+
+def _draw_info_two_col_table(table_id: str, label_col_w: int, rows: list[tuple[str, str]]) -> None:
     """Render label/description rows in clean 2-column alignment."""
     if not PyImGui.begin_table(f"##{table_id}", 2, _INFO_TABLE_FLAGS, 0, 0):
         return
-    PyImGui.table_setup_column(
-        "##label", PyImGui.TableColumnFlags.WidthFixed, label_col_w
-    )
-    PyImGui.table_setup_column(
-        "##desc", PyImGui.TableColumnFlags.WidthStretch, 0
-    )
+    PyImGui.table_setup_column("##label", PyImGui.TableColumnFlags.WidthFixed, label_col_w)
+    PyImGui.table_setup_column("##desc", PyImGui.TableColumnFlags.WidthStretch, 0)
     for label, desc in rows:
         PyImGui.table_next_row()
         PyImGui.table_set_column_index(0)
@@ -387,12 +377,16 @@ def _draw_info_section() -> None:
     ImGui.pop_font()
     PyImGui.separator()
     PyImGui.dummy((0, 2))
-    _draw_info_two_col_table("info_priorities", _INFO_LABEL_COL_W, [
-        ("NONE", "never remove on this role"),
-        ("LOW",  "remove only if nothing better"),
-        ("MED",  "standard cleanup"),
-        ("HIGH", "urgent removal"),
-    ])
+    _draw_info_two_col_table(
+        "info_priorities",
+        _INFO_LABEL_COL_W,
+        [
+            ("NONE", "never remove on this role"),
+            ("LOW", "remove only if nothing better"),
+            ("MED", "standard cleanup"),
+            ("HIGH", "urgent removal"),
+        ],
+    )
 
     PyImGui.dummy((0, 10))
     ImGui.push_font("Bold", 14)
@@ -400,11 +394,15 @@ def _draw_info_section() -> None:
     ImGui.pop_font()
     PyImGui.separator()
     PyImGui.dummy((0, 2))
-    _draw_info_two_col_table("info_roles", _INFO_LABEL_COL_W, [
-        ("Caster",         "Mesmer, Necromancer, Elementalist, Monk, Ritualist"),
-        ("Ranged-martial", "Ranger, Paragon"),
-        ("Melee",          "Warrior, Assassin, Dervish"),
-    ])
+    _draw_info_two_col_table(
+        "info_roles",
+        _INFO_LABEL_COL_W,
+        [
+            ("Caster", "Mesmer, Necromancer, Elementalist, Monk, Ritualist"),
+            ("Ranged-martial", "Ranger, Paragon"),
+            ("Melee", "Warrior, Assassin, Dervish"),
+        ],
+    )
 
     PyImGui.dummy((0, 10))
     ImGui.push_font("Bold", 14)
@@ -423,11 +421,15 @@ def _draw_info_section() -> None:
     ImGui.pop_font()
     PyImGui.separator()
     PyImGui.dummy((0, 2))
-    _draw_info_two_col_table("info_row_controls", _INFO_LABEL_COL_W, [
-        ("Click row",   "expand or collapse the configuration."),
-        ("Hover icon",  "show the in-game skill description."),
-        ("Reset button", "restore that hex to its default values."),
-    ])
+    _draw_info_two_col_table(
+        "info_row_controls",
+        _INFO_LABEL_COL_W,
+        [
+            ("Click row", "expand or collapse the configuration."),
+            ("Hover icon", "show the in-game skill description."),
+            ("Reset button", "restore that hex to its default values."),
+        ],
+    )
 
     PyImGui.dummy((0, 10))
     ImGui.push_font("Bold", 14)
@@ -435,17 +437,20 @@ def _draw_info_section() -> None:
     ImGui.pop_font()
     PyImGui.separator()
     PyImGui.dummy((0, 2))
-    _draw_info_two_col_table("info_settings", _INFO_LABEL_COL_W, [
-        ("Import config",            "paste a previously exported config from clipboard."),
-        ("Export config to desktop", "save a JSONC file you can back up or share."),
-        ("Debug toggles",            "control [HexRemoval] and lock-related console logs."),
-        ("Reset config",             "set every hex to NONE everywhere (irreversible)."),
-    ])
+    _draw_info_two_col_table(
+        "info_settings",
+        _INFO_LABEL_COL_W,
+        [
+            ("Import config", "paste a previously exported config from clipboard."),
+            ("Export config to desktop", "save a JSONC file you can back up or share."),
+            ("Debug toggles", "control [HexRemoval] and lock-related console logs."),
+            ("Reset config", "set every hex to NONE everywhere (irreversible)."),
+        ],
+    )
 
     PyImGui.dummy((0, 10))
     PyImGui.text_colored(
-        "Config file lives at: Settings/<account-email>/HeroAI/Hex removal/"
-        "<character-name>/hex_removal_config.json",
+        "Config file lives at: Settings/<account-email>/HeroAI/Hex removal/" "<character-name>/hex_removal_config.json",
         (0.7, 0.7, 0.7, 1.0),
     )
 
@@ -453,6 +458,7 @@ def _draw_info_section() -> None:
 # ============================================================================
 # Profession grouping cache
 # ============================================================================
+
 
 def _ensure_grouped_cache() -> dict[int, list[tuple[int, str, str]]]:
     _build_hex_removal_priority()
@@ -502,6 +508,7 @@ def _draw_profession_content(pid: int, hexes: list[tuple[int, str, str]]) -> Non
 # ============================================================================
 # Hex row
 # ============================================================================
+
 
 def _draw_hex_row(skill_id: int, name: str, texture_path: str) -> None:
     entry = HEX_REMOVAL_PRIORITY.get(skill_id)
@@ -563,6 +570,7 @@ def _draw_hex_row(skill_id: int, name: str, texture_path: str) -> None:
 def _draw_skill_tooltip(skill_id: int) -> None:
     try:
         from HeroAI.ui_base import HeroAI_BaseUI
+
         HeroAI_BaseUI._draw_skill_info_card(skill_id, compact=True, tooltip=True)
     except Exception:
         try:
@@ -575,9 +583,9 @@ def _draw_skill_tooltip(skill_id: int) -> None:
 def _draw_priority_chips(entry: HexRemovalEntry) -> None:
     """Collapsed-row preview - keeps the per-priority colors per user request."""
     role_specs = [
-        ("Caster",         entry.caster),
+        ("Caster", entry.caster),
         ("Ranged-martial", entry.ranged_martial),
-        ("Melee",          entry.melee),
+        ("Melee", entry.melee),
     ]
     for i, (label, prio) in enumerate(role_specs):
         PyImGui.text(f"{label}:")
@@ -596,6 +604,7 @@ def _draw_priority_chips(entry: HexRemovalEntry) -> None:
 # Configure panel - Skill Editor table style
 # ============================================================================
 
+
 def _draw_hex_configure(name: str, entry: HexRemovalEntry) -> None:
     PyImGui.indent(60)
     PyImGui.dummy((0, 4))
@@ -606,18 +615,12 @@ def _draw_hex_configure(name: str, entry: HexRemovalEntry) -> None:
 
     # === Role / Priority section (table with dark-blue header bar) ===
     if PyImGui.begin_table(f"##hex_role_table_{name}", 2, _TABLE_FLAGS, 0, 0):
-        PyImGui.table_setup_column(
-            "Role", PyImGui.TableColumnFlags.WidthFixed, _CFG_LABEL_COL_W
-        )
-        PyImGui.table_setup_column(
-            "Priority", PyImGui.TableColumnFlags.WidthStretch, 0
-        )
+        PyImGui.table_setup_column("Role", PyImGui.TableColumnFlags.WidthFixed, _CFG_LABEL_COL_W)
+        PyImGui.table_setup_column("Priority", PyImGui.TableColumnFlags.WidthStretch, 0)
         PyImGui.table_headers_row()
 
         new_caster = _draw_role_priority_table_row("Caster", entry.caster, f"{name}_c")
-        new_ranged = _draw_role_priority_table_row(
-            "Ranged-martial", entry.ranged_martial, f"{name}_r"
-        )
+        new_ranged = _draw_role_priority_table_row("Ranged-martial", entry.ranged_martial, f"{name}_r")
         new_melee = _draw_role_priority_table_row("Melee", entry.melee, f"{name}_m")
 
         PyImGui.end_table()
@@ -639,9 +642,7 @@ def _draw_hex_configure(name: str, entry: HexRemovalEntry) -> None:
     _emit_changes_and_save(name, entry, new_entry)
 
 
-def _draw_role_priority_table_row(
-    label: str, current: HexRemovalPriority, key_suffix: str
-) -> HexRemovalPriority:
+def _draw_role_priority_table_row(label: str, current: HexRemovalPriority, key_suffix: str) -> HexRemovalPriority:
     """One row of the Role/Priority table with the label vertically centered."""
     PyImGui.table_next_row()
     PyImGui.table_set_column_index(0)
@@ -652,16 +653,14 @@ def _draw_role_priority_table_row(
     return _draw_priority_segments(current, key_suffix)
 
 
-def _draw_priority_segments(
-    current: HexRemovalPriority, key_suffix: str
-) -> HexRemovalPriority:
+def _draw_priority_segments(current: HexRemovalPriority, key_suffix: str) -> HexRemovalPriority:
     """4-button segmented control. Inactive = default grey, active = neutral
     blue-gray (no priority colour). Priority colours are kept in the row
     preview chips only.
     """
     selected = current
     for i, (prio_name, prio_val) in enumerate(zip(_PRIORITY_NAMES, _PRIORITY_VALUES)):
-        is_active = (current == prio_val)
+        is_active = current == prio_val
         if is_active:
             PyImGui.push_style_color(PyImGui.ImGuiCol.Button, _ACTIVE_BTN_COLOR)
             PyImGui.push_style_color(PyImGui.ImGuiCol.ButtonHovered, _ACTIVE_BTN_COLOR)
@@ -680,20 +679,12 @@ def _draw_profession_overrides_table(
 ) -> dict[int, HexRemovalPriority]:
     new_dict = dict(current)
 
-    if not PyImGui.begin_table(
-        f"##hex_overrides_table_{hex_name}", 3, _TABLE_FLAGS, 0, 0
-    ):
+    if not PyImGui.begin_table(f"##hex_overrides_table_{hex_name}", 3, _TABLE_FLAGS, 0, 0):
         return new_dict
 
-    PyImGui.table_setup_column(
-        "Profession overrides", PyImGui.TableColumnFlags.WidthFixed, _CFG_LABEL_COL_W
-    )
-    PyImGui.table_setup_column(
-        "Priority", PyImGui.TableColumnFlags.WidthFixed, _CFG_PRIO_COL_W
-    )
-    PyImGui.table_setup_column(
-        "##action_col", PyImGui.TableColumnFlags.WidthStretch, 0
-    )
+    PyImGui.table_setup_column("Profession overrides", PyImGui.TableColumnFlags.WidthFixed, _CFG_LABEL_COL_W)
+    PyImGui.table_setup_column("Priority", PyImGui.TableColumnFlags.WidthFixed, _CFG_PRIO_COL_W)
+    PyImGui.table_setup_column("##action_col", PyImGui.TableColumnFlags.WidthStretch, 0)
     PyImGui.table_headers_row()
 
     for pid in _PROFESSION_ORDER:
@@ -713,9 +704,7 @@ def _draw_profession_overrides_table(
             new_dict[pid] = new_prio
 
         PyImGui.table_set_column_index(2)
-        if PyImGui.button(
-            f"Remove##rm_{hex_name}_{pid}", _CFG_REMOVE_BTN_W, _BUTTON_H
-        ):
+        if PyImGui.button(f"Remove##rm_{hex_name}_{pid}", _CFG_REMOVE_BTN_W, _BUTTON_H):
             del new_dict[pid]
 
     available_pids = [p for p in _PROFESSION_ORDER if p not in new_dict]
@@ -749,9 +738,8 @@ def _draw_profession_overrides_table(
 # Per-change logging (no arrow symbol, granular events)
 # ============================================================================
 
-def _emit_changes_and_save(
-    name: str, old: HexRemovalEntry, new: HexRemovalEntry
-) -> None:
+
+def _emit_changes_and_save(name: str, old: HexRemovalEntry, new: HexRemovalEntry) -> None:
     """Diff old vs new entry, emit per-change log lines, save once."""
     changed = (
         old.caster != new.caster
@@ -763,30 +751,21 @@ def _emit_changes_and_save(
         return
 
     role_pairs = [
-        ("caster",         old.caster,         new.caster),
+        ("caster", old.caster, new.caster),
         ("ranged_martial", old.ranged_martial, new.ranged_martial),
-        ("melee",          old.melee,          new.melee),
+        ("melee", old.melee, new.melee),
     ]
     for role_name, old_val, new_val in role_pairs:
         if old_val != new_val:
-            _log(
-                f"'{name}' - changed {role_name} priority to "
-                f"{_PRIORITY_NAME_BY_VALUE[new_val]}"
-            )
+            _log(f"'{name}' - changed {role_name} priority to " f"{_PRIORITY_NAME_BY_VALUE[new_val]}")
 
     old_overrides = old.by_profession
     new_overrides = new.by_profession
     for pid, prio in new_overrides.items():
         if pid not in old_overrides:
-            _log(
-                f"'{name}' - added {_NAME_BY_PROFESSION_ID[pid]} override "
-                f"({_PRIORITY_NAME_BY_VALUE[prio]})"
-            )
+            _log(f"'{name}' - added {_NAME_BY_PROFESSION_ID[pid]} override " f"({_PRIORITY_NAME_BY_VALUE[prio]})")
         elif old_overrides[pid] != prio:
-            _log(
-                f"'{name}' - changed {_NAME_BY_PROFESSION_ID[pid]} override to "
-                f"{_PRIORITY_NAME_BY_VALUE[prio]}"
-            )
+            _log(f"'{name}' - changed {_NAME_BY_PROFESSION_ID[pid]} override to " f"{_PRIORITY_NAME_BY_VALUE[prio]}")
     for pid in old_overrides:
         if pid not in new_overrides:
             _log(f"'{name}' - removed {_NAME_BY_PROFESSION_ID[pid]} override")

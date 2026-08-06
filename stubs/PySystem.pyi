@@ -6,7 +6,6 @@
 from enum import IntEnum
 from typing import List, Tuple, overload
 
-
 # ═══════════════ ENUMS ═══════════════════════════════════════════
 # Values from `enum class MessageType` in include/base/logger.h (unscoped, 0-based).
 
@@ -20,7 +19,6 @@ class MessageType(IntEnum):
     Notice = 6
     Hook = 7
 
-
 # ═══════════════ CLASSES ═════════════════════════════════════════
 
 class ConsoleMessage:
@@ -32,7 +30,6 @@ class ConsoleMessage:
     message_type: MessageType
     message: str
     def __repr__(self) -> str: ...
-
 
 # ═══════════════ TOP-LEVEL FUNCTIONS ════════════════════════════
 
@@ -84,11 +81,9 @@ def get_settings_directory() -> str:
     """Get the per-account settings directory (empty until the anchor is resolved)."""
     ...
 
-
 # ═══════════════ SUBMODULES ══════════════════════════════════════
 
 _MessageTypeAlias = MessageType
-
 
 class Console:
     """Authoritative script-facing console: logging, retrieval, and window control."""
@@ -110,7 +105,6 @@ class Console:
     def get_gw_window_handle() -> int:
         """Get the Guild Wars window handle as an integer."""
         ...
-
     # Two registered overloads: level string first, then MessageType.
     @overload
     @staticmethod
@@ -126,7 +120,6 @@ class Console:
     @overload
     @staticmethod
     def get_messages(message_type: MessageType) -> List[ConsoleMessage]: ...
-
     @staticmethod
     def filter_messages(module_name: str = "", level: str = "", contains: str = "") -> List[ConsoleMessage]:
         """Filter buffered console messages by module, level, and substring."""
@@ -177,7 +170,6 @@ class Console:
         """Toggle the compact console window."""
         ...
 
-
 class environment:
     """Process environment queries."""
 
@@ -190,7 +182,6 @@ class environment:
     def get_projects_path() -> str:
         """Get the path where Py4GW.dll is located."""
         ...
-
 
 class window:
     """Guild Wars window control."""
@@ -305,7 +296,6 @@ class window:
         """Show the Guild Wars window if hidden."""
         ...
 
-
 class script_control:
     """Python script lifecycle control."""
 
@@ -353,7 +343,6 @@ class script_control:
     def defer_stop_and_run(delay_ms: int = 1000) -> None:
         """Stop current script, then rerun it after delay (ms)."""
         ...
-
 
 class widget_manager:
     """Always-on widget manager script host."""

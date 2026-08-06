@@ -5,15 +5,15 @@ from typing import Protocol
 from typing import SupportsIndex
 from typing import SupportsInt
 
-from Py4GWCoreLib import Agent, Party, Player, Range, ThrottledTimer
-from Py4GWCoreLib.py4gwcorelib_src.Settings import Settings
-from Py4GWCoreLib.Map import Map
-from Py4GWCoreLib.Pathing import AutoPathing
-from Py4GWCoreLib.py4gwcorelib_src.Utils import Utils
-from Py4GWCoreLib.GlobalCache.shared_memory_src.AccountStruct import AccountStruct
-from Py4GWCoreLib.GlobalCache.shared_memory_src.AllAccounts import AllAccounts
-from Py4GWCoreLib.GlobalCache.shared_memory_src.HeroAIOptionStruct import HeroAIOptionStruct
-from Py4GWCoreLib.native_src.internals.types import Vec2f
+from Core import Agent, Party, Player, Range, ThrottledTimer
+from Core.py4gwcorelib_src.Settings import Settings
+from Core.Map import Map
+from Core.Pathing import AutoPathing
+from Core.py4gwcorelib_src.Utils import Utils
+from Core.GlobalCache.shared_memory_src.AccountStruct import AccountStruct
+from Core.GlobalCache.shared_memory_src.AllAccounts import AllAccounts
+from Core.GlobalCache.shared_memory_src.HeroAIOptionStruct import HeroAIOptionStruct
+from Core.native_src.internals.types import Vec2f
 
 
 # Force-load the navmesh on first call. AutoPathing's cache is normally
@@ -34,20 +34,17 @@ def _get_navmesh():
 class SharedMemoryManagerProtocol(Protocol):
     max_num_players: int
 
-    def GetAllAccounts(self) -> AllAccounts:
-        ...
+    def GetAllAccounts(self) -> AllAccounts: ...
 
 
 class NavMeshProtocol(Protocol):
-    def contains(self, x: float, y: float, margin: float) -> bool:
-        ...
+    def contains(self, x: float, y: float, margin: float) -> bool: ...
 
     def find_nearest_reachable(
         self,
         origin: tuple[float, float],
         margin: float = 20,
-    ) -> tuple[float, float] | None:
-        ...
+    ) -> tuple[float, float] | None: ...
 
 
 @dataclass(slots=True)
@@ -192,15 +189,14 @@ class FollowFormationPublisher:
         cfg = self._runtime_cfg()
         self.thresholds.default_follow_threshold = max(
             0.0,
-            float(cfg.get_float(self.ini.runtime_section, "follow_move_threshold_default", float(Range.Area.value)))
+            float(cfg.get_float(self.ini.runtime_section, "follow_move_threshold_default", float(Range.Area.value))),
         )
         self.thresholds.combat_follow_threshold = max(
             0.0,
-            float(cfg.get_float(self.ini.runtime_section, "follow_move_threshold_combat", float(Range.Adjacent.value)))
+            float(cfg.get_float(self.ini.runtime_section, "follow_move_threshold_combat", float(Range.Adjacent.value))),
         )
         self.thresholds.flagged_follow_threshold = max(
-            0.0,
-            float(cfg.get_float(self.ini.runtime_section, "follow_move_threshold_flagged", 0.0))
+            0.0, float(cfg.get_float(self.ini.runtime_section, "follow_move_threshold_flagged", 0.0))
         )
 
     def _resolve_selected_formation_id(self) -> str:
@@ -210,7 +206,9 @@ class FollowFormationPublisher:
         if selected_id:
             return selected_id
 
-        selected_name = str(settings_cfg.get_str(self.ini.formations_section, self.ini.selected_name_key, "") or "").strip()
+        selected_name = str(
+            settings_cfg.get_str(self.ini.formations_section, self.ini.selected_name_key, "") or ""
+        ).strip()
         formation_count = max(
             0,
             formations_cfg.get_int(self.ini.formations_section, self.ini.count_key, 0),
@@ -293,11 +291,11 @@ class FollowFormationPublisher:
     @staticmethod
     def _same_party_and_map(a: AccountStruct, b: AccountStruct) -> bool:
         return (
-            a.AgentPartyData.PartyID == b.AgentPartyData.PartyID and
-            a.AgentData.Map.MapID == b.AgentData.Map.MapID and
-            a.AgentData.Map.Region == b.AgentData.Map.Region and
-            a.AgentData.Map.District == b.AgentData.Map.District and
-            a.AgentData.Map.Language == b.AgentData.Map.Language
+            a.AgentPartyData.PartyID == b.AgentPartyData.PartyID
+            and a.AgentData.Map.MapID == b.AgentData.Map.MapID
+            and a.AgentData.Map.Region == b.AgentData.Map.Region
+            and a.AgentData.Map.District == b.AgentData.Map.District
+            and a.AgentData.Map.Language == b.AgentData.Map.Language
         )
 
     def _is_nonzero_vec2(self, vec: Vec2f) -> bool:
@@ -429,7 +427,9 @@ class FollowFormationPublisher:
         options.FollowMoveThresholdCombat = self.thresholds.disabled_threshold
         options.LeaderFollowReady = False
 
-    def _apply_missing_point_slot(self, options: HeroAIOptionStruct, account: AccountStruct, leader_zplane: int) -> None:
+    def _apply_missing_point_slot(
+        self, options: HeroAIOptionStruct, account: AccountStruct, leader_zplane: int
+    ) -> None:
         options.FollowOffset.x = 0.0
         options.FollowOffset.y = 0.0
         if self.state.hold_until_leader_moves:
@@ -480,7 +480,9 @@ class FollowFormationPublisher:
 
         for index in range(self.shared_memory_manager.max_num_players):
             account = all_accounts.AccountData[index]
-            if not (account.IsSlotActive and account.IsAccount) or all_accounts._is_slot_isolated_from_viewer(index, leader_index):
+            if not (account.IsSlotActive and account.IsAccount) or all_accounts._is_slot_isolated_from_viewer(
+                index, leader_index
+            ):
                 continue
             if not self._same_party_and_map(leader_account, account):
                 continue
@@ -507,7 +509,11 @@ class FollowFormationPublisher:
         return (
             float(leader_x),
             float(leader_y),
-            float(self.state.combat_anchor_facing if leader_in_combat and self.state.combat_anchor_facing is not None else leader_facing),
+            float(
+                self.state.combat_anchor_facing
+                if leader_in_combat and self.state.combat_anchor_facing is not None
+                else leader_facing
+            ),
             self.thresholds.default_follow_threshold,
             self.thresholds.combat_follow_threshold,
         )
@@ -557,8 +563,7 @@ class FollowFormationPublisher:
             return (resolved_x, resolved_y)
 
         candidate_centers = [
-            (float(candidate_x), float(candidate_y))
-            for candidate_x, candidate_y in (fallback_candidates or [])
+            (float(candidate_x), float(candidate_y)) for candidate_x, candidate_y in (fallback_candidates or [])
         ]
 
         midpoint_candidates: list[tuple[float, float]] = []
@@ -567,9 +572,7 @@ class FollowFormationPublisher:
             left_x, left_y = candidate_centers[i]
             for j in range(i + 1, candidate_count):
                 right_x, right_y = candidate_centers[j]
-                midpoint_candidates.append(
-                    ((left_x + right_x) / 2.0, (left_y + right_y) / 2.0)
-                )
+                midpoint_candidates.append(((left_x + right_x) / 2.0, (left_y + right_y) / 2.0))
 
         midpoint_candidates.sort(key=lambda pos: math.hypot(pos[0] - raw_x, pos[1] - raw_y))
         for midpoint_x, midpoint_y in midpoint_candidates:
@@ -728,7 +731,9 @@ class FollowFormationPublisher:
         party_positions: list[tuple[float, float]] = []
         for index in range(self.shared_memory_manager.max_num_players):
             account = all_accounts.AccountData[index]
-            if not (account.IsSlotActive and account.IsAccount) or all_accounts._is_slot_isolated_from_viewer(index, leader_index):
+            if not (account.IsSlotActive and account.IsAccount) or all_accounts._is_slot_isolated_from_viewer(
+                index, leader_index
+            ):
                 continue
             if not self._same_party_and_map(leader_account, account):
                 continue
@@ -736,7 +741,9 @@ class FollowFormationPublisher:
 
         for index in range(self.shared_memory_manager.max_num_players):
             account: AccountStruct = all_accounts.AccountData[index]
-            if not (account.IsSlotActive and account.IsAccount) or all_accounts._is_slot_isolated_from_viewer(index, leader_index):
+            if not (account.IsSlotActive and account.IsAccount) or all_accounts._is_slot_isolated_from_viewer(
+                index, leader_index
+            ):
                 continue
             if not self._same_party_and_map(leader_account, account):
                 continue
@@ -760,7 +767,8 @@ class FollowFormationPublisher:
             options.FollowMoveThresholdCombat = float(self.thresholds.combat_follow_threshold)
             options.LeaderFollowReady = False
             fallback_candidates = [
-                pos for pos in party_positions
+                pos
+                for pos in party_positions
                 if abs(float(pos[0]) - float(account.AgentData.Pos.x)) > self.tuning.nonzero_epsilon
                 or abs(float(pos[1]) - float(account.AgentData.Pos.y)) > self.tuning.nonzero_epsilon
             ]

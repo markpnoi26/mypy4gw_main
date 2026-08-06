@@ -1,33 +1,37 @@
 import PyImGui
 
-from Py4GWCoreLib import IconsFontAwesome5
-from Py4GWCoreLib import Color
-from Py4GWCoreLib import ColorPalette
-from Py4GWCoreLib import UIManager
-from Py4GWCoreLib import ImGui
+from Core import IconsFontAwesome5
+from Core import Color
+from Core import ColorPalette
+from Core import UIManager
+from Core import ImGui
 import math
-# aliased: this module defines its own `Frame` wrapper class below
-from Py4GWCoreLib.FrameTree import Frame as GWFrame
 
-INVENTORY_FRAME_HASH = 291586130   
+# aliased: this module defines its own `Frame` wrapper class below
+from Core.FrameTree import Frame as GWFrame
+
+INVENTORY_FRAME_HASH = 291586130
 XUNLAI_VAULT_FRAME_HASH = 2315448754
 MERCHANT_FRAME = 3613855137
 
-#region TabIcon  
+
+# region TabIcon
 class TabIcon:
-    def __init__(self, 
-                    icon_name = "Unknown",
-                    icon = IconsFontAwesome5.ICON_QUESTION_CIRCLE,
-                    icon_color = Color(255, 255, 255, 255),
-                    icon_tooltip = "Unknown",
-                    rainbow_color = False):
+    def __init__(
+        self,
+        icon_name="Unknown",
+        icon=IconsFontAwesome5.ICON_QUESTION_CIRCLE,
+        icon_color=Color(255, 255, 255, 255),
+        icon_tooltip="Unknown",
+        rainbow_color=False,
+    ):
         self.icon_name = icon_name
         self.icon = icon
         self.icon_color = icon_color
-        self.icon_tooltip = icon_tooltip 
+        self.icon_tooltip = icon_tooltip
         self._color_tick = 0
         self.rainbow_color = rainbow_color
-        
+
     def advance_rainbow_color(self):
         if not self.rainbow_color:
             return
@@ -37,10 +41,11 @@ class TabIcon:
         g = int((math.sin(self._color_tick * 0.05 + 2.0) * 0.5 + 0.5) * 255)  # Green wave
         b = int((math.sin(self._color_tick * 0.05 + 4.0) * 0.5 + 0.5) * 255)  # Blue wave
         self.icon_color = Color(r, g, b, 255)
-    
-    #endregion
-    
-#region Frame
+
+    # endregion
+
+
+# region Frame
 class Frame:
     """Cached screen rectangle for one frame.
 
@@ -73,26 +78,27 @@ class Frame:
             return
         self.frame.draw_outline(color.to_color())
 
-#endregion
 
-#region GameButton
-def floating_game_button(caption, name, tooltip,  x, y, width = 18, height = 18 , color: Color = Color(255, 0, 0, 255)):
+# endregion
+
+
+# region GameButton
+def floating_game_button(caption, name, tooltip, x, y, width=18, height=18, color: Color = Color(255, 0, 0, 255)):
     PyImGui.set_next_window_pos(x, y)
     PyImGui.set_next_window_size(width, height)
 
     flags = (
-        PyImGui.WindowFlags.NoCollapse |
-        PyImGui.WindowFlags.NoTitleBar |
-        PyImGui.WindowFlags.NoScrollbar |
-        PyImGui.WindowFlags.NoScrollWithMouse |
-        PyImGui.WindowFlags.AlwaysAutoResize
+        PyImGui.WindowFlags.NoCollapse
+        | PyImGui.WindowFlags.NoTitleBar
+        | PyImGui.WindowFlags.NoScrollbar
+        | PyImGui.WindowFlags.NoScrollWithMouse
+        | PyImGui.WindowFlags.AlwaysAutoResize
     )
 
     PyImGui.push_style_var_vec2(ImGui.ImGuiStyleVar.WindowPadding, (0, 0))
     PyImGui.push_style_var(ImGui.ImGuiStyleVar.WindowRounding, 0.0)
     PyImGui.push_style_var_vec2(ImGui.ImGuiStyleVar.FramePadding, (0, 0))
     PyImGui.push_style_var_vec2(ImGui.ImGuiStyleVar.ItemInnerSpacing, (0, 0))
-    
 
     result = False
     if PyImGui.begin(f"{caption}##invisible_buttonwindow{name}", flags):
@@ -114,7 +120,8 @@ def floating_game_button(caption, name, tooltip,  x, y, width = 18, height = 18 
 
     return result
 
-def game_button(caption, name, tooltip, width = 18, height = 18 , color: Color = Color(255, 0, 0, 255)):
+
+def game_button(caption, name, tooltip, width=18, height=18, color: Color = Color(255, 0, 0, 255)):
     PyImGui.push_style_var_vec2(ImGui.ImGuiStyleVar.WindowPadding, (0, 0))
     PyImGui.push_style_var(ImGui.ImGuiStyleVar.WindowRounding, 0.0)
     PyImGui.push_style_var_vec2(ImGui.ImGuiStyleVar.FramePadding, (0, 0))
@@ -122,7 +129,7 @@ def game_button(caption, name, tooltip, width = 18, height = 18 , color: Color =
 
     result = False
 
-    #color.set_a(255)
+    # color.set_a(255)
     col_normal = color.to_tuple_normalized()
 
     col_hovered = color.desaturate(0.50).to_tuple_normalized()
@@ -141,6 +148,7 @@ def game_button(caption, name, tooltip, width = 18, height = 18 , color: Color =
 
     return result
 
+
 def game_toggle_button(name, tooltip, state, width=18, height=18, color: Color = Color(255, 0, 0, 255)):
     if state:
         caption = IconsFontAwesome5.ICON_CHECK_CIRCLE
@@ -150,45 +158,47 @@ def game_toggle_button(name, tooltip, state, width=18, height=18, color: Color =
         _color = Color(color.r, color.g, color.b, 125)
         clicked = game_button(caption, name, tooltip, width, height, _color)
     return clicked
-    
 
-#endregion
 
+# endregion
 
 
 def _get_parent_hash():
     return INVENTORY_FRAME_HASH
 
-def _get_offsets(bag_id:int, slot:int):
-    return [0,0,0,bag_id-1,slot+2]
 
-def _get_frame_color(rarity:str):
+def _get_offsets(bag_id: int, slot: int):
+    return [0, 0, 0, bag_id - 1, slot + 2]
+
+
+def _get_frame_color(rarity: str):
     rarity_colors = {
         "White": ColorPalette.GetColor("GW_White"),
         "Blue": ColorPalette.GetColor("GW_Blue"),
         "Green": ColorPalette.GetColor("GW_Green"),
         "Purple": ColorPalette.GetColor("GW_Purple"),
         "Gold": ColorPalette.GetColor("GW_Gold"),
-        "Disabled": ColorPalette.GetColor("GW_Disabled")
+        "Disabled": ColorPalette.GetColor("GW_Disabled"),
     }
-    color =  rarity_colors.get(rarity, Color(255, 255, 255, 255))
+    color = rarity_colors.get(rarity, Color(255, 255, 255, 255))
     _color = Color(color.r, color.g, color.b, color.a)
     if rarity != "Disabled":
         _color.a = 25
     else:
         _color.a = 200
     return _color.to_color()
-    
-def _get_frame_outline_color(rarity:str):
+
+
+def _get_frame_outline_color(rarity: str):
     rarity_colors = {
         "White": ColorPalette.GetColor("GW_White"),
         "Blue": ColorPalette.GetColor("GW_Blue"),
         "Green": ColorPalette.GetColor("GW_Green"),
         "Purple": ColorPalette.GetColor("GW_Purple"),
         "Gold": ColorPalette.GetColor("GW_Gold"),
-        "Disabled": ColorPalette.GetColor("GW_Disabled")
+        "Disabled": ColorPalette.GetColor("GW_Disabled"),
     }
-    color =  rarity_colors.get(rarity, Color(255, 255, 255, 255))
+    color = rarity_colors.get(rarity, Color(255, 255, 255, 255))
     _color = Color(color.r, color.g, color.b, color.a)
     if rarity != "Disabled":
         _color.a = 125
@@ -196,29 +206,30 @@ def _get_frame_outline_color(rarity:str):
         _color.a = 255
     return _color.to_color()
 
-def _get_checkbox_color(rarity:str):
+
+def _get_checkbox_color(rarity: str):
     rarity_colors = {
         "White": ColorPalette.GetColor("GW_White"),
         "Blue": ColorPalette.GetColor("GW_Blue"),
         "Green": ColorPalette.GetColor("GW_Green"),
         "Purple": ColorPalette.GetColor("GW_Purple"),
         "Gold": ColorPalette.GetColor("GW_Gold"),
-        "Disabled": ColorPalette.GetColor("GW_Disabled")
+        "Disabled": ColorPalette.GetColor("GW_Disabled"),
     }
     color = rarity_colors.get(rarity, Color(255, 255, 255, 255))
     _color = Color(color.r, color.g, color.b, color.a)
     return _color
 
-def _get_floating_button_color(rarity:str):
+
+def _get_floating_button_color(rarity: str):
     rarity_colors = {
         "White": ColorPalette.GetColor("GW_White"),
         "Blue": ColorPalette.GetColor("GW_Blue"),
         "Green": ColorPalette.GetColor("GW_Green"),
         "Purple": ColorPalette.GetColor("GW_Purple"),
         "Gold": ColorPalette.GetColor("GW_Gold"),
-        "Disabled": ColorPalette.GetColor("GW_Disabled")
+        "Disabled": ColorPalette.GetColor("GW_Disabled"),
     }
     color = rarity_colors.get(rarity, Color(255, 255, 255, 255))
     _color = Color(color.r, color.g, color.b, 150)
     return _color
-    

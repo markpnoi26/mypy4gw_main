@@ -5,9 +5,7 @@
 from typing import Callable, Any
 
 def clear_calls() -> None: ...
-
 def is_in_game_thread() -> bool: ...
-
 def enqueue(fn: Callable[[], Any]) -> None:
     """
     Enqueue a Python callable to run on the GW game thread.

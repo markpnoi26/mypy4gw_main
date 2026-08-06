@@ -7,7 +7,7 @@
 # It dumps the game's authoritative item-mod label tables + the per-EItemType
 # upgrade-slot table to a Python data module. Values are ETextStr string-table IDs
 # (language-independent keys); decode them to display text at runtime with
-# Py4GWCoreLib.native_src.internals.string_table.decode().
+# Core.native_src.internals.string_table.decode().
 #
 # WHY: replaces a hand-maintained JSON. The data is the game's own, re-dumpable per
 # patch. See docs/item_mods/06_game_mod_engine_RE.md for how these addresses were found.
@@ -59,7 +59,7 @@ def dump():
     out.append("# Source: Guild Wars client image (Gw.wasm). DO NOT EDIT BY HAND.")
     out.append("#")
     out.append("# Label-table values are ETextStr string-table IDs. Resolve to display text via")
-    out.append("#   from Py4GWCoreLib.native_src.internals import string_table")
+    out.append("#   from Core.native_src.internals import string_table")
     out.append("#   string_table.decode(bytes(<encoded-ref built from the id>))")
     out.append("# or map to your taxonomy labels directly by enum index.")
     out.append("")

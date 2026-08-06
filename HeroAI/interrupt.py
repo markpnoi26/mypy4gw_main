@@ -6,14 +6,14 @@ Owns the per-frame cast sampler, the interrupt classifier (driven by
 
 Consumed by two evaluators:
 * ``HeroAI/combat.py`` ``AreCastConditionsMet`` — data-driven (unmatched bar).
-* ``Py4GWCoreLib/BuildMgr.py`` ``CastSkillID`` — matched-build choke point.
+* ``Core/BuildMgr.py`` ``CastSkillID`` — matched-build choke point.
 """
 
 from __future__ import annotations
 
 import Py4GW
 import PyPing
-from Py4GWCoreLib import (
+from Core import (
     GLOBAL_CACHE,
     Agent,
     AgentArray,
@@ -25,7 +25,6 @@ from Py4GWCoreLib import (
 )
 
 from .types import SkillNature
-
 
 # Logs every decision to the console while True. Flip off when validated.
 INTERRUPT_DEBUG: bool = False
@@ -54,17 +53,17 @@ _OUTCOME_FAIL_GRACE_MS = 500
 # Consumables — stack MULTIPLICATIVELY with each other per user guidance.
 # (skill_id_name, multiplier)
 _CONSUMABLE_CAST_MODS: list[tuple[str, float]] = [
-    ("Blue_Rock_Candy_Rush", 0.80),    # 20% faster
-    ("Green_Rock_Candy_Rush", 0.85),   # 15% faster
-    ("Red_Rock_Candy_Rush", 0.75),     # 25% faster
+    ("Blue_Rock_Candy_Rush", 0.80),  # 20% faster
+    ("Green_Rock_Candy_Rush", 0.85),  # 15% faster
+    ("Red_Rock_Candy_Rush", 0.75),  # 25% faster
     ("Essence_of_Celerity_item_effect", 0.80),  # 20% faster
-    ("Pie_Induced_Ecstasy", 0.85),     # Slice of Pumpkin Pie buff — 15% faster
+    ("Pie_Induced_Ecstasy", 0.85),  # Slice of Pumpkin Pie buff — 15% faster
 ]
 
 # Self-enchantments that only affect SPELLS (not signets, not attack skills).
 # Gated on GLOBAL_CACHE.Skill.Flags.IsSpell(our_skill_id).
 _SPELL_ONLY_SPEEDUPS: list[tuple[str, float]] = [
-    ("Mindbender", 0.80),              # 20% faster, PvE-only
+    ("Mindbender", 0.80),  # 20% faster, PvE-only
 ]
 
 # Slowing hexes that affect ALL skill types. Take MAX (they don't stack).
@@ -242,10 +241,7 @@ class CastObserver:
             live_keys.add(key)
 
         stale_cutoff = now - _OBSERVATION_MAX_AGE_MS
-        to_remove = [
-            key for key, ts in self._observations.items()
-            if key not in live_keys and ts < stale_cutoff
-        ]
+        to_remove = [key for key, ts in self._observations.items() if key not in live_keys and ts < stale_cutoff]
         for key in to_remove:
             self._observations.pop(key, None)
 
@@ -265,9 +261,7 @@ class CastObserver:
     ) -> None:
         if not target_id or not enemy_skill_id or not our_skill_id:
             return
-        self._pending_outcomes.append(
-            (target_id, enemy_skill_id, our_skill_id, _now_ms(), enemy_total_ms)
-        )
+        self._pending_outcomes.append((target_id, enemy_skill_id, our_skill_id, _now_ms(), enemy_total_ms))
 
     def _sweep_pending_outcomes(self) -> None:
         if not self._pending_outcomes:
@@ -291,9 +285,7 @@ class CastObserver:
 
             # SUCCESS: target is still casting, but a different skill now.
             try:
-                current_sid = (
-                    Agent.GetCastingSkillID(target) if Agent.IsCasting(target) else 0
-                )
+                current_sid = Agent.GetCastingSkillID(target) if Agent.IsCasting(target) else 0
             except Exception:
                 current_sid = 0
             if current_sid and current_sid != enemy_skill:
@@ -566,9 +558,7 @@ def _queue_outcome(target_id: int, enemy_skill_id: int, our_skill_id: int) -> No
         enemy_total_s = GLOBAL_CACHE.Skill.Data.GetActivation(enemy_skill_id) or 0.0
     except Exception:
         enemy_total_s = 0.0
-    cast_observer.queue_outcome(
-        target_id, enemy_skill_id, our_skill_id, int(enemy_total_s * 1000)
-    )
+    cast_observer.queue_outcome(target_id, enemy_skill_id, our_skill_id, int(enemy_total_s * 1000))
 
 
 # --- is_interrupt_feasible: the decision helper ---
@@ -679,9 +669,7 @@ def is_interrupt_feasible(
         ) = _calc_attack_skill_activation_ms(our_skill_id, distance, player_id)
     else:
         try:
-            our_activation_s, _ = Routines.Checks.Skills.apply_fast_casting(
-                our_skill_id, fast_casting_level
-            )
+            our_activation_s, _ = Routines.Checks.Skills.apply_fast_casting(our_skill_id, fast_casting_level)
         except Exception:
             try:
                 our_activation_s = GLOBAL_CACHE.Skill.Data.GetActivation(our_skill_id) or 0.0
@@ -700,17 +688,10 @@ def is_interrupt_feasible(
 
     if debug:
         verdict = "FEASIBLE" if feasible else "SKIP: cast too far along"
-        _log(
-            f"[rupt] Our '{our_name}', {target_name} is casting '{enemy_skill_name}' "
-            f"→ {verdict}"
-        )
-        _log(
-            f"       distance={distance}gw ({range_label} max {max_range_gw}gw)"
-        )
+        _log(f"[rupt] Our '{our_name}', {target_name} is casting '{enemy_skill_name}' " f"→ {verdict}")
+        _log(f"       distance={distance}gw ({range_label} max {max_range_gw}gw)")
         if is_attack_path:
-            _log(
-                f"       attack: {', '.join(attack_breakdown)}"
-            )
+            _log(f"       attack: {', '.join(attack_breakdown)}")
             _log(
                 f"       target_remaining={remaining_ms}ms vs our_budget={budget_ms}ms  "
                 f"[cast={our_activation_ms}ms "
@@ -724,9 +705,7 @@ def is_interrupt_feasible(
                     mods_summary = f"raw x{raw_mult:.2f}, capped x{capped_mult:.2f}"
                 else:
                     mods_summary = f"x{capped_mult:.2f}"
-                _log(
-                    f"       modifiers: {', '.join(applied_modifiers)} -> {mods_summary}"
-                )
+                _log(f"       modifiers: {', '.join(applied_modifiers)} -> {mods_summary}")
             _log(
                 f"       target_remaining={remaining_ms}ms vs our_budget={budget_ms}ms  "
                 f"[cast={our_activation_ms}ms (FC {fast_casting_level}, mods x{capped_mult:.2f}) "
