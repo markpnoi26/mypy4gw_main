@@ -34,10 +34,12 @@ from Core import Player
 from Core import Range
 from Core import SharedCommandType
 from Core.BottingTree import BottingTree
+from Core.enums_src.Model_enums import GadgetModelID
 from Core.py4gwcorelib_src.BehaviorTree import BehaviorTree
 from Core.py4gwcorelib_src.Settings import Settings
 from Core.routines_src.BehaviourTrees import BT
 from Sources.marks_sources import fight_awareness
+from Sources.marks_sources import gadget_interact
 from Sources.marks_sources import team_turns
 
 MODULE_NAME = "Voltaic Spear Team BT"
@@ -110,6 +112,10 @@ class ChestRoute:
     name: str
     path: tuple[tuple[float, float], ...]
     chest: tuple[float, float]
+    # Coordinates alone pick the nearest gadget of ANY kind, so a door or a
+    # signpost standing closer to the scan point wins and gets interacted with
+    # perfectly. The id is what makes the target the chest.
+    chest_id: int
 
 
 ROUTES: tuple[ChestRoute, ...] = (
@@ -117,6 +123,7 @@ ROUTES: tuple[ChestRoute, ...] = (
         name="Thommis",
         path=(THOMMIS_PRE_PATH_1, *THOMMIS_PATH_1, THOMMIS_PRE_PATH_2, *THOMMIS_PATH_2),
         chest=REWARD_CHEST_XY,
+        chest_id=GadgetModelID.CHEST_DUNGEON_SLAVERS_EXILE_JUSTICIAR_THOMMIS_ROOM.value,
     ),
     # Second chest: add a ChestRoute here once its path is mapped. Steps are
     # generated per route and the chest turn-taker is keyed by route name, so
@@ -128,6 +135,10 @@ FIGHT_HOLD_KEY = "FIGHT_HOLD"
 # Player.Move goes through the ACTION queue the party's skills are also using.
 REPOSITION_INTERVAL_MS = 1500.0
 CHEST_TURNS_KEY = "chest_turns"
+# Wider than the 200 this used before. Once the gadget id is doing the matching a
+# decoy cannot win the scan, so the only thing a tight radius still buys is a
+# missed chest when the walk lands short.
+CHEST_SCAN_RADIUS = 400.0
 # Generous on purpose: expiry here means "could not confirm", and every wait that
 # uses it is wrapped so it cannot decide whether the step counted.
 TEAM_ACK_TIMEOUT_MS = 90_000
@@ -321,20 +332,6 @@ def team_opens_chest_in_turn(chest: str) -> BehaviorTree:
     )
 
 
-def remember_chest_target(chest: str) -> BehaviorTree:
-    """The turn-taker outlives the leader's own target, which HeroAI is free to
-    change the moment combat options come back on."""
-
-    def remember(node: BehaviorTree.Node) -> BehaviorTree.NodeState:
-        target = int(Player.GetTargetID() or 0)
-        node.blackboard[chest_target_key(chest)] = target
-        return BehaviorTree.NodeState.SUCCESS if target else BehaviorTree.NodeState.FAILURE
-
-    return BehaviorTree(
-        BehaviorTree.ActionNode(name=f"RememberChestTarget({chest})", action_fn=remember, aftercast_ms=0)
-    )
-
-
 def initialize() -> BehaviorTree:
     tree = ensure_botting_tree()
     return BehaviorTree(
@@ -389,15 +386,16 @@ def enter_thommis_room() -> BehaviorTree:
     )
 
 
-def claim_chest(chest_xy: tuple[float, float], chest: str) -> BehaviorTree:
-    """Takes its coordinates so a room with more than one chest is a second entry
+def claim_chest(route: ChestRoute) -> BehaviorTree:
+    """Takes the whole route so a room with more than one chest is a second entry
     in ROUTES rather than a second copy of this."""
+    chest = route.name
     return BehaviorTree(
         BehaviorTree.SequenceNode(
             name=f"Claim Chest ({chest})",
             children=[
                 BT.Player.Wait(5_000),
-                walk(*chest_xy),
+                walk(*route.chest),
                 # The leader takes the FIRST turn and finishes it — opens, then
                 # loots — before any follower is ordered in. Nothing below may
                 # run while the leader still has the chest window up.
@@ -408,9 +406,13 @@ def claim_chest(chest_xy: tuple[float, float], chest: str) -> BehaviorTree:
                         BehaviorTree.SequenceNode(
                             name=f"Leader opens {chest}",
                             children=[
-                                BT.Agents.TargetNearestGadgetXY(chest_xy[0], chest_xy[1], 200, log=True),
-                                remember_chest_target(chest),
-                                BT.Player.InteractTarget(log=True),
+                                gadget_interact.interact_gadget(
+                                    route.chest[0],
+                                    route.chest[1],
+                                    key=chest_target_key(chest),
+                                    radius=CHEST_SCAN_RADIUS,
+                                    wanted_ids=(route.chest_id,),
+                                ),
                                 BT.Player.Wait(3_000),
                                 BT.Items.LootItems(distance=float(Range.Spellcast.value), timeout_ms=20_000),
                             ],
@@ -469,7 +471,7 @@ def get_execution_steps() -> list[tuple[str, Callable[[], BehaviorTree]]]:
     ]
     for route in ROUTES:
         steps.append((f"Clear {route.name}", lambda route=route: clear_route(route)))
-        steps.append((f"Chest {route.name}", lambda route=route: claim_chest(route.chest, route.name)))
+        steps.append((f"Chest {route.name}", lambda route=route: claim_chest(route)))
     steps.append(("Reset Run", reset_run))
     return steps
 
