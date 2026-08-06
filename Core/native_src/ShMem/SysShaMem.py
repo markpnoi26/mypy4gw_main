@@ -96,15 +96,19 @@ class SystemSharedMemoryManager:
         self.pointers_struct = None
 
     def get_payload(self):
-        self.reset_data()
+        # Refresh runs on both loops; clearing only on failure keeps the other
+        # loop from reading None mid-rebuild on a visible client.
         if not self._connect():
+            self.reset_data()
             return
 
         if self.shm is None or self.shm.buf is None:
+            self.reset_data()
             self.last_error = "Shared memory buffer is not available."
             return
 
         if self.size < self.expected_size:
+            self.reset_data()
             self.last_error = (
                 f"Shared memory is too small: got {self.size} bytes, " f"expected at least {self.expected_size} bytes."
             )
@@ -116,6 +120,7 @@ class SystemSharedMemoryManager:
                 continue
 
             if header_before.total_size < self.expected_size:
+                self.reset_data()
                 self.last_error = (
                     f"Shared memory header reports {header_before.total_size} bytes, "
                     f"expected at least {self.expected_size} bytes."
@@ -141,6 +146,7 @@ class SystemSharedMemoryManager:
             self.last_error = ""
             return
 
+        self.reset_data()
         self.last_error = "Snapshot changed while reading."
         return
 
@@ -156,6 +162,17 @@ class SystemSharedMemoryManager:
             priority=0,
             context=PyCallback.Context.Draw,
         )
+        # Draw alone freezes this snapshot on a minimised client, and with it every
+        # AgentArray read - enemies that spawn after the minimize simply never exist.
+        # The native writer (UpdateAgentArrayRegion) runs on the update thread and
+        # keeps publishing while minimised, despite what a9c93d3c's message claims.
+        PyCallback.PyCallback.Register(
+            "SystemSharedMemory.SystemSharedMemory.Update",
+            PyCallback.Phase.PreUpdate,
+            self.get_payload,
+            priority=0,
+            context=PyCallback.Context.Update,
+        )
         self._enabled = True
 
     def disable(self):
@@ -166,6 +183,7 @@ class SystemSharedMemoryManager:
         import PyCallback
 
         PyCallback.PyCallback.RemoveByName("SystemSharedMemory.SystemSharedMemory")
+        PyCallback.PyCallback.RemoveByName("SystemSharedMemory.SystemSharedMemory.Update")
         self._enabled = False
         self.close()
         self.reset_data()
