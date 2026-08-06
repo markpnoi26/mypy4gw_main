@@ -203,6 +203,12 @@ dest = "Widgets/Overlays/{rel:Widgets/Guild Wars/Screen Overlays}"
 tier = "widget"
 
 [[override]]
+match = "Widgets/Guild Wars/Map Overlay.py"
+dest = "Widgets/Overlays/Map Overlay.py"
+tier = "widget"
+note = "Upstream 2cb1b73d deleted Screen Overlays/ and moved this up to Widgets/Guild Wars/, which stranded it: the Screen Overlays/** rule above stopped matching, so it fell through uncovered into a directory apply.py writes no .widget marker for, and discovery lost it. RS-003 already names it a genuine widget, so it goes back to Overlays/ rather than to the orphaned-widgets pack."
+
+[[override]]
 match = "Widgets/Guild Wars/Items & Loot/TeamInventoryViewer.py"
 dest = "Widgets/Items/TeamInventoryViewer.py"
 tier = "widget"
@@ -552,7 +558,7 @@ old = "Guild Wars/Screen Overlays/Instance Timer.py"
 new = "widgets:Overlays/Instance Timer.py"
 
 [[legacy_id]]
-old = "Guild Wars/Screen Overlays/Map Overlay.py"
+old = "Guild Wars/Map Overlay.py"
 new = "widgets:Overlays/Map Overlay.py"
 
 [[legacy_id]]
@@ -947,12 +953,6 @@ pack = "orphaned-widgets"
 [[override]]
 match = "Widgets/Guild Wars/Customization/Layout Manager.py"
 dest = "Scripts/orphaned-widgets/scripts/Layout Manager.py"
-tier = "script"
-pack = "orphaned-widgets"
-
-[[override]]
-match = "Widgets/Guild Wars/Screen Overlays/Map Overlay.py"
-dest = "Scripts/orphaned-widgets/scripts/Map Overlay.py"
 tier = "script"
 pack = "orphaned-widgets"
 
