@@ -232,7 +232,12 @@ def execute_follower_follow(
 
     recovery_active = is_follow_recovery_active(cached_data, state)
 
-    if Agent.IsCasting(player_agent_id):
+    # IsCasting decodes model_state, which GW barely advances while not rendering —
+    # the MC probe read attacking/casting/moving/idle as all-zero through entire
+    # minimised fights. The skillbar casting field is game-logic driven and the
+    # GLOBAL_CACHE pump refreshes it on both loops, so it is the signal that stops
+    # follow moves from cancelling this client's own casts while minimised.
+    if Agent.IsCasting(player_agent_id) or (GLOBAL_CACHE.SkillBar.GetCasting() or 0) != 0:
         return BehaviorTree.NodeState.FAILURE
 
     map_sig = (

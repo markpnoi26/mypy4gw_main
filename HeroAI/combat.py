@@ -38,7 +38,7 @@ from .targeting import (
 )
 from .targeting import GetEnemyHexed, GetEnemyDegenHexed, GetEnemyEnchanted, GetEnemyMoving, GetEnemyKnockedDown
 from .targeting import GetEnemyBleeding, GetEnemyPoisoned, GetEnemyCrippled
-from .interrupt import is_interrupt_feasible, _queue_outcome
+from .interrupt import is_interrupt_feasible, observed_casting_skill_id, _queue_outcome
 from .types import SkillNature, Skilltarget, SkillType
 from .constants import MAX_NUM_PLAYERS
 from .call_target import CallTarget
@@ -1399,8 +1399,10 @@ class CombatClass:
                                 break
 
         if Conditions.IsCasting:
-            if Agent.IsCasting(vTarget):
-                casting_skill_id = Agent.GetCastingSkillID(vTarget)
+            # Sampler-backed: Agent.IsCasting decodes model_state, which reads
+            # False for every agent on a minimised client.
+            casting_skill_id = observed_casting_skill_id(vTarget)
+            if casting_skill_id:
                 nature = self.skills[slot].custom_skill_data.Nature
                 if nature == SkillNature.Interrupt.value:
                     if is_interrupt_feasible(

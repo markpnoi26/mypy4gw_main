@@ -1553,14 +1553,13 @@ class CombatServices:
             from HeroAI.interrupt import (
                 is_classified_as_interrupt,
                 is_interrupt_feasible,
+                observed_casting_skill_id,
                 _get_player_fast_casting_level,
                 _PING_HANDLER as _RUPT_PING_HANDLER,
                 _queue_outcome,
             )
 
             if target_agent_id and is_classified_as_interrupt(skill_id):
-                from Core.Agent import Agent as _RuptAgent
-
                 if not is_interrupt_feasible(
                     target_agent_id=target_agent_id,
                     our_skill_id=skill_id,
@@ -1570,7 +1569,7 @@ class CombatServices:
                     return False
                 _queue_outcome(
                     target_agent_id,
-                    _RuptAgent.GetCastingSkillID(target_agent_id),
+                    observed_casting_skill_id(target_agent_id),
                     skill_id,
                 )
         except Exception:

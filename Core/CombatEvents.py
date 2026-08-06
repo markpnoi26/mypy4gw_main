@@ -220,6 +220,20 @@ class CombatEvents:
         helpers._process_pending_events(CombatEventQueue)
 
     @staticmethod
+    def PumpFromDraw():
+        from .py4gwcorelib_src.Utils import Utils
+
+        if not Utils.IsDrawLoopStalled():
+            CombatEvents.Update()
+
+    @staticmethod
+    def PumpFromUpdate():
+        from .py4gwcorelib_src.Utils import Utils
+
+        if Utils.IsDrawLoopStalled():
+            CombatEvents.Update()
+
+    @staticmethod
     def Enable():
         """Register the per-frame sweep but leave dispatch OFF.
 
@@ -229,12 +243,24 @@ class CombatEvents:
         helpers._set_callback_active(False)
         import PyCallback
 
+        # The pump destructively drains the native buffer (get_and_clear) into
+        # shared Python state, so exactly one loop may drive it - the stall gate
+        # picks which, keeping interrupts alive on a minimised client. The native
+        # buffer is mutex-guarded (agent_events_listener.cpp), so draining from
+        # the update thread is safe.
         PyCallback.PyCallback.Register(
             CombatEvents._callback_name,
             PyCallback.Phase.Data,
-            CombatEvents.Update,
+            CombatEvents.PumpFromDraw,
             priority=7,
             context=PyCallback.Context.Draw,
+        )
+        PyCallback.PyCallback.Register(
+            CombatEvents._callback_name + ".Update",
+            PyCallback.Phase.Data,
+            CombatEvents.PumpFromUpdate,
+            priority=7,
+            context=PyCallback.Context.Update,
         )
 
     @staticmethod
@@ -257,6 +283,7 @@ class CombatEvents:
             import PyCallback
 
             PyCallback.PyCallback.RemoveByName(CombatEvents._callback_name)
+            PyCallback.PyCallback.RemoveByName(CombatEvents._callback_name + ".Update")
         except Exception:
             pass
 

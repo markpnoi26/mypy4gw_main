@@ -11,18 +11,17 @@ Consumed by two evaluators:
 
 from __future__ import annotations
 
-import Py4GW
 import PyPing
-from Core import (
-    GLOBAL_CACHE,
-    Agent,
-    AgentArray,
-    Effects,
-    Player,
-    Range,
-    Routines,
-    Utils,
-)
+import PySystem
+
+from Core import GLOBAL_CACHE
+from Core import Agent
+from Core import AgentArray
+from Core import Effects
+from Core import Player
+from Core import Range
+from Core import Routines
+from Core import Utils
 
 from .types import SkillNature
 
@@ -194,6 +193,43 @@ class CastObserver:
             return None
         return _now_ms() - ts
 
+    def current_cast(self, agent_id: int) -> tuple[int, int] | None:
+        """(skill_id, elapsed_ms) of the agent's freshest observed cast."""
+        best: tuple[int, int] | None = None
+        now = _now_ms()
+        for (aid, sid), ts in self._observations.items():
+            if aid != agent_id:
+                continue
+            elapsed = now - ts
+            if best is None or elapsed < best[1]:
+                best = (sid, elapsed)
+        return best
+
+    # --- CombatEvents feed ---------------------------------------------------
+    # Network events, so they arrive on a minimised client where the polling
+    # sweep is blind (model_state barely advances without rendering).
+
+    def on_cast_started(self, agent_id: int, skill_id: int) -> None:
+        if not agent_id or not skill_id:
+            return
+        try:
+            if agent_id == Player.GetAgentID():
+                return
+        except Exception:
+            pass
+        key = (agent_id, skill_id)
+        if key not in self._observations:
+            self._drop_agent(agent_id)
+            self._observations[key] = _now_ms()
+
+    def on_cast_ended(self, agent_id: int, skill_id: int = 0) -> None:
+        if not agent_id:
+            return
+        if skill_id:
+            self._observations.pop((agent_id, skill_id), None)
+        else:
+            self._drop_agent(agent_id)
+
     # --- Per-frame tick -----------------------------------------------------
 
     def tick(self) -> None:
@@ -204,6 +240,16 @@ class CastObserver:
             _log(f"tick error: {exc}", "Warning")
 
     def _sweep_observations(self) -> None:
+        """Polling adder for rendering clients; the event feed owns removal.
+
+        Removal-by-poll was dropped: a fresh cast reads as "not casting" for the
+        first frames of its animation, which raced the event feed and deleted
+        entries it had just added — and on a minimised client it read every
+        entry as removable. Ended casts leave via SKILL_FINISHED / INTERRUPTED /
+        STOPPED events, with the age-out below as backstop; a stale entry is
+        harmless anyway, since elapsed past activation makes remaining_ms 0 and
+        the feasibility check refuse.
+        """
         now = _now_ms()
 
         try:
@@ -216,8 +262,6 @@ class CastObserver:
         except Exception:
             enemies = []
 
-        live_keys: set[tuple[int, int]] = set()
-
         for agent_id in enemies:
             if not Agent.IsValid(agent_id):
                 # Slot recycled since AgentArray was captured — drop any
@@ -226,24 +270,21 @@ class CastObserver:
                 continue
             try:
                 if not Agent.IsCasting(agent_id):
-                    self._drop_agent(agent_id)
                     continue
                 sid = Agent.GetCastingSkillID(agent_id)
             except Exception:
                 continue
 
             if not sid:
-                self._drop_agent(agent_id)
                 continue
 
             key = (agent_id, sid)
             if key not in self._observations:
                 self._drop_agent(agent_id)
                 self._observations[key] = now
-            live_keys.add(key)
 
         stale_cutoff = now - _OBSERVATION_MAX_AGE_MS
-        to_remove = [key for key, ts in self._observations.items() if key not in live_keys and ts < stale_cutoff]
+        to_remove = [key for key, ts in self._observations.items() if ts < stale_cutoff]
         for key in to_remove:
             self._observations.pop(key, None)
 
@@ -586,11 +627,20 @@ def is_interrupt_feasible(
     if not target_agent_id or not Agent.IsValid(target_agent_id):
         return False
 
-    try:
-        if not Agent.IsCasting(target_agent_id):
+    # Sampler first: it is event-fed and survives minimising, where IsCasting
+    # (model_state) reads False through entire casts. The live poll remains as
+    # fallback so a rendering client loses nothing if the event stream drops.
+    observed = cast_observer.current_cast(target_agent_id)
+    polled_skill_id = 0
+    if observed is None:
+        try:
+            if not Agent.IsCasting(target_agent_id):
+                return False
+            polled_skill_id = int(Agent.GetCastingSkillID(target_agent_id) or 0)
+        except Exception:
             return False
-    except Exception:
-        return False
+        if not polled_skill_id:
+            return False
 
     # --- Range gate ---
     try:
@@ -614,13 +664,7 @@ def is_interrupt_feasible(
         return False
 
     # --- Target skill info ---
-    try:
-        enemy_skill_id = Agent.GetCastingSkillID(target_agent_id)
-    except Exception:
-        return False
-
-    if not enemy_skill_id:
-        return False
+    enemy_skill_id = observed[0] if observed is not None else polled_skill_id
 
     try:
         enemy_total_s = GLOBAL_CACHE.Skill.Data.GetActivation(enemy_skill_id) or 0.0
@@ -717,22 +761,83 @@ def is_interrupt_feasible(
     return feasible
 
 
+def observed_casting_skill_id(agent_id: int) -> int:
+    """Best-known skill the agent is casting right now; 0 when none.
+
+    Sampler-backed so it works minimised; falls back to the live poll, which
+    Agent.GetCastingSkillID already gates on IsCasting.
+    """
+    observed = cast_observer.current_cast(agent_id)
+    if observed is not None:
+        return observed[0]
+    try:
+        return int(Agent.GetCastingSkillID(agent_id) or 0)
+    except Exception:
+        return 0
+
+
+# --- CombatEvents feed registration ---
+
+
+def handle_skill_activated_event(agent_id: int, skill_id: int, target_id: int = 0) -> None:
+    cast_observer.on_cast_started(agent_id, skill_id)
+
+
+def handle_skill_ended_event(agent_id: int, skill_id: int = 0) -> None:
+    cast_observer.on_cast_ended(agent_id, skill_id)
+
+
+def register_combat_event_feed() -> None:
+    try:
+        from Core.CombatEvents import CombatEvents
+
+        CombatEvents.Activate()
+        CombatEvents.OnSkillActivated(handle_skill_activated_event)
+        CombatEvents.OnSkillFinished(handle_skill_ended_event)
+        CombatEvents.OnSkillInterrupted(handle_skill_ended_event)
+        CombatEvents.OnSkillStopped(handle_skill_ended_event)
+    except Exception as exc:
+        _log(f"combat-event feed registration failed: {exc}", "Warning")
+
+
+register_combat_event_feed()
+
+
 # --- Per-frame tick registration ---
 # Sampler runs independent of either evaluator path.
 
 _CALLBACK_NAME = "HeroAI.Interrupt.Tick"
 
 
+def tick_from_draw() -> None:
+    if not Utils.IsDrawLoopStalled():
+        cast_observer.tick()
+
+
+def tick_from_update() -> None:
+    if Utils.IsDrawLoopStalled():
+        cast_observer.tick()
+
+
 def _register_tick_callback() -> None:
     try:
         import PyCallback
 
+        # Draw alone kills the sampler on a minimised client, so interrupts never
+        # fire. The stall gate keeps exactly one loop sampling at a time.
         PyCallback.PyCallback.Register(
             _CALLBACK_NAME,
             PyCallback.Phase.Data,
-            cast_observer.tick,
+            tick_from_draw,
             priority=7,
             context=PyCallback.Context.Draw,
+        )
+        PyCallback.PyCallback.Register(
+            _CALLBACK_NAME + ".Update",
+            PyCallback.Phase.Data,
+            tick_from_update,
+            priority=7,
+            context=PyCallback.Context.Update,
         )
         _log("sampler tick registered", "Info")
     except Exception as exc:
