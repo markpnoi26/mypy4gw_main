@@ -30,13 +30,17 @@ class HealthRetreatConfig:
     # Opt-in like the zone itself. Off still computes and publishes a verdict, so
     # the controller can be watched through the tab before it moves anything.
     enabled: bool = False
-    arm_fraction: float = 0.60
+    # Measured live: 60% was too late to act on. By the time an eight-man mean
+    # is that low the fight is already lost, and one 250u step cannot recover it.
+    arm_fraction: float = 0.80
     # Strictly above arm_fraction, and the gap IS the release condition: health
     # hovering on the arm threshold must not be able to cycle the budget.
-    release_fraction: float = 0.75
-    # The hard bound on everything below. Three steps is 750u at the authored
-    # give_ground_step, which is a real withdrawal and not a rout.
-    max_steps: int = 3
+    release_fraction: float = 0.90
+    # NOT the termination guarantee — ZoneConfig.max_given_ground is, and it caps
+    # total displacement no matter how many steps are budgeted. This only bounds
+    # how many bites the party takes to get there, so it can be generous: eight
+    # 250u steps with a dwell between each, rather than three and then a stand.
+    max_steps: int = 8
     # How far the mean must climb before the last step counts as working. Paired
     # with the latch in HealthRetreatState, this is what stops a flat line
     # spending the whole budget in three consecutive dwells. Never zero: at zero
@@ -119,9 +123,12 @@ def alive_mean(party_health: dict[int, float]) -> float:
     instead, which is bounded by the budget where a depressed mean is not.
     """
     standing = [value for value in party_health.values() if value > 0.0]
-    if not standing:
-        return 1.0
-    return sum(standing) / len(standing)
+    if standing:
+        return sum(standing) / len(standing)
+    # "Nobody reported" and "everybody is down" both leave no survivors to
+    # average, and collapsing them returned the most optimistic number there is
+    # at the exact moment of a wipe. Only the first is genuinely unknown.
+    return 1.0 if not party_health else 0.0
 
 
 def newly_dead(state: HealthRetreatState, party_health: dict[int, float]) -> int:

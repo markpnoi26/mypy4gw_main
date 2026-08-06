@@ -130,7 +130,10 @@ HEALTH_RELEASE_MAX = 95.0
 # sliders cannot express it, whatever the two are set to.
 HEALTH_RELEASE_MIN_GAP = 5.0
 HEALTH_STEPS_MIN = 1
-HEALTH_STEPS_MAX = 6
+# Safe to raise because ZoneConfig.max_given_ground, not this, is what stops the
+# party retreating forever — the ceiling clamps total displacement whatever the
+# budget says.
+HEALTH_STEPS_MAX = 8
 
 # The authored numbers, captured before anything writes over them. Sliders scale
 # THESE and never ZONE_CFG's current contents: reload_runtime runs once a second

@@ -131,9 +131,13 @@ def test_a_spent_budget_holds_even_as_it_gets_worse():
     """Worse is not more authority. Past the budget the party stands and fights
     where it got to — there is no outrunning a mob that moves at your speed."""
     state = fresh()
-    for fraction in (0.55, 0.45, 0.35):
-        assert act(state, party(fraction)) is HealthVerdict.WITHDRAW
-    for fraction in (0.25, 0.15, 0.05):
+    # Spend exactly the budget, whatever it is. Hardcoding three steps here
+    # tested the number rather than the rule, and passed for the wrong reason
+    # the moment the budget moved.
+    for step in range(CFG.max_steps):
+        worsening = LOSING - (step * 0.02)
+        assert act(state, party(worsening)) is HealthVerdict.WITHDRAW
+    for fraction in (LOSING / 2.0, LOSING / 3.0, 0.05):
         assert act(state, party(fraction)) is HealthVerdict.HOLD
 
 
@@ -214,7 +218,10 @@ def test_a_resurrected_member_can_die_again():
     state = fresh()
     down = party(1.0, 1.0, 1.0, 0.0)
     assert act(state, down) is HealthVerdict.WITHDRAW
-    assert act(state, party(1.0, 1.0, 1.0, 0.4)) is HealthVerdict.CLEAR
+    # Up AND healed past the release threshold, so the episode actually ends.
+    # A revived member still below release leaves the latch armed, and the
+    # second death would then be answered by an episode that never closed.
+    assert act(state, party(1.0, 1.0, 1.0, RECOVERED)) is HealthVerdict.CLEAR
     assert act(state, down) is HealthVerdict.WITHDRAW
 
 
@@ -254,15 +261,22 @@ def test_an_absent_reading_never_argues_for_retreat():
         assert act(state, {}) is HealthVerdict.CLEAR
 
 
-def test_a_wipe_spends_one_step_and_then_says_nothing():
-    """Degenerate shape. With nobody standing there is no living mean, so the
-    contract answers 1.0 and only the deaths register — once."""
+def test_a_wipe_keeps_trying_to_withdraw_rather_than_reporting_clear():
+    """Degenerate shape, and the one that made the readout unbelievable.
+
+    With nobody standing, the old contract answered 1.0: one step got spent on
+    the deaths, the mean then cleared the release threshold, and the controller
+    RELEASED — reporting a healthy party in the middle of a wipe. Zero survivors
+    is the worst reading there is, not the best.
+    """
     state = fresh()
     wiped = party(0.0, 0.0, 0.0, 0.0)
-    assert health_retreat.alive_mean(wiped) == 1.0
-    assert act(state, wiped) is HealthVerdict.WITHDRAW
-    for _ in range(10):
-        assert act(state, wiped) is HealthVerdict.CLEAR
+    assert health_retreat.alive_mean(wiped) == 0.0
+
+    verdicts = [act(state, wiped) for _ in range(CFG.max_steps + 5)]
+    assert HealthVerdict.CLEAR not in verdicts, "a wiping party must never read as clear"
+    assert verdicts.count(HealthVerdict.WITHDRAW) == CFG.max_steps
+    assert set(verdicts[CFG.max_steps :]) == {HealthVerdict.HOLD}
 
 
 def test_releasing_the_episode_keeps_the_corpse_census():
@@ -285,3 +299,26 @@ def test_the_census_is_published_for_the_readout():
     act(state, party(1.0, 0.5, 0.0, 0.0))
     assert (state.alive, state.dead) == (2, 2)
     assert abs(state.last_mean - 0.75) < 0.001
+
+
+def test_a_party_that_is_all_the_way_down_does_not_report_full_health():
+    """The readout said 100% during a wipe.
+
+    Excluding corpses from the mean is deliberate — a zero that never recovers
+    would cap the mean and destroy the release condition. But with NOBODY left
+    standing there is no mean to protect, and "no survivors" was collapsing into
+    the same answer as "no readings yet", which is the most optimistic number
+    there is.
+    """
+    assert health_retreat.alive_mean(party(0.0, 0.0, 0.0, 0.0)) == 0.0
+
+
+def test_an_absent_reading_still_reports_full_health():
+    """The other half of that distinction: nothing known must never argue for a
+    retreat, or a slot that has not published yet starts one."""
+    assert health_retreat.alive_mean({}) == 1.0
+
+
+def test_survivors_still_set_the_mean_while_others_are_down():
+    """The original reason corpses are excluded, which must survive the fix."""
+    assert health_retreat.alive_mean(party(1.0, 1.0, 0.0, 0.0)) == 1.0
