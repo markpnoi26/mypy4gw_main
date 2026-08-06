@@ -532,6 +532,13 @@ class FollowFormationPublisher:
                 party_in_aggro = True
             party_position = int(account.AgentPartyData.PartyPosition)
             if party_position <= 0:
+                # The leader takes no PIN — the formation is anchored on it and
+                # cannot place it — but its HEALTH is still party health. Skipping
+                # the whole slot read seven eighths of an eight-man party, and the
+                # missing eighth is the character standing nearest the mob.
+                leader_fraction = health_fraction(account.AgentData.Health)
+                if leader_fraction is not None:
+                    party_health[party_position] = leader_fraction
                 continue
             character_name = str(getattr(account.AgentData, "CharacterName", "") or "")
             primary_profession = int(account.AgentData.Profession[0])
