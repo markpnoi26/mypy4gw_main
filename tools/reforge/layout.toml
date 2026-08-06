@@ -555,10 +555,6 @@ old = "Guild Wars/Items & Loot/TeamInventoryViewer.py"
 new = "widgets:Items/TeamInventoryViewer.py"
 
 [[legacy_id]]
-old = "Guild Wars/Calendar.py"
-new = "widgets:World/Calendar.py"
-
-[[legacy_id]]
 old = "Guild Wars/Travel.py"
 new = "widgets:World/Travel.py"
 
@@ -569,10 +565,6 @@ new = "widgets:Multibox/HeroAI.py"
 [[legacy_id]]
 old = "Guild Wars/Switch Character.py"
 new = "widgets:Multibox/Switch Character.py"
-
-[[legacy_id]]
-old = "Automation/Enhancements/HeroHelper.py"
-new = "widgets:Heroes/HeroHelper.py"
 
 
 # ============================================================================
@@ -668,72 +660,8 @@ dest = "drop"
 # ============================================================================
 
 [[legacy_id]]
-old = "Automation/Enhancements/Dhuum Helper.py"
-new = "widgets:Combat/Dhuum Helper.py"
-
-[[legacy_id]]
-old = "Automation/Enhancements/Heroic Refrain.py"
-new = "widgets:Combat/Heroic Refrain.py"
-
-[[legacy_id]]
-old = "Automation/Enhancements/Pet Helper.py"
-new = "widgets:Heroes/Pet Helper.py"
-
-[[legacy_id]]
-old = "Automation/Enhancements/Survival Title Helper.py"
-new = "widgets:Upkeep/Survival Title Helper.py"
-
-[[legacy_id]]
-old = "Automation/Enhancements/Kamadan Trade Spammer.py"
-new = "widgets:Trade/Kamadan Trade Spammer.py"
-
-[[legacy_id]]
-old = "Automation/Helpers/EZ Cast.py"
-new = "widgets:Combat/EZ Cast.py"
-
-[[legacy_id]]
-old = "Automation/Helpers/Pycons.py"
-new = "widgets:Upkeep/Pycons.py"
-
-[[legacy_id]]
-old = "Automation/Helpers/Dialogs/Balthazar Skill Unlock.py"
-new = "widgets:Dialogs/Balthazar Skill Unlock.py"
-
-[[legacy_id]]
-old = "Automation/Helpers/Dialogs/CanthaDialogSender.py"
-new = "widgets:Dialogs/CanthaDialogSender.py"
-
-[[legacy_id]]
-old = "Automation/Helpers/Dialogs/NFDialogSender.py"
-new = "widgets:Dialogs/NFDialogSender.py"
-
-[[legacy_id]]
-old = "Automation/Helpers/Dialogs/Profession Unlocker.py"
-new = "widgets:Dialogs/Profession Unlocker.py"
-
-[[legacy_id]]
-old = "Automation/Helpers/Dialogs/Skill Trainer.py"
-new = "widgets:Dialogs/Skill Trainer.py"
-
-[[legacy_id]]
 old = "Automation/Helpers/Elite Skills/EliteSkillsCapture.py"
 new = "scripts:py4gw-tasks/EliteSkillsCapture.py"
-
-[[legacy_id]]
-old = "Guild Wars/Items & Loot/InventoryPlus.py"
-new = "widgets:Items/InventoryPlus.py"
-
-[[legacy_id]]
-old = "Guild Wars/Items & Loot/Xunlaimanager.py"
-new = "widgets:Items/Xunlaimanager.py"
-
-[[legacy_id]]
-old = "Guild Wars/item_eater.py"
-new = "widgets:Items/item_eater.py"
-
-[[legacy_id]]
-old = "Guild Wars/Layout Manager.py"
-new = "widgets:Client/Layout Manager.py"
 
 [[legacy_id]]
 old = "Guild Wars/Titles.py"
