@@ -74,15 +74,27 @@ def party_under_fire(
     state: EngagementState,
     cfg: EngagementConfig,
     party_health: dict[int, float],
+    enemies_present: bool,
 ) -> bool:
     """Health going down anywhere in the party. Catches ranged pressure, degen
-    and spirits, where nothing nearby ever reads as attacking."""
+    and spirits, where nothing nearby ever reads as attacking.
+
+    Requires an enemy to exist at all. Not every wound is an attack: a sacrifice
+    (Blood is Power, Blood Ritual) is a large instant self-inflicted drop, and it
+    was arming the engagement in an empty corridor — dropping a battle formation
+    on nothing and holding it there for the disengage window.
+
+    The baseline is refreshed either way. Skipping it while no enemy is around
+    would leave the pre-sacrifice reading in place, and the first enemy to wander
+    into scan range would be greeted by that whole accumulated drop at once.
+    """
     under_fire = False
-    for party_position, fraction in party_health.items():
-        previous = state.last_party_health.get(party_position)
-        if previous is not None and (previous - fraction) >= cfg.health_drop_fraction:
-            under_fire = True
-            break
+    if enemies_present:
+        for party_position, fraction in party_health.items():
+            previous = state.last_party_health.get(party_position)
+            if previous is not None and (previous - fraction) >= cfg.health_drop_fraction:
+                under_fire = True
+                break
     state.last_party_health = dict(party_health)
     return under_fire
 
@@ -112,10 +124,14 @@ def update_engagement(
     Asymmetric on purpose — being late to form up costs a second, while tearing
     the zone down early drops everyone back into follow mid-fight.
     """
+    # Evaluated before the chain, never inside it: `or` short-circuits, so on any
+    # tick something else answered True this would not run and the health
+    # baseline would go stale. The next quiet tick then reads one accumulated
+    # drop spanning the whole fight.
+    under_fire = party_under_fire(state, cfg, party_health, bool(enemy_ids))
+
     active_now = (
-        hostile_pressure(cfg, leader_xy, enemy_ids)
-        or party_under_fire(state, cfg, party_health)
-        or party_offensive(party_target_ids, enemy_ids)
+        hostile_pressure(cfg, leader_xy, enemy_ids) or under_fire or party_offensive(party_target_ids, enemy_ids)
     )
 
     if active_now:
