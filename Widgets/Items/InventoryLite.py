@@ -36,6 +36,7 @@ from Core.Py4GWcorelib import ConsoleLog
 from Core.Py4GWcorelib import Utils
 from Core.py4gwcorelib_src.Settings import Settings
 from Core.Routines import Routines
+from Core.UIManager import XunlaiStorageWindow
 from Sources.marks_sources.item_naming import NAME_CACHE
 from Sources.marks_sources.item_naming import fetch_base_name
 from Sources.marks_sources.item_naming import known_base_name
@@ -62,6 +63,7 @@ POLL_MS = 50
 DEPOSIT_REQUEST_TTL_MS = 300000
 STORAGE_OPEN_TIMEOUT_MS = 4000
 DEPOSIT_CONFIRM_TIMEOUT_MS = 2500
+MATERIAL_DEPOSIT_TIMEOUT_MS = 3000
 MAX_MOVES_PER_ITEM = 8
 
 #: Matched case-insensitively against agent names. Traders ("Rune Trader", "Material Trader") do not
@@ -1062,6 +1064,52 @@ def ensure_storage_open():
     return False
 
 
+def material_count_in_bags() -> int:
+    return sum(1 for item_id in live_bag_items() if GLOBAL_CACHE.Item.Type.IsMaterial(item_id))
+
+
+def deposit_all_materials():
+    """The client's own button, which sweeps every material out of the bags and ignores the Keep rules.
+
+    Nothing else here can reach the material panes: both MoveItem and DepositItemToStorage target
+    Storage1..14 only, so materials would otherwise land in ordinary storage slots.
+    """
+    before = material_count_in_bags()
+    if not before:
+        return
+    if not XunlaiStorageWindow.ClickDepositAllMaterials():
+        ConsoleLog(MODULE_NAME, "Could not reach the deposit-all-materials button.", Console.MessageType.Warning)
+        return
+
+    waited = 0
+    remaining = before
+    moving = False
+    while waited < MATERIAL_DEPOSIT_TIMEOUT_MS:
+        yield from Routines.Yield.wait(POLL_MS)
+        waited += POLL_MS
+        current = material_count_in_bags()
+        if current != remaining:
+            remaining = current
+            moving = True
+            continue
+        if moving:
+            break
+
+    if remaining < before:
+        ConsoleLog(
+            MODULE_NAME,
+            f"{before - remaining} of {before} material stack(s) left the bags.",
+            Console.MessageType.Success,
+        )
+        return
+    ConsoleLog(
+        MODULE_NAME,
+        f"Clicked deposit all materials, but none of the {before} stack(s) moved within "
+        f"{MATERIAL_DEPOSIT_TIMEOUT_MS} ms - the material panes may be full.",
+        Console.MessageType.Warning,
+    )
+
+
 def storage_deposit_target(model_id: int, quantity: int, stackable: bool, dye: int):
     """(bag_id, slot, amount) for this item's next move into storage, or None when storage is full."""
     first_empty = None
@@ -1467,8 +1515,8 @@ class InventoryLite:
         self.report_rows = rows
 
     def start_deposit(self):
-        if not [r for r in self.rules if r.enabled and r.action == "keep"]:
-            ConsoleLog(MODULE_NAME, "No Keep rule is enabled.", Console.MessageType.Info)
+        if not [r for r in self.rules if r.enabled and r.action == "keep"] and not material_count_in_bags():
+            ConsoleLog(MODULE_NAME, "No Keep rule is enabled and there are no materials.", Console.MessageType.Info)
             return
         self.run(self.deposit(), "Deposit")
 
@@ -1478,10 +1526,11 @@ class InventoryLite:
         self.report_title = "%d of %d item(s) matched" % (len(matched), len(facts_by_id))
         self.report_columns = PREVIEW_COLUMNS
         self.report_rows = rows
+        if not (yield from ensure_storage_open()):
+            return
+        yield from deposit_all_materials()
         if not matched:
             ConsoleLog(MODULE_NAME, "Nothing matches the deposit rules.", Console.MessageType.Info)
-            return
-        if not (yield from ensure_storage_open()):
             return
 
         deposited = 0
@@ -1571,7 +1620,9 @@ class InventoryLite:
         """Deposit, sell, then tidy both ends. Identical work whether asked for here or by a peer.
 
         Deposit runs first so the Keep rules have claimed everything they want before anything is
-        offered to a merchant, and organising runs last so it sorts what is actually left.
+        offered to a merchant, and organising runs last so it sorts what is actually left. Note that
+        the materials sweep inside deposit is the client's own button: it takes every material,
+        including any a Sell rule would have offered to the merchant.
         """
         yield from self.deposit()
         yield from self.merchant_run()
@@ -1703,7 +1754,12 @@ class InventoryLite:
                     "Sort and condense storage and the carry bags",
                     self.start_organize,
                 ),
-                (ICON_DEPOSIT, BUTTON_DEPOSIT, "Deposit everything the Keep rules claim", self.start_deposit),
+                (
+                    ICON_DEPOSIT,
+                    BUTTON_DEPOSIT,
+                    "Deposit all materials, then everything the Keep rules claim",
+                    self.start_deposit,
+                ),
                 (
                     ICON_MERCHANT,
                     BUTTON_MERCHANT,
