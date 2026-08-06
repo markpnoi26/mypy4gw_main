@@ -30,6 +30,7 @@ from Core.py4gwcorelib_src.WidgetManager import get_widget_handler
 from Core.GlobalCache.shared_memory_src.SharedMessageStruct import SharedMessageStruct
 from Core.GlobalCache.shared_memory_src.Globals import SHMEM_MAX_NUMBER_OF_SKILLS
 from Core.Item import has_active_party_summon, has_summoning_sickness
+from Core.py4gwcorelib_src.LiveClock import GetLiveTimestamp
 
 cached_data = CacheData()
 
@@ -54,6 +55,48 @@ PYCONS_WIDGET_NAME = "Pycons"
 _pcon_last_exec_ms_by_signature: dict[tuple[str, tuple[int, int, int, int]], int] = {}
 PCON_EXEC_DEDUP_MS = 500
 _pending_widget_enables: list[str] = []
+
+# GetNextMessage keeps returning a message until its handler marks it Running,
+# and that does not happen until the scheduler first runs the coroutine. Every
+# tick in that gap dispatched another copy. Handlers that snapshot HeroAI options
+# then interleave their push/pop pairs, so one pops a snapshot taken while already
+# disabled and HeroAI stays off until HealStaleHeroAISnapshot heals it — followers
+# stop attacking mid-fight, then recover.
+#
+# Suppressed here rather than by marking Running at dispatch: Running also decides
+# what GetNextMessage can see, so setting it early releases messages that handlers
+# deliberately park, and unparking a stale DisableHeroAI stops combat outright.
+dispatched_messages: dict[int, tuple[tuple, int]] = {}
+DISPATCH_DEDUP_MS = 500
+
+
+def dispatch_signature(message: SharedMessageStruct) -> tuple:
+    """Identify a message by content, the same way SendMessage dedups it.
+
+    Command and sender alone are not enough: ReportCombatLine repeats both at high
+    rate with a different payload every time, and suppressing on that would drop
+    real combat lines whenever they reused an inbox slot.
+    """
+    return (
+        int(message.Command),
+        str(message.SenderEmail),
+        tuple(float(message.Params[i]) for i in range(4)),
+        _extra_data(message),
+    )
+
+
+def already_dispatched(index: int, message: SharedMessageStruct) -> bool:
+    now_ms = int(Utils.GetLiveTimestamp())
+    signature = dispatch_signature(message)
+
+    previous = dispatched_messages.get(index)
+    if previous is not None:
+        last_signature, last_ms = previous
+        if last_signature == signature and now_ms - last_ms < DISPATCH_DEDUP_MS:
+            return True
+
+    dispatched_messages[index] = (signature, now_ms)
+    return False
 
 _MESSAGE_TYPE_OPTIONS = tuple(command for command in SharedCommandType if command is not SharedCommandType.NoCommand)
 _message_recipient_index = 0
@@ -224,7 +267,7 @@ def _record_message_history(
     _message_history.append(
         MessageHistoryEntry(
             sequence=_message_history_sequence,
-            timestamp=int(PySystem.get_tick_count64()),
+            timestamp=int(GetLiveTimestamp()),
             sender=str(sender or ""),
             receiver=str(receiver or ""),
             command=_message_type_name(command),
@@ -300,7 +343,7 @@ def _message_age_text(message: SharedMessageStruct) -> str:
         timestamp = int(message.Timestamp)
         if timestamp <= 0:
             return "—"
-        age_ms = max(0, int(PySystem.get_tick_count64()) - timestamp)
+        age_ms = max(0, int(GetLiveTimestamp()) - timestamp)
         if age_ms < 1000:
             return f"{age_ms}ms"
         if age_ms < 60_000:
@@ -529,7 +572,7 @@ def _draw_selected_message(messages: list[tuple[int, SharedMessageStruct]]) -> N
 
 
 def _history_age_text(entry: MessageHistoryEntry) -> str:
-    age_ms = max(0, int(PySystem.get_tick_count64()) - entry.timestamp)
+    age_ms = max(0, int(GetLiveTimestamp()) - entry.timestamp)
     if age_ms < 1000:
         return f"{age_ms}ms"
     if age_ms < 60_000:
@@ -3406,6 +3449,9 @@ def ProcessMessages():
     if index == -1 or message is None:
         return
 
+    if already_dispatched(index, message):
+        return
+
     _record_received_message(message)
 
     match message.Command:
@@ -3554,11 +3600,13 @@ def ProcessMessages():
 # endregion
 
 
-def main():
+def update():
+    """Receives shared-memory commands from the leader.
+
+    On the update loop so a minimised client still obeys them - none of this
+    draws, and leaving it on the draw loop made a minimised follower silently
+    ignore everything sent to it.
+    """
     HealStaleHeroAISnapshot(Player.GetAccountEmail())
     _process_pending_widget_enables()
     ProcessMessages()
-
-
-if __name__ == "__main__":
-    main()

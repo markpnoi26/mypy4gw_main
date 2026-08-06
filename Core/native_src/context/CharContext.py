@@ -255,12 +255,22 @@ class CharContext:
             priority=2,
             context=PyCallback.Context.Draw,
         )
+        # Draw alone freezes this cache on a minimised client, pinning every read to
+        # whatever it held when the draw loop stopped. Refresh is idempotent.
+        PyCallback.PyCallback.Register(
+            CharContext._callback_name + ".Update",
+            PyCallback.Phase.PreUpdate,
+            CharContext._update_ptr,
+            priority=2,
+            context=PyCallback.Context.Update,
+        )
 
     @staticmethod
     def disable():
         import PyCallback
 
         PyCallback.PyCallback.RemoveByName(CharContext._callback_name)
+        PyCallback.PyCallback.RemoveByName(CharContext._callback_name + ".Update")
         CharContext._ptr = 0
         CharContext._cached_ctx = None
 

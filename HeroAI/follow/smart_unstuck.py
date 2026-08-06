@@ -259,7 +259,9 @@ def reload_smart_unstuck_config_from_ini(force_reload: bool = False) -> None:
 
 
 def _now_ms() -> int:
-    return int(PySystem.get_tick_count64())
+    # Live tick: stuck detection is elapsed-time based, and the per-frame cache
+    # freezes on a minimised client, so nothing would ever register as stuck.
+    return Utils.GetLiveTimestamp()
 
 
 def _log(message: str) -> None:

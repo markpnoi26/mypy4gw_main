@@ -26,6 +26,7 @@ from .KeyStruct import KeyStruct
 from .AgentPartyStruct import AgentPartyStruct
 from .AgentDataStruct import AgentDataStruct
 from .InventoryBagsStruct import InventoryBagsStruct
+from Core.py4gwcorelib_src.LiveClock import GetLiveTimestamp
 
 _player_meta_timers: dict[int, ThrottledTimer] = {}
 _player_progress_timers: dict[int, ThrottledTimer] = {}
@@ -274,7 +275,7 @@ class AccountStruct(Structure):
                     account_in_aggro = bool(account.InAggro)
                     if account_in_aggro:
                         party_in_aggro = True
-                now = PySystem.get_tick_count64()
+                now = GetLiveTimestamp()
                 stay_alert = self.InAggroTick64 > 0 and now - self.InAggroTick64 < IN_AGGRO_STAY_ALERT_TIME
                 try:
                     from HeroAI.settings import Settings
@@ -304,7 +305,7 @@ class AccountStruct(Structure):
                     self.InAggroTick64 = 0
             except Exception:
                 self.InAggro = bool(Checks.Agents.InAggro(Range.Earshot.value))
-                self.InAggroTick64 = PySystem.get_tick_count64() if self.InAggro else 0
+                self.InAggroTick64 = GetLiveTimestamp() if self.InAggro else 0
 
         meta_timer = _get_slot_timer(_player_meta_timers, slot_index, SHMEM_PLAYER_META_UPDATE_THROTTLE_MS)
         if force_full or meta_timer.IsExpired():
@@ -373,7 +374,7 @@ class AccountStruct(Structure):
             _update_inventory_bags()
             inventory_timer.Reset()
 
-        self.LastUpdated = PySystem.get_tick_count64()
+        self.LastUpdated = GetLiveTimestamp()
 
     def from_hero_context(self, hero_data: HeroPartyMember, slot_index: int) -> None:
         """Load hero data for one shared-memory slot."""
@@ -404,7 +405,7 @@ class AccountStruct(Structure):
         # - _is_slot_active doesn't treat this slot as expired (LastUpdated=0),
         #   preventing GetEmptySlot from recycling it before the map finishes loading.
         self.AgentData.HeroID = hero_data.hero_id
-        self.LastUpdated = PySystem.get_tick_count64()
+        self.LastUpdated = GetLiveTimestamp()
 
         if Map.IsMapLoading():
             return
@@ -501,7 +502,7 @@ class AccountStruct(Structure):
                     self.UnlockedSkills.reset()
                 _hero_static_stage[slot_index] = (static_stage + 1) % 3
             static_timer.Reset()
-        self.LastUpdated = PySystem.get_tick_count64()
+        self.LastUpdated = GetLiveTimestamp()
 
     def from_pet_context(self, pet_data: PetInfo, slot_index: int) -> None:
         """Load pet data for one shared-memory slot."""
@@ -622,4 +623,4 @@ class AccountStruct(Structure):
                     self.UnlockedSkills.reset()
                 _pet_static_stage[slot_index] = (static_stage + 1) % 3
             static_timer.Reset()
-        self.LastUpdated = PySystem.get_tick_count64()
+        self.LastUpdated = GetLiveTimestamp()

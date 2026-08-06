@@ -107,7 +107,9 @@ _LOG_PREFIX = "HeroAI.interrupt"
 
 
 def _now_ms() -> int:
-    return int(PySystem.get_tick_count64())
+    # Live tick, not the per-frame cache: interrupting is pure elapsed-time maths,
+    # and a minimised client would read every enemy cast as having just started.
+    return Utils.GetLiveTimestamp()
 
 
 def _log(message: str, level: str = "Debug") -> None:

@@ -159,8 +159,14 @@ class HeroAIBTEngine(BldMgrBT):
         from Core import Profession
 
         primary_value, secondary_value = Agent.GetProfessions(Player.GetAgentID())
-        current_primary = Profession(primary_value)
-        current_secondary = Profession(secondary_value)
+        try:
+            current_primary = Profession(primary_value)
+            current_secondary = Profession(secondary_value)
+        except ValueError:
+            # The living struct reads as garbage while an instance is still settling
+            # — seen minimised through a map load. Keep the last contract rather than
+            # letting one bad sample abort the whole tree tick.
+            return self.contract_build
         current_skills = self.get_current_skills()
 
         resolved = self

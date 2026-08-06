@@ -7,6 +7,7 @@ from functools import lru_cache
 from Core.enums_src.GameData_enums import Profession
 
 from ..py4gwcorelib_src.FrameCache import frame_cache
+from Core.py4gwcorelib_src.LiveClock import GetLiveTimestamp
 
 
 class HexRemovalPriority(IntEnum):
@@ -746,7 +747,7 @@ def should_log_detection(agent_id: int, hex_skill_id: int) -> bool:
     try:
         import PySystem
 
-        now = int(PySystem.get_tick_count64())
+        now = int(GetLiveTimestamp())
     except Exception:
         return False
     key = (int(agent_id), int(hex_skill_id))

@@ -45,12 +45,22 @@ class Cinematic:
             priority=99,
             context=PyCallback.Context.Draw,
         )
+        # Draw alone freezes this cache on a minimised client, pinning every read to
+        # whatever it held when the draw loop stopped. Refresh is idempotent.
+        PyCallback.PyCallback.Register(
+            Cinematic._callback_name + ".Update",
+            PyCallback.Phase.PreUpdate,
+            Cinematic._update_ptr,
+            priority=99,
+            context=PyCallback.Context.Update,
+        )
 
     @staticmethod
     def disable():
         import PyCallback
 
         PyCallback.PyCallback.RemoveByName(Cinematic._callback_name)
+        PyCallback.PyCallback.RemoveByName(Cinematic._callback_name + ".Update")
         Cinematic._ptr = 0
         Cinematic._cached_ctx = None
 

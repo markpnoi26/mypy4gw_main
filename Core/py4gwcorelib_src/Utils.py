@@ -7,12 +7,47 @@ import PyImGui
 import re
 
 from .Color import Color
+from .LiveClock import GetLiveTimestamp
 from datetime import datetime, timezone
 from ..enums import CAP_EXPERIENCE, CAP_STEP, EXPERIENCE_PROGRESSION
 
 
 class Utils:
     from typing import Tuple
+
+    @staticmethod
+    def GetLiveTimestamp() -> int:
+        """Milliseconds since Windows booted; see LiveClock.GetLiveTimestamp."""
+        return GetLiveTimestamp()
+
+    @staticmethod
+    def IsWindowMinimized() -> bool:
+        import PySystem
+
+        try:
+            return bool(PySystem.window.is_window_minimized())
+        except Exception:
+            return False
+
+    @staticmethod
+    def IsDrawLoopStalled(threshold_ms: int = 500) -> bool:
+        """Whether GW has stopped presenting frames.
+
+        Widgets that split work across update() and draw() use this to keep exactly
+        one loop driving that work — running both races their shared state.
+
+        Asks the real question rather than 'is it minimized'. get_tick_count64 is
+        stamped once per rendered frame from the same boot clock GetLiveTimestamp
+        reads live, so their difference *is* the age of the last frame. That covers
+        minimized, hidden, occluded and device-lost alike, where IsIconic only
+        catches the first.
+        """
+        import PySystem
+
+        try:
+            return (GetLiveTimestamp() - int(PySystem.get_tick_count64())) > threshold_ms
+        except Exception:
+            return False
 
     @staticmethod
     def HasFlag(flags: int, flag: int) -> bool:

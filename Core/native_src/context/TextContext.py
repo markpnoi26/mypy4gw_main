@@ -171,12 +171,22 @@ class TextParser:
             priority=99,
             context=PyCallback.Context.Draw,
         )
+        # Draw alone freezes this cache on a minimised client, pinning every read to
+        # whatever it held when the draw loop stopped. Refresh is idempotent.
+        PyCallback.PyCallback.Register(
+            TextParser._callback_name + ".Update",
+            PyCallback.Phase.PreUpdate,
+            TextParser._update_ptr,
+            priority=99,
+            context=PyCallback.Context.Update,
+        )
 
     @staticmethod
     def disable():
         import PyCallback
 
         PyCallback.PyCallback.RemoveByName(TextParser._callback_name)
+        PyCallback.PyCallback.RemoveByName(TextParser._callback_name + ".Update")
         TextParser._ptr = 0
         TextParser._cached_ctx = None
 

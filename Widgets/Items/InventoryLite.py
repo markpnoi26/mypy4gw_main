@@ -17,6 +17,8 @@ import PySystem
 
 from Core import ImGui
 from Core.Agent import Agent
+from Core.py4gwcorelib_src.LiveClock import GetLiveTimestamp
+from Core.py4gwcorelib_src.Utils import Utils
 from Core.AgentArray import AgentArray
 from Core.enums_src.Item_enums import INVENTORY_BAGS
 from Core.enums_src.Item_enums import STORAGE_BAGS
@@ -2075,7 +2077,7 @@ def reap_stale_deposit_requests():
     a request sent to a client with this widget switched off would hold a slot for everyone, forever.
     Running requests are left alone: those have an owner working through them.
     """
-    now = PySystem.get_tick_count64()
+    now = GetLiveTimestamp()
     for index, message in GLOBAL_CACHE.ShMem.GetAllMessages():
         if message is None or not getattr(message, "Active", False) or getattr(message, "Running", False):
             continue
@@ -2135,18 +2137,41 @@ def configure():
     widget.show_config = True
 
 
-def main():
+def ensure_initialized() -> bool:
     if not widget.initialized:
         if not widget.load_settings():
-            return
+            return False
         widget.initialized = True
+    return True
+
+
+def tick_logic():
+    """Salvage/identify pumping and the cross-account deposit claim.
+
+    A minimised client has to keep doing this or it never auto-identifies and never
+    claims a DepositAndOrganize broadcast - the sender eventually reaps the request
+    and blames it on Inventory Lite being disabled. Driven from exactly one loop at
+    a time, so the panel never reads state this is halfway through writing.
+    """
+    if not ensure_initialized():
+        return
 
     widget.pump()
     widget.poll_full_pass_requests()
     widget.tick_auto_identify()
+
+
+def update():
+    if Utils.IsDrawLoopStalled():
+        tick_logic()
+
+
+def draw():
+    if not Utils.IsDrawLoopStalled():
+        tick_logic()
+
+    if not widget.initialized:
+        return
+
     widget.draw_buttons()
     widget.draw_config()
-
-
-if __name__ == "__main__":
-    main()

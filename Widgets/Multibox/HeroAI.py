@@ -34,7 +34,7 @@ from HeroAI.windows import (
 from HeroAI.ui_base import HeroAI_BaseUI
 from HeroAI.ui import draw_configure_window, draw_skip_cutscene_overlay
 from HeroAI import team_viewer_broadcast
-from Core import GLOBAL_CACHE, Agent, Range, Routines, ThrottledTimer, SharedCommandType
+from Core import GLOBAL_CACHE, Agent, Range, Routines, ThrottledTimer, SharedCommandType, Utils
 
 # region GLOBALS
 LOOT_THROTTLE_CHECK = ThrottledTimer(250)
@@ -207,7 +207,10 @@ def Follow(cached_data: CacheData) -> BehaviorTree.NodeState:
 
 def handle_UI(cached_data: CacheData):
     global HeroAI_BT
-    team_viewer_broadcast.tick()
+    # Flag placement reads live mouse state, so it has to stay on the draw loop.
+    # It is leader-only and self-gates, so followers pay nothing for it here.
+    if Routines.Checks.Map.MapValid():
+        HeroAI_BaseUI._process_flagging_runtime(cached_data)
     if not cached_data.ui_state_data.show_classic_controls:
         HeroAI_BaseUI.DrawEmbeddedWindow(cached_data)
     else:
@@ -244,7 +247,6 @@ def initialize(cached_data: CacheData) -> bool:
     if Map.IsInCinematic():  # halt operation during cinematic
         return False
 
-    HeroAI_BaseUI._process_flagging_runtime(cached_data)
     # HeroAI_FloatingWindows.draw_Targeting_floating_buttons(cached_data)
     heroai_build.set_cached_data(cached_data)
     map_signature = (
@@ -487,44 +489,167 @@ def tooltip():
     PyImGui.end_tooltip()
 
 
-modulo = 0
+# The update loop runs at ~100 Hz; the tree used to tick every other draw frame.
+# This keeps roughly the old cadence, and matches what follower steering wants
+# during a detour.
+TREE_TICK_INTERVAL_MS = 33
+
+tree_timer = ThrottledTimer(TREE_TICK_INTERVAL_MS)
 
 
-def main():
-    global cached_data, map_quads, modulo
+def report_error(kind: str, error: Exception):
+    PySystem.Console.Log(MODULE_NAME, f"{kind} encountered: {str(error)}", PySystem.Console.MessageType.Error)
+    PySystem.Console.Log(MODULE_NAME, f"Stack trace: {traceback.format_exc()}", PySystem.Console.MessageType.Error)
+
+
+def tick_logic():
+    """Everything that is not drawing.
+
+    Driven from exactly one loop at a time - see update()/draw(). Never both:
+    cached_data, map_quads and the tree are shared mutable state, and letting the
+    draw loop read them while this writes tore them apart on map transitions.
+    """
+    global cached_data, map_quads
+
+    if not tree_timer.IsExpired():
+        return
+    tree_timer.Reset()
 
     try:
         cached_data.Update()
 
+        log_aggro_probe()
+
         EnsureFollowModuleIni()
         HeroAI_FloatingWindows.update()
-        handle_UI(cached_data)
+        team_viewer_broadcast.tick()
         resurrection_scroll.tick()
 
         if initialize(cached_data):
-            modulo += 1
-            if modulo >= 2:
-                modulo = 0
-                HeroAI_BT.tick()
+            HeroAI_BT.tick()
         else:
             map_quads.clear()
             HeroAI_BT.reset()
 
     except ImportError as e:
-        PySystem.Console.Log(MODULE_NAME, f"ImportError encountered: {str(e)}", PySystem.Console.MessageType.Error)
-        PySystem.Console.Log(MODULE_NAME, f"Stack trace: {traceback.format_exc()}", PySystem.Console.MessageType.Error)
+        report_error("ImportError", e)
     except ValueError as e:
-        PySystem.Console.Log(MODULE_NAME, f"ValueError encountered: {str(e)}", PySystem.Console.MessageType.Error)
-        PySystem.Console.Log(MODULE_NAME, f"Stack trace: {traceback.format_exc()}", PySystem.Console.MessageType.Error)
+        report_error("ValueError", e)
     except TypeError as e:
-        PySystem.Console.Log(MODULE_NAME, f"TypeError encountered: {str(e)}", PySystem.Console.MessageType.Error)
-        PySystem.Console.Log(MODULE_NAME, f"Stack trace: {traceback.format_exc()}", PySystem.Console.MessageType.Error)
+        report_error("TypeError", e)
     except Exception as e:
-        # Catch-all for any other unexpected exceptions
-        PySystem.Console.Log(MODULE_NAME, f"Unexpected error encountered: {str(e)}", PySystem.Console.MessageType.Error)
-        PySystem.Console.Log(MODULE_NAME, f"Stack trace: {traceback.format_exc()}", PySystem.Console.MessageType.Error)
-    finally:
-        pass
+        report_error("Unexpected error", e)
+
+
+AGGRO_PROBE_ENABLED = True
+AGGRO_PROBE_MAX_LINES = 50
+
+# MC = minimised combat. Account scope, so every client writes its own file and a
+# minimised follower can be read without restoring its window. JsonFactory rather
+# than a raw file because all disk access goes through the persistence jail.
+MC_DOCUMENT = "MC.json"
+
+aggro_probe_timer = ThrottledTimer(1000)
+aggro_probe_lines = 0
+mc_lines: list[str] = []
+mc_path_announced = False
+
+
+def record_mc_line(line: str) -> None:
+    global mc_path_announced
+
+    import PySystem
+    from Core.py4gwcorelib_src.JsonFactory import JsonFactory
+
+    mc_lines.append(line)
+    if len(mc_lines) > AGGRO_PROBE_MAX_LINES:
+        del mc_lines[0 : len(mc_lines) - AGGRO_PROBE_MAX_LINES]
+
+    document = JsonFactory(MC_DOCUMENT)
+    document.set_json("lines", list(mc_lines))
+    document.save()
+
+    if not mc_path_announced:
+        mc_path_announced = True
+        PySystem.Console.Log("MC", "writing to %s" % document.resolved_path(), PySystem.Console.MessageType.Info)
+
+
+def log_aggro_probe() -> None:
+    """TEMPORARY. Reports which gate is holding the combat branch shut.
+
+    Logs only while in aggro, capped per engagement — a follower that heals but
+    never attacks has failed one of these gates, and the interesting window is the
+    fight itself. The counter resets when combat ends, so each fight gets a fresh
+    budget instead of one long fight burning it for the session.
+    """
+    global aggro_probe_lines
+
+    if not AGGRO_PROBE_ENABLED or not aggro_probe_timer.IsExpired():
+        return
+    aggro_probe_timer.Reset()
+
+    # MC only: minimised AND in combat. A visible client records nothing.
+    if not (Utils.IsDrawLoopStalled() and cached_data.data.in_aggro):
+        aggro_probe_lines = 0
+        return
+    if aggro_probe_lines >= AGGRO_PROBE_MAX_LINES:
+        return
+    aggro_probe_lines += 1
+
+    import PySystem
+
+    try:
+        import time
+
+        from Core.AgentArray import AgentArray
+        from Core import ActionQueueManager
+
+        data = cached_data.data
+        enemies = AgentArray.GetEnemyArray()
+        me = Player.GetAgentID()
+        target = Player.GetTargetID()
+        queue = ActionQueueManager()
+
+        line = (
+            "%s pos=%d enemies=%d effective=%d | target=%d attacking=%d casting=%d moving=%d idle=%d"
+            " | weapon=%d holding=%d qACTION=%s next=%s"
+            % (
+                time.strftime("%H:%M:%S"),
+                int(data.party_position),
+                len(enemies or []),
+                int(bool(data.in_aggro)),
+                int(target or 0),
+                int(bool(Agent.IsAttacking(me))),
+                int(bool(Agent.IsCasting(me))),
+                int(bool(Agent.IsMoving(me))),
+                int(bool(Agent.IsIdle(me))),
+                int(data.weapon_type or 0),
+                int(bool(Agent.IsHoldingItem(me))),
+                "empty" if queue.IsEmpty("ACTION") else "BUSY",
+                queue.GetNextActionName("ACTION") or "-",
+            )
+        )
+
+        PySystem.Console.Log("MC", line, PySystem.Console.MessageType.Info)
+        record_mc_line(line)
+    except Exception as error:
+        PySystem.Console.Log("MC", "probe failed: %s" % error, PySystem.Console.MessageType.Warning)
+
+
+def update():
+    # Only while minimised. A visible client has a live draw loop and drives the
+    # same work from there, so exactly one thread ever touches the shared state.
+    if Utils.IsDrawLoopStalled():
+        tick_logic()
+
+
+def draw():
+    if not Utils.IsDrawLoopStalled():
+        tick_logic()
+    try:
+        handle_UI(cached_data)
+    except Exception as e:
+        report_error("Unexpected error", e)
 
 
 def minimal():
@@ -536,4 +661,4 @@ def on_enable():
     HeroAI_FloatingWindows.SETTINGS_THROTTLE.SetThrottleTime(50)
 
 
-__all__ = ['main', 'configure', 'on_enable']
+__all__ = ['update', 'draw', 'configure', 'on_enable']

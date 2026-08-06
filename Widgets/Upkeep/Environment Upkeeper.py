@@ -93,10 +93,24 @@ def tooltip():
     PyImGui.end_tooltip()
 
 
-def main():
+# The update loop runs faster than the draw loop did; this keeps the cache
+# refresh and coroutine drain at roughly their previous cadence.
+PUMP_INTERVAL_MS = 16
+
+pump_timer = ThrottledTimer(PUMP_INTERVAL_MS)
+
+
+def pump():
+    """Drains every ActionQueue and the coroutine list.
+
+    HeroAI's moves, casts and looting depend on this, so a minimised client has to
+    keep doing it. Driven from exactly one loop at a time - see update()/draw().
+    """
     global widget_config
 
-    HOTKEY_MANAGER.update()
+    if not pump_timer.IsExpired():
+        return
+    pump_timer.Reset()
 
     if Routines.Checks.Map.MapValid():
         GLOBAL_CACHE._update_cache()
@@ -148,8 +162,19 @@ def main():
         widget_config.action_queue_manager.ProcessQueue("FAST")
         widget_config.throttle_fast_queue.Reset()
 
+
+def update():
+    if Utils.IsDrawLoopStalled():
+        pump()
+
+
+def draw():
+    global widget_config
+
+    if not Utils.IsDrawLoopStalled():
+        pump()
+
+    # Both need a live frame: hotkeys read current input state, texture upkeep
+    # needs the device.
+    HOTKEY_MANAGER.update()
     widget_config.overlay.UpkeepTextures()
-
-
-if __name__ == "__main__":
-    main()

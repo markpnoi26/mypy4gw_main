@@ -1292,12 +1292,22 @@ class WorldContext:
         PyCallback.PyCallback.Register(
             WorldContext._callback_name, PyCallback.Phase.PreUpdate, WorldContext._update_ptr, priority=4
         )
+        # Register defaults to Context.Draw, which freezes this cache on a minimised
+        # client, pinning every read to whatever it held when the draw loop stopped.
+        PyCallback.PyCallback.Register(
+            WorldContext._callback_name + ".Update",
+            PyCallback.Phase.PreUpdate,
+            WorldContext._update_ptr,
+            priority=4,
+            context=PyCallback.Context.Update,
+        )
 
     @staticmethod
     def disable():
         import PyCallback
 
         PyCallback.PyCallback.RemoveByName(WorldContext._callback_name)
+        PyCallback.PyCallback.RemoveByName(WorldContext._callback_name + ".Update")
         WorldContext._ptr = 0
         WorldContext._cached_ctx = None
 

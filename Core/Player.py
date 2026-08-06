@@ -1,3 +1,4 @@
+import PyGameThread
 import PyPlayer
 import PySystem
 
@@ -717,7 +718,7 @@ class Player:
         """
 
         def _do_action():
-            Player.player_instance().ChangeTarget(agent_id)
+            PyGameThread.enqueue(lambda: Player.player_instance().ChangeTarget(agent_id))
 
         # ActionQueueManager().AddAction("ACTION",PlayerMethods.ChangeTarget,agent_id)
         ActionQueueManager().AddAction("ACTION", _do_action)
@@ -734,7 +735,7 @@ class Player:
         """
 
         def _do_action():
-            Player.player_instance().CallTarget(agent_id)
+            PyGameThread.enqueue(lambda: Player.player_instance().CallTarget(agent_id))
 
         ActionQueueManager().AddAction("ACTION", _do_action)
 
@@ -749,7 +750,7 @@ class Player:
         """
 
         def _do_action():
-            Player.player_instance().InteractAgent(agent_id, call_target)
+            PyGameThread.enqueue(lambda: Player.player_instance().InteractAgent(agent_id, call_target))
 
         ActionQueueManager().AddAction("ACTION", _do_action)
 
@@ -763,7 +764,7 @@ class Player:
         """
 
         def _do_action():
-            Player.player_instance().CallTarget(agent_id)
+            PyGameThread.enqueue(lambda: Player.player_instance().CallTarget(agent_id))
 
         ActionQueueManager().AddAction("ACTION", _do_action)
 
@@ -914,7 +915,10 @@ class Player:
         Args: None
         Returns: None
         """
-        ActionQueueManager().AddAction("ACTION", Player.player_instance().RequestChatHistory)
+        def _do_action():
+            PyGameThread.enqueue(Player.player_instance().RequestChatHistory)
+
+        ActionQueueManager().AddAction("ACTION", _do_action)
 
     @staticmethod
     def IsChatHistoryReady():
@@ -951,7 +955,12 @@ class Player:
             command (str): The command to send.
         Returns: None
         """
-        ActionQueueManager().AddAction("ACTION", Player.player_instance().SendChatCommand, command)
+        # PlayerMethods, not the raw PyPlayer binding: it enqueues onto GW's game
+        # thread. The raw call reached GW directly from whichever thread drained the
+        # queue, which stopped working once that became our own update thread.
+        from .native_src.methods.PlayerMethods import PlayerMethods
+
+        ActionQueueManager().AddAction("ACTION", PlayerMethods.SendChatCommand, command)
 
     @staticmethod
     def SendChat(channel, message):
@@ -962,7 +971,9 @@ class Player:
             message (str): The message to send.
         Returns: None
         """
-        ActionQueueManager().AddAction("ACTION", Player.player_instance().SendChat, channel, message)
+        from .native_src.methods.PlayerMethods import PlayerMethods
+
+        ActionQueueManager().AddAction("ACTION", PlayerMethods.SendChat, channel, message)
 
     @staticmethod
     def SendWhisper(target_name, message):
@@ -973,7 +984,10 @@ class Player:
             message (str): The message to send.
         Returns: None
         """
-        ActionQueueManager().AddAction("ACTION", Player.player_instance().SendWhisper, target_name, message)
+        def _do_action():
+            PyGameThread.enqueue(lambda: Player.player_instance().SendWhisper(target_name, message))
+
+        ActionQueueManager().AddAction("ACTION", _do_action)
 
     @staticmethod
     def SendFakeChat(channel: ChatChannel, message):
@@ -984,7 +998,10 @@ class Player:
             message (str): The message to send.
         Returns: None
         """
-        ActionQueueManager().AddAction("ACTION", Player.player_instance().SendFakeChat, channel.value, message)
+        def _do_action():
+            PyGameThread.enqueue(lambda: Player.player_instance().SendFakeChat(channel.value, message))
+
+        ActionQueueManager().AddAction("ACTION", _do_action)
 
     @staticmethod
     def SendFakeChatColored(channel: ChatChannel, message, r, g, b):
@@ -999,9 +1016,11 @@ class Player:
         Returns: None
         """
         colored_msg = Player.FormatChatMessage(message, r, g, b)
-        ActionQueueManager().AddAction(
-            "ACTION", Player.player_instance().SendFakeChat, channel.value, colored_msg, r, g, b
-        )
+
+        def _do_action():
+            PyGameThread.enqueue(lambda: Player.player_instance().SendFakeChat(channel.value, colored_msg, r, g, b))
+
+        ActionQueueManager().AddAction("ACTION", _do_action)
 
     @staticmethod
     def FormatChatMessage(message, r, g, b):

@@ -43,6 +43,11 @@ from .shared_memory_src.AccountStruct import AccountStruct
 from .shared_memory_src.AllAccounts import AllAccounts
 from HeroAI.follow.leader_publish import FollowFormationPublisher
 from ..py4gwcorelib_src.FrameCache import frame_cache
+from Core.py4gwcorelib_src.LiveClock import GetLiveTimestamp
+
+# Keepalive cadence for the mirror republish below. Comfortably under
+# SHMEM_SUBSCRIBE_TIMEOUT_MILLISECONDS, and no faster than a draw loop would run.
+MIRROR_REPUBLISH_INTERVAL_MS = 33
 
 
 # region SharedMemoryManager
@@ -69,6 +74,7 @@ class Py4GWSharedMemoryManager:
         self._attach()
 
         self._intent_sweep_timer = ThrottledTimer(SHMEM_INTENT_SWEEP_INTERVAL_MS)
+        self._mirror_republish_timer = ThrottledTimer(MIRROR_REPUBLISH_INTERVAL_MS)
         self._initialized = True
 
     def _attach(self) -> bool:
@@ -97,7 +103,9 @@ class Py4GWSharedMemoryManager:
 
     # Base Methods
     def GetBaseTimestamp(self):
-        return PySystem.get_tick_count64()
+        # Same epoch as PySystem.get_tick_count64 (ms since boot) but read live, so
+        # heartbeats and intent leases keep moving while a client is minimised.
+        return Utils.GetLiveTimestamp()
 
     @frame_cache(category="SharedMemory", source_lib="GetAllAccounts")
     def GetAllAccounts(self) -> AllAccounts:
@@ -630,12 +638,75 @@ class Py4GWSharedMemoryManager:
         self.PublishFormationFollowPoints()
         if self._intent_sweep_timer.IsExpired():
             self._intent_sweep_timer.Reset()
-            now = PySystem.get_tick_count64()
+            now = GetLiveTimestamp()
             # Inline sweep; the ThrottledTimer above already rate-limits
             # and iterating 64 slots is cheap. Bypasses the WHITEBOARD_SWEEP
             # ActionQueue since no code in this repo drains named queues
             # automatically, which would dead-letter the sweep.
             self.SweepExpiredIntents(now)
+
+    def mirror_republish_callback(self):
+        """Keep this client's own AccountData mirror alive while it is minimised.
+
+        The C++ multibox module writes the mirror from DrawLoop, so a minimised
+        client stops stamping LastUpdated and its slot expires after
+        SHMEM_SUBSCRIBE_TIMEOUT_MILLISECONDS. Everything keyed off the active-slot
+        list then drops it: the HeroAI tab row and its options disappear, its last
+        published position goes stale so it flags far away, and party aggro
+        aggregation stops counting it, which is why it casts out of combat but not
+        in it.
+
+        No race with the C++ writer: that writes only when frames arrive, which is
+        exactly when this does not run.
+        """
+        if not Utils.IsDrawLoopStalled():
+            return
+
+        # The singleton survives a module reload with _initialized already True, so
+        # __init__ never reruns and an instance built before this existed would have
+        # no timer at all.
+        timer = getattr(self, "_mirror_republish_timer", None)
+        if timer is None:
+            timer = ThrottledTimer(MIRROR_REPUBLISH_INTERVAL_MS)
+            self._mirror_republish_timer = timer
+
+        if not timer.IsExpired():
+            return
+        timer.Reset()
+
+        account_email = Player.GetAccountEmail()
+        if not account_email:
+            return
+
+        # InAggro has exactly one owner: HeroAI's cache_data, via SetInAggroByEmail.
+        # from_context still carries a pre-C++-migration copy of that computation and
+        # overwrites it on its own staged cycle, which drops party_in_aggro party-wide
+        # and leaves followers running only their out-of-combat branch. Republishing
+        # must not resurrect that second writer.
+        preserved = self.GetInAggroState(account_email)
+
+        self.SetPlayerData(account_email)
+        self.SetHeroesData()
+        self.SetPetData()
+
+        if preserved is not None:
+            self.RestoreInAggroState(account_email, preserved)
+
+    def GetInAggroState(self, account_email: str) -> tuple[bool, int] | None:
+        accounts = self.GetAllAccounts()
+        index = accounts._find_account_slot_by_email(account_email)
+        if index == -1:
+            return None
+        account = accounts.AccountData[index]
+        return bool(account.InAggro), int(account.InAggroTick64)
+
+    def RestoreInAggroState(self, account_email: str, state: tuple[bool, int]) -> None:
+        accounts = self.GetAllAccounts()
+        index = accounts._find_account_slot_by_email(account_email)
+        if index == -1:
+            return
+        account = accounts.AccountData[index]
+        account.InAggro, account.InAggroTick64 = state
 
     @staticmethod
     def enable():
@@ -656,10 +727,24 @@ class Py4GWSharedMemoryManager:
             else:
                 _update()
 
+        # Must stay on Draw. The C++ multibox module writes the AccountData mirror
+        # from DrawLoop, so running this here is what serialises Python's writes to
+        # HeroAIOptions against it. Moving it to Update raced the C++ writer and
+        # faulted the client on map transitions, when those slots are reset.
+        # Publishing is leader-only and the leader is never the minimised client.
         PyCallback.PyCallback.Register(
             Callback_name, PyCallback.Phase.Data, _profiled_update, priority=99, context=PyCallback.Context.Draw
         )
         ProfilingRegistry().register(Callback_name)
+
+        mirror_callback_name = "SharedMemory.MirrorRepublish"
+        PyCallback.PyCallback.Register(
+            mirror_callback_name,
+            PyCallback.Phase.Data,
+            Py4GWSharedMemoryManager().mirror_republish_callback,
+            priority=99,
+            context=PyCallback.Context.Update,
+        )
 
 
 Py4GWSharedMemoryManager.enable()

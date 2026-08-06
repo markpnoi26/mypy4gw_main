@@ -961,12 +961,22 @@ class MapContext:
             priority=1,
             context=PyCallback.Context.Draw,
         )
+        # Draw alone freezes this cache on a minimised client, pinning every read to
+        # whatever it held when the draw loop stopped. Refresh is idempotent.
+        PyCallback.PyCallback.Register(
+            MapContext._callback_name + ".Update",
+            PyCallback.Phase.PreUpdate,
+            MapContext._update_ptr,
+            priority=1,
+            context=PyCallback.Context.Update,
+        )
 
     @staticmethod
     def disable():
         import PyCallback
 
         PyCallback.PyCallback.RemoveByName(MapContext._callback_name)
+        PyCallback.PyCallback.RemoveByName(MapContext._callback_name + ".Update")
 
         MapContext._ptr = 0
         MapContext._cached_ctx = None

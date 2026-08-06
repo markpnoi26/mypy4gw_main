@@ -7,11 +7,12 @@ import PySystem
 import PyGameThread
 
 from ..enums import EventType
+from Core.py4gwcorelib_src.LiveClock import GetLiveTimestamp
 
 
 def _get_tick_count() -> int:
     """Get current time in milliseconds from the shared Py4GW game clock."""
-    return int(PySystem.get_tick_count64())
+    return int(GetLiveTimestamp())
 
 
 _events: deque = deque(maxlen=2000)

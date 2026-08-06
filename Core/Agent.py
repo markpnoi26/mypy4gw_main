@@ -57,6 +57,17 @@ class Agent:
         PyCallback.PyCallback.Register(
             "Agent.InvalidatePropertyCache", PyCallback.Phase.PreUpdate, Agent._invalidate_property_cache, priority=7
         )
+        # Register defaults to Context.Draw, so on a minimised client this cache was
+        # never invalidated and every agent property stayed frozen at the moment the
+        # draw loop stopped: IsAttacking/IsCasting/IsMoving/IsIdle all read False at
+        # once, because GetLivingAgentByID was serving a dead struct.
+        PyCallback.PyCallback.Register(
+            "Agent.InvalidatePropertyCache.Update",
+            PyCallback.Phase.PreUpdate,
+            Agent._invalidate_property_cache,
+            priority=7,
+            context=PyCallback.Context.Update,
+        )
 
     @staticmethod
     def GetAgentByID(agent_id: int):

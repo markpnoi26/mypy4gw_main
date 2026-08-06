@@ -48,12 +48,22 @@ class GameplayContext:
             priority=7,
             context=PyCallback.Context.Draw,
         )
+        # Draw alone freezes this cache on a minimised client, pinning every read to
+        # whatever it held when the draw loop stopped. Refresh is idempotent.
+        PyCallback.PyCallback.Register(
+            GameplayContext._callback_name + ".Update",
+            PyCallback.Phase.PreUpdate,
+            GameplayContext._update_ptr,
+            priority=7,
+            context=PyCallback.Context.Update,
+        )
 
     @staticmethod
     def disable():
         import PyCallback
 
         PyCallback.PyCallback.RemoveByName(GameplayContext._callback_name)
+        PyCallback.PyCallback.RemoveByName(GameplayContext._callback_name + ".Update")
         GameplayContext._ptr = 0
         GameplayContext._cached_ctx = None
 

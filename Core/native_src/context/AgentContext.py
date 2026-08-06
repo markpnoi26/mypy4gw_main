@@ -1482,6 +1482,15 @@ class AgentArray:
             priority=6,
             context=PyCallback.Context.Draw,
         )
+        # Draw alone freezes this cache on a minimised client. Clearing twice only
+        # costs a repeated native read; not clearing at all serves stale agents.
+        PyCallback.PyCallback.Register(
+            AgentArray._callback_name_ptr + ".Update",
+            PyCallback.Phase.PreUpdate,
+            AgentArray.reset_cache,
+            priority=6,
+            context=PyCallback.Context.Update,
+        )
 
         """
         PyCallback.PyCallback.Register(
@@ -1497,6 +1506,7 @@ class AgentArray:
         import PyCallback
 
         PyCallback.PyCallback.RemoveByName(AgentArray._callback_name_ptr)
+        PyCallback.PyCallback.RemoveByName(AgentArray._callback_name_ptr + ".Update")
         # PyCallback.PyCallback.RemoveByName(AgentArray._callback_name_cache)
         AgentArray._ptr = 0
         AgentArray._cached_ctx = None

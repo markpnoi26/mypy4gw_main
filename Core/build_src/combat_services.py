@@ -7,6 +7,7 @@ import random
 from typing import TYPE_CHECKING, Any, Callable, cast
 
 import PySystem
+from Core.py4gwcorelib_src.LiveClock import GetLiveTimestamp
 
 if TYPE_CHECKING:
     from HeroAI.custom_skill import CustomSkillClass
@@ -1365,7 +1366,7 @@ class CombatServices:
             if not email:
                 return False
             group_id = GLOBAL_CACHE.ShMem.GetAccountGroupByEmail(email)
-            now = PySystem.get_tick_count64()
+            now = GetLiveTimestamp()
             return GLOBAL_CACHE.ShMem.IsIntentClaimed(
                 int(skill_id),
                 int(target_agent_id),
@@ -1405,7 +1406,7 @@ class CombatServices:
             except Exception:
                 pass
             cast_window_ms = max(500, activation_ms + aftercast_ms)
-            now = PySystem.get_tick_count64()
+            now = GetLiveTimestamp()
             expires_at = int(now) + cast_window_ms + int(SHMEM_INTENT_DEFAULT_PING_BUDGET_MS)
             GLOBAL_CACHE.ShMem.PostIntent(email, int(skill_id), int(target_agent_id), int(expires_at))
             self._wb_posted_this_cast = True

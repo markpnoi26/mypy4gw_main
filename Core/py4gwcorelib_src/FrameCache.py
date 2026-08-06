@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 from functools import wraps
 from typing import Any, Callable, Hashable, ParamSpec, TypeVar
@@ -17,9 +18,14 @@ class FrameCacheKey:
 
 
 class FrameCache:
+    # Per-thread storage. The draw loop and the update loop both read through this
+    # cache and both invalidate it; a single shared dict lets one thread clear
+    # entries the other is mid-read of, and those entries include ctypes views into
+    # shared memory, so the dangling view faults the client rather than raising.
     _instance: "FrameCache | None" = None
-    _values: dict[FrameCacheKey, Any]
+    _local: threading.local
     _callback_name: str
+    _update_callback_name: str
     _callback_registered: bool
 
     def __new__(cls) -> "FrameCache":
@@ -28,12 +34,21 @@ class FrameCache:
         return cls._instance
 
     def __init__(self) -> None:
-        if not hasattr(self, "_values"):
-            self._values = {}
+        if not hasattr(self, "_local"):
+            self._local = threading.local()
         if not hasattr(self, "_callback_name"):
             self._callback_name = "FrameCache.ResetCache"
+        if not hasattr(self, "_update_callback_name"):
+            self._update_callback_name = "FrameCache.ResetCache.Update"
         if not hasattr(self, "_callback_registered"):
             self._callback_registered = False
+
+    def values(self) -> dict[FrameCacheKey, Any]:
+        store = getattr(self._local, "values", None)
+        if store is None:
+            store = {}
+            self._local.values = store
+        return store
 
     def get_or_create(
         self,
@@ -49,18 +64,19 @@ class FrameCache:
             function_name=str(function_name),
             key=self._normalize_key(key),
         )
-        if cache_key not in self._values:
-            self._values[cache_key] = factory()
-        return self._values[cache_key]
+        store = self.values()
+        if cache_key not in store:
+            store[cache_key] = factory()
+        return store[cache_key]
 
     def reset_cache(self) -> None:
-        self._values.clear()
+        self.values().clear()
 
     def clear(self) -> None:
         self.reset_cache()
 
     def items(self) -> list[tuple[FrameCacheKey, Any]]:
-        return list(self._values.items())
+        return list(self.values().items())
 
     @staticmethod
     def _normalize_key(key: Any) -> Hashable:
@@ -93,11 +109,22 @@ class FrameCache:
             return
         import PyCallback
 
+        # Registered on both loops. Draw alone leaves every cached read frozen on
+        # a minimised client, because the draw loop is what stops; Update alone
+        # would clear mid-frame. Clearing twice only costs a repeated native read.
         PyCallback.PyCallback.Register(
             self._callback_name,
             PyCallback.Phase.PreUpdate,
             self.reset_cache,
             priority=7,
+            context=PyCallback.Context.Draw,
+        )
+        PyCallback.PyCallback.Register(
+            self._update_callback_name,
+            PyCallback.Phase.PreUpdate,
+            self.reset_cache,
+            priority=7,
+            context=PyCallback.Context.Update,
         )
         self._callback_registered = True
 
@@ -107,6 +134,7 @@ class FrameCache:
         import PyCallback
 
         PyCallback.PyCallback.RemoveByName(self._callback_name)
+        PyCallback.PyCallback.RemoveByName(self._update_callback_name)
         self._callback_registered = False
 
 

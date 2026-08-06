@@ -42,6 +42,7 @@ rather than firing input at nothing.
 """
 
 import re
+import threading
 from typing import Any, Iterator, Optional
 
 import PyOverlay  # type: ignore
@@ -308,6 +309,7 @@ class _FrameTree:
     """
 
     _CALLBACK = "FrameTree.Tick"
+    _UPDATE_CALLBACK = "FrameTree.Tick.Update"
     BUFFER_TICKS = 5  # passes a good copy may stand in for a failed read.
     # Counted in polls, not time: the system reads every
     # frame, so this is at most 5 frames behind, whatever
@@ -336,7 +338,7 @@ class _FrameTree:
             return
         import PyCallback  # type: ignore
 
-        PyCallback.PyCallback.Register(self._CALLBACK, PyCallback.Phase.PreUpdate, self._on_tick, priority=6)
+        FrameTree.register_callbacks()
         self._registered = True
 
     def disable(self) -> None:
@@ -345,6 +347,7 @@ class _FrameTree:
         import PyCallback  # type: ignore
 
         PyCallback.PyCallback.RemoveByName(self._CALLBACK)
+        PyCallback.PyCallback.RemoveByName(self._UPDATE_CALLBACK)
         self._registered = False
 
     def _on_tick(self) -> None:
@@ -715,7 +718,49 @@ class _FrameTree:
         return self._overlay
 
 
-FrameTree = _FrameTree()
+class _FrameTreeRegistry:
+    """One tree per thread, forwarding attribute access to the calling thread's.
+
+    The draw loop and the update loop both resolve frames — a minimised client has
+    only the latter. Sharing one tree let them rebuild it underneath each other,
+    and it holds native frame objects, so that is a fault rather than stale data.
+
+    Costs nothing in practice: widgets drive their logic from exactly one loop at a
+    time, so only one thread ever touches a tree.
+    """
+
+    def __init__(self) -> None:
+        self._local = threading.local()
+        self._callbacks_registered = False
+
+    def instance(self) -> _FrameTree:
+        tree = getattr(self._local, "tree", None)
+        if tree is None:
+            tree = _FrameTree()
+            self._local.tree = tree
+        return tree
+
+    def bump(self) -> None:
+        """Invalidate the tree belonging to whichever loop is calling."""
+        self.instance().tick += 1
+
+    def register_callbacks(self) -> None:
+        if self._callbacks_registered:
+            return
+        import PyCallback  # type: ignore
+
+        for name, context in (
+            (_FrameTree._CALLBACK, PyCallback.Context.Draw),
+            (_FrameTree._UPDATE_CALLBACK, PyCallback.Context.Update),
+        ):
+            PyCallback.PyCallback.Register(name, PyCallback.Phase.PreUpdate, self.bump, priority=6, context=context)
+        self._callbacks_registered = True
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.instance(), name)
+
+
+FrameTree = _FrameTreeRegistry()
 
 
 # --------------------------------------------------------------------------

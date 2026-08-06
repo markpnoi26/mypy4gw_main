@@ -26,6 +26,7 @@ from .HeroAIOptionStruct import HeroAIOptionStruct
 from .AccountStruct import AccountStruct
 from .KeyStruct import KeyStruct
 from .IntentStruct import IntentStruct
+from Core.py4gwcorelib_src.LiveClock import GetLiveTimestamp
 
 # Master toggle for all whiteboard/lock debug logs.
 # Default is silent. Flip this single flag when you want visibility again.
@@ -79,7 +80,7 @@ class AllAccounts(Structure):
         slot_active = slot_data.IsSlotActive
         last_updated = slot_data.LastUpdated
 
-        base_timestamp = PySystem.get_tick_count64()
+        base_timestamp = GetLiveTimestamp()
 
         if slot_active and (base_timestamp - last_updated) < SHMEM_SUBSCRIBE_TIMEOUT_MILLISECONDS:
             return True
@@ -325,7 +326,7 @@ class AllAccounts(Structure):
         slot_data = self.AccountData[index]
         if not slot_data.IsSlotActive:
             return False
-        return (PySystem.get_tick_count64() - slot_data.LastUpdated) >= SHMEM_SUBSCRIBE_TIMEOUT_MILLISECONDS
+        return (GetLiveTimestamp() - slot_data.LastUpdated) >= SHMEM_SUBSCRIBE_TIMEOUT_MILLISECONDS
 
     def GetEmptySlot(self, allow_expired_reclaim: bool = True) -> int:
         """Find the first empty or safely reclaimable slot in shared memory."""
@@ -348,7 +349,7 @@ class AllAccounts(Structure):
             slot_data = self.AccountData[i]
             slot_active = slot_data.IsSlotActive
             last_updated = slot_data.LastUpdated
-            base_timestamp = PySystem.get_tick_count64()
+            base_timestamp = GetLiveTimestamp()
             if slot_active and (base_timestamp - last_updated) >= SHMEM_SUBSCRIBE_TIMEOUT_MILLISECONDS:
                 expired_slots.append(i)
 
@@ -433,7 +434,7 @@ class AllAccounts(Structure):
 
         owner_id = Party.Players.GetAgentIDByLoginNumber(hero_data.owner_player_id)
         retry_key = (int(hero_data.hero_id), int(owner_id))
-        now = PySystem.get_tick_count64()
+        now = GetLiveTimestamp()
         if now < _HERO_SUBMIT_RETRY_AFTER.get(retry_key, 0):
             return -1
 
@@ -463,7 +464,7 @@ class AllAccounts(Structure):
     def SubmitPetData(self, pet_data: PetInfo) -> int:
         """Submit pet data to shared memory. Returns the slot index or -1 on failure."""
         retry_key = (int(pet_data.agent_id), int(pet_data.owner_agent_id))
-        now = PySystem.get_tick_count64()
+        now = GetLiveTimestamp()
         if now < _PET_SUBMIT_RETRY_AFTER.get(retry_key, 0):
             return -1
 
@@ -878,7 +879,7 @@ class AllAccounts(Structure):
         slot = self.AccountData[index]
         value = bool(in_aggro)
         slot.InAggro = value
-        slot.InAggroTick64 = PySystem.get_tick_count64() if value else 0
+        slot.InAggroTick64 = GetLiveTimestamp() if value else 0
         return True
 
     def GetMapsFromPlayers(self):
@@ -1047,7 +1048,7 @@ class AllAccounts(Structure):
             message.ExtraData = (arr_type * 4)(*packed)
             message.Active = True
             message.Running = False
-            message.Timestamp = PySystem.get_tick_count64()
+            message.Timestamp = GetLiveTimestamp()
             return i
 
         return -1
@@ -1091,7 +1092,7 @@ class AllAccounts(Structure):
             if message.ReceiverEmail == account_email:
                 message.Running = True
                 message.Active = True
-                message.Timestamp = PySystem.get_tick_count64()
+                message.Timestamp = GetLiveTimestamp()
             else:
                 ConsoleLog(
                     SHMEM_MODULE_NAME,
@@ -1120,7 +1121,7 @@ class AllAccounts(Structure):
                 empty = [self._str_to_c_wchar_array("", SHMEM_MAX_CHAR_LEN) for _ in range(4)]
                 message.ExtraData = (arr_type * 4)(*empty)
 
-                message.Timestamp = PySystem.get_tick_count64()
+                message.Timestamp = GetLiveTimestamp()
                 message.Running = False
                 message.Active = False
             else:
@@ -1192,7 +1193,7 @@ class AllAccounts(Structure):
             return
         intent = self.Intents[index]
         if intent.Active:
-            lifetime = int(PySystem.get_tick_count64()) - int(intent.PostedAtTick)
+            lifetime = int(GetLiveTimestamp()) - int(intent.PostedAtTick)
             self._wb_log(
                 int(intent.KindID),
                 f"CLEAR slot={index} email='{intent.OwnerEmail}' "
@@ -1205,7 +1206,7 @@ class AllAccounts(Structure):
         if not owner_email:
             return 0
         count = 0
-        now = int(PySystem.get_tick_count64())
+        now = int(GetLiveTimestamp())
         for i in range(SHMEM_MAX_INTENTS):
             intent = self.Intents[i]
             if intent.Active and intent.OwnerEmail == owner_email:
@@ -1235,7 +1236,7 @@ class AllAccounts(Structure):
         if not owner_email:
             return 0
         count = 0
-        now = int(PySystem.get_tick_count64())
+        now = int(GetLiveTimestamp())
         for i in range(SHMEM_MAX_INTENTS):
             intent = self.Intents[i]
             if not intent.Active:
@@ -1276,7 +1277,7 @@ class AllAccounts(Structure):
         Every lock is a lease. Past or missing expiry is rejected so no caller
         can create a permanent lock.
         """
-        now = int(PySystem.get_tick_count64())
+        now = int(GetLiveTimestamp())
         if not owner_email or kind_id <= 0 or target_id < 0:
             return -1
         if int(expires_at_tick) <= now:

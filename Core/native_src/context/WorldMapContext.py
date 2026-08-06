@@ -67,12 +67,22 @@ class WorldMapContext:
             priority=99,
             context=PyCallback.Context.Draw,
         )
+        # Draw alone freezes this cache on a minimised client, pinning every read to
+        # whatever it held when the draw loop stopped. Refresh is idempotent.
+        PyCallback.PyCallback.Register(
+            WorldMapContext._callback_name + ".Update",
+            PyCallback.Phase.PreUpdate,
+            WorldMapContext._update_ptr,
+            priority=99,
+            context=PyCallback.Context.Update,
+        )
 
     @staticmethod
     def disable():
         import PyCallback
 
         PyCallback.PyCallback.RemoveByName(WorldMapContext._callback_name)
+        PyCallback.PyCallback.RemoveByName(WorldMapContext._callback_name + ".Update")
         WorldMapContext._ptr = 0
         WorldMapContext._cached_ctx = None
 

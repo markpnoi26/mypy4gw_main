@@ -355,12 +355,22 @@ class GuildContext:
             priority=99,
             context=PyCallback.Context.Draw,
         )
+        # Draw alone freezes this cache on a minimised client, pinning every read to
+        # whatever it held when the draw loop stopped. Refresh is idempotent.
+        PyCallback.PyCallback.Register(
+            GuildContext._callback_name + ".Update",
+            PyCallback.Phase.PreUpdate,
+            GuildContext._update_ptr,
+            priority=99,
+            context=PyCallback.Context.Update,
+        )
 
     @staticmethod
     def disable():
         import PyCallback
 
         PyCallback.PyCallback.RemoveByName(GuildContext._callback_name)
+        PyCallback.PyCallback.RemoveByName(GuildContext._callback_name + ".Update")
         GuildContext._ptr = 0
         GuildContext._cached_ctx = None
 

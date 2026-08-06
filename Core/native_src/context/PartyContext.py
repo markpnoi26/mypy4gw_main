@@ -257,12 +257,22 @@ class PartyContext:
             priority=6,
             context=PyCallback.Context.Draw,
         )
+        # Draw alone freezes this cache on a minimised client, pinning every read to
+        # whatever it held when the draw loop stopped. Refresh is idempotent.
+        PyCallback.PyCallback.Register(
+            PartyContext._callback_name + ".Update",
+            PyCallback.Phase.PreUpdate,
+            PartyContext._update_ptr,
+            priority=6,
+            context=PyCallback.Context.Update,
+        )
 
     @staticmethod
     def disable():
         import PyCallback
 
         PyCallback.PyCallback.RemoveByName(PartyContext._callback_name)
+        PyCallback.PyCallback.RemoveByName(PartyContext._callback_name + ".Update")
         PartyContext._ptr = 0
         PartyContext._cached_ptr = 0
         PartyContext._cached_ctx = None

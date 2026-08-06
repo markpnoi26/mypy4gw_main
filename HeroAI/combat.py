@@ -45,6 +45,7 @@ from .call_target import CallTarget
 from .settings import Settings
 
 from Core.enums_src.GameData_enums import Profession
+from Core.py4gwcorelib_src.LiveClock import GetLiveTimestamp
 
 if TYPE_CHECKING:
     from .cache_data import CacheData
@@ -652,7 +653,7 @@ class CombatClass:
             if not email:
                 return
             group_id = GLOBAL_CACHE.ShMem.GetAccountGroupByEmail(email)
-            expires_at = int(PySystem.get_tick_count64()) + 1500
+            expires_at = int(GetLiveTimestamp()) + 1500
             GLOBAL_CACHE.ShMem.PostLock(
                 email,
                 int(WhiteboardLockKind.CALL_TARGET),
@@ -2004,7 +2005,7 @@ class CombatClass:
             if not email:
                 return False
             group_id = GLOBAL_CACHE.ShMem.GetAccountGroupByEmail(email)
-            now = PySystem.get_tick_count64()
+            now = GetLiveTimestamp()
             return GLOBAL_CACHE.ShMem.IsLockBlocked(
                 int(WhiteboardLockKind.COOLDOWN),
                 int(skill.skill_id),
@@ -2045,7 +2046,7 @@ class CombatClass:
                 + extra_ms
                 + int(SHMEM_INTENT_DEFAULT_PING_BUDGET_MS)
             )
-            expires_at = int(PySystem.get_tick_count64()) + int(lease_ms)
+            expires_at = int(GetLiveTimestamp()) + int(lease_ms)
             GLOBAL_CACHE.ShMem.PostLock(
                 email,
                 int(WhiteboardLockKind.COOLDOWN),

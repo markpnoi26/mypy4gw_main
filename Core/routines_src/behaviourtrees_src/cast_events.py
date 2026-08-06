@@ -16,6 +16,7 @@ import PySystem
 
 from ...CombatEvents import CombatEvents
 from ...py4gwcorelib_src.BehaviorTree import BehaviorTree
+from ...py4gwcorelib_src.LiveClock import GetLiveTimestamp
 
 NodeState = BehaviorTree.NodeState
 
@@ -31,7 +32,7 @@ RESOLVE_BACKSTOP_MS = 2500
 
 
 def now_ms() -> int:
-    return int(PySystem.get_tick_count64())
+    return int(GetLiveTimestamp())
 
 
 class CastTracker:
