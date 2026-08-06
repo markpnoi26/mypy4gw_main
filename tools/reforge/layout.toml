@@ -376,7 +376,7 @@ dest = "Launcher/{rel:Py4GW_Reforged_Launcher}"
 note = "distinct deliverable, not dev sediment — builds the root .exe"
 
 [[rule]]
-match = "{frame_api_test,frame_relation_test,frame_viewer,frame_viewer_basic,listeners_test,particle_lab,particle_test,navmesh_debug,overlay_occlusion_diag,context_diagnostic,gwui_scrollable_window_test,skill_texture_test,frame_api_test}.py"
+match = "{frame_api_test,frame_relation_test,frame_viewer,frame_viewer_basic,inventory_slot_tint_test,listeners_test,particle_lab,particle_test,navmesh_debug,overlay_occlusion_diag,context_diagnostic,gwui_scrollable_window_test,skill_texture_test,frame_api_test}.py"
 dest = "dev/harness/{name}"
 tier = "dev"
 
@@ -455,6 +455,11 @@ dest = "drop"
 [[override]]
 match = "test_sqlite3 - Copy - Copy.py"
 dest = "drop"
+
+[[override]]
+match = "frame observations.txt"
+dest = "drop"
+note = "upstream c7daeaaf left its author's notes-to-self about the Frame API at the repo root"
 
 [[rule]]
 match = "Wayfarer's_Reverie_maps/**"
