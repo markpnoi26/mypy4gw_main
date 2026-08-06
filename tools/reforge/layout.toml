@@ -197,11 +197,6 @@ match = "Widgets/System/Enemy Tracker.py"
 dest = "Widgets/Overlays/Enemy Tracker.py"
 tier = "widget"
 
-[[rule]]
-match = "Widgets/Guild Wars/Screen Overlays/**"
-dest = "Widgets/Overlays/{rel:Widgets/Guild Wars/Screen Overlays}"
-tier = "widget"
-
 [[override]]
 match = "Widgets/Guild Wars/Map Overlay.py"
 dest = "Widgets/Overlays/Map Overlay.py"
@@ -252,10 +247,11 @@ tier = "script"
 note = "Shared library, not a widget: EZ Cast.py subclasses its SkillData. The Widgets/Coding/** sweep put it in py4gw-devtools, whose hyphen makes it unimportable, so EZ Cast dies at load. Widgets/lib/ is importable as Widgets.lib and gets no .widget marker precisely because this entry is tier=script — write_markers() only touches dirs whose tier is widget, so nothing here is loaded as a widget."
 
 [[override]]
-match = "Widgets/Guild Wars/Customization/HeroAi Skill Editor.py"
+match = "Widgets/Automation/Multiboxing/HeroAi Skill Editor.py"
 dest = "Scripts/py4gw-heroai/scripts/HeroAi Skill Editor.py"
 tier = "script"
 pack = "heroai"
+note = "Upstream 2cb1b73d moved this out of Guild Wars/Customization/ and in beside HeroAI.py, which is where it belonged."
 
 [[override]]
 match = "Widgets/Automation/Multiboxing/CombatPrep.py"
@@ -546,18 +542,6 @@ old = "System/Enemy Tracker.py"
 new = "widgets:Overlays/Enemy Tracker.py"
 
 [[legacy_id]]
-old = "Guild Wars/Screen Overlays/Skillbar +.py"
-new = "widgets:Overlays/Skillbar +.py"
-
-[[legacy_id]]
-old = "Guild Wars/Screen Overlays/Vanquish Tracker.py"
-new = "widgets:Overlays/Vanquish Tracker.py"
-
-[[legacy_id]]
-old = "Guild Wars/Screen Overlays/Instance Timer.py"
-new = "widgets:Overlays/Instance Timer.py"
-
-[[legacy_id]]
 old = "Guild Wars/Map Overlay.py"
 new = "widgets:Overlays/Map Overlay.py"
 
@@ -576,10 +560,6 @@ new = "widgets:World/Travel.py"
 [[legacy_id]]
 old = "Automation/Multiboxing/HeroAI.py"
 new = "widgets:Multibox/HeroAI.py"
-
-[[legacy_id]]
-old = "Guild Wars/ChatCommandBroadcast.py"
-new = "widgets:Multibox/ChatCommandBroadcast.py"
 
 [[legacy_id]]
 old = "Guild Wars/Switch Character.py"
@@ -638,20 +618,11 @@ dest = "Widgets/Items/{name}"
 tier = "widget"
 
 # --- Customization: client-behaviour tweaks, except the multibox one ---
-[[rule]]
-match = "Widgets/Guild Wars/Customization/**"
-dest = "Widgets/Client/{name}"
-tier = "widget"
-
 [[override]]
-match = "Widgets/Guild Wars/Triggers/Disable Alcohol Effect.py"
-dest = "Widgets/Client/Disable Alcohol Effect.py"
-tier = "widget"
-
-[[override]]
-match = "Widgets/Guild Wars/Triggers/Titles.py"
+match = "Widgets/Guild Wars/Titles.py"
 dest = "Widgets/Upkeep/Titles.py"
 tier = "widget"
+note = "Upstream 2cb1b73d flattened Guild Wars/, deleting Triggers/."
 
 # --- modular authoring tools belong with the modular pack, not the widget tree ---
 [[rule]]
@@ -748,35 +719,19 @@ old = "Guild Wars/Items & Loot/InventoryPlus.py"
 new = "widgets:Items/InventoryPlus.py"
 
 [[legacy_id]]
-old = "Guild Wars/Items & Loot/SuperItemEater.py"
-new = "widgets:Items/SuperItemEater.py"
-
-[[legacy_id]]
 old = "Guild Wars/Items & Loot/Xunlaimanager.py"
 new = "widgets:Items/Xunlaimanager.py"
 
 [[legacy_id]]
-old = "Guild Wars/Items & Loot/item_eater.py"
+old = "Guild Wars/item_eater.py"
 new = "widgets:Items/item_eater.py"
 
 [[legacy_id]]
-old = "Guild Wars/Customization/Disable Camera Smoothing.py"
-new = "widgets:Client/Disable Camera Smoothing.py"
-
-[[legacy_id]]
-old = "Guild Wars/Customization/Layout Manager.py"
+old = "Guild Wars/Layout Manager.py"
 new = "widgets:Client/Layout Manager.py"
 
 [[legacy_id]]
-old = "Guild Wars/Customization/Window Renamer.py"
-new = "widgets:Client/Window Renamer.py"
-
-[[legacy_id]]
-old = "Guild Wars/Triggers/Disable Alcohol Effect.py"
-new = "widgets:Client/Disable Alcohol Effect.py"
-
-[[legacy_id]]
-old = "Guild Wars/Triggers/Titles.py"
+old = "Guild Wars/Titles.py"
 new = "widgets:Upkeep/Titles.py"
 
 
@@ -818,16 +773,16 @@ tier = "dev"
 note = "4 eager imports of Sources.frenkeyLib. 30378 lines; needs a rewrite, not a patch."
 
 [[override]]
-match = "Widgets/Guild Wars/Customization/MultiBoxing.py"
+match = "Widgets/Guild Wars/MultiBoxing.py"
 dest = "dev/tabled/MultiBoxing.py"
 tier = "dev"
-note = "6 eager imports of Sources.frenkeyLib"
+note = "6 eager imports of Sources.frenkeyLib. Upstream 2cb1b73d flattened Guild Wars/, deleting Customization/."
 
 [[override]]
-match = "Widgets/Guild Wars/Screen Overlays/PartyQuestLog.py"
+match = "Widgets/Guild Wars/PartyQuestLog.py"
 dest = "dev/tabled/PartyQuestLog.py"
 tier = "dev"
-note = "4 eager imports of Sources.ApoSource + Sources.frenkeyLib"
+note = "4 eager imports of Sources.ApoSource + Sources.frenkeyLib. Upstream 2cb1b73d flattened Guild Wars/, deleting Screen Overlays/."
 
 [[override]]
 match = "Widgets/Automation/Helpers/TitleHelper.py"
@@ -885,12 +840,6 @@ tier = "script"
 pack = "orphaned-widgets"
 
 [[override]]
-match = "Widgets/Guild Wars/ChatCommandBroadcast.py"
-dest = "Scripts/orphaned-widgets/scripts/ChatCommandBroadcast.py"
-tier = "script"
-pack = "orphaned-widgets"
-
-[[override]]
 match = "Widgets/Automation/Enhancements/Dhuum Helper.py"
 dest = "Scripts/orphaned-widgets/scripts/Dhuum Helper.py"
 tier = "script"
@@ -905,12 +854,6 @@ pack = "orphaned-widgets"
 [[override]]
 match = "Widgets/Automation/Helpers/Dialogs/NFDialogSender.py"
 dest = "Scripts/orphaned-widgets/scripts/NFDialogSender.py"
-tier = "script"
-pack = "orphaned-widgets"
-
-[[override]]
-match = "Widgets/Guild Wars/Customization/Disable Camera Smoothing.py"
-dest = "Scripts/orphaned-widgets/scripts/Disable Camera Smoothing.py"
 tier = "script"
 pack = "orphaned-widgets"
 
@@ -933,28 +876,24 @@ tier = "script"
 pack = "orphaned-widgets"
 
 [[override]]
-match = "Widgets/Guild Wars/Screen Overlays/Instance Timer.py"
-dest = "Scripts/orphaned-widgets/scripts/Instance Timer.py"
-tier = "script"
-pack = "orphaned-widgets"
-
-[[override]]
 match = "Widgets/Guild Wars/Items & Loot/InventoryPlus.py"
 dest = "Scripts/orphaned-widgets/scripts/InventoryPlus.py"
 tier = "script"
 pack = "orphaned-widgets"
 
 [[override]]
-match = "Widgets/Guild Wars/Items & Loot/item_eater.py"
+match = "Widgets/Guild Wars/item_eater.py"
 dest = "Scripts/orphaned-widgets/scripts/item_eater.py"
 tier = "script"
 pack = "orphaned-widgets"
+note = "Upstream 2cb1b73d moved this up out of Items & Loot/, which still exists and still holds the other four."
 
 [[override]]
-match = "Widgets/Guild Wars/Customization/Layout Manager.py"
+match = "Widgets/Guild Wars/Layout Manager.py"
 dest = "Scripts/orphaned-widgets/scripts/Layout Manager.py"
 tier = "script"
 pack = "orphaned-widgets"
+note = "Upstream 2cb1b73d flattened Guild Wars/, deleting Customization/."
 
 [[override]]
 match = "Widgets/Automation/Enhancements/Pet Helper.py"
@@ -981,20 +920,8 @@ tier = "script"
 pack = "orphaned-widgets"
 
 [[override]]
-match = "Widgets/Guild Wars/Items & Loot/SuperItemEater.py"
-dest = "Scripts/orphaned-widgets/scripts/SuperItemEater.py"
-tier = "script"
-pack = "orphaned-widgets"
-
-[[override]]
 match = "Widgets/Automation/Enhancements/Survival Title Helper.py"
 dest = "Scripts/orphaned-widgets/scripts/Survival Title Helper.py"
-tier = "script"
-pack = "orphaned-widgets"
-
-[[override]]
-match = "Widgets/Guild Wars/Customization/Window Renamer.py"
-dest = "Scripts/orphaned-widgets/scripts/Window Renamer.py"
 tier = "script"
 pack = "orphaned-widgets"
 
