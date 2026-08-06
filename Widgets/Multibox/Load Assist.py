@@ -17,7 +17,11 @@ MODULE_ICON = "Textures/Module_Icons/Frame Limiter.png"
 SW_MINIMIZE = 6
 SW_RESTORE = 9
 
-POLL_INTERVAL_MS = 200
+# Fast poll: the restore must land before GW's loader reaches its non-pumping
+# stretch, or the SW_RESTORE sits unread in the message queue while the loader
+# waits for drawing that only a restored window can do — a deadlock that shows
+# as "Not Responding" on map load.
+POLL_INTERVAL_MS = 50
 
 # Backstop so a check that never clears cannot strand the window on screen.
 MAX_HOLD_MS = 30000
@@ -45,7 +49,10 @@ def show_window(command: int) -> bool:
         if not hwnd:
             log("no GW window handle; cannot move the window", PySystem.Console.MessageType.Warning)
             return False
-        USER32.ShowWindow(ctypes.c_void_p(hwnd), command)
+        # Async: plain ShowWindow waits on the main thread's message pump, which
+        # can already be inside the loader and not pumping — that blocked this
+        # entire update loop along with it.
+        USER32.ShowWindowAsync(ctypes.c_void_p(hwnd), command)
         return True
     except Exception as error:
         log("ShowWindow failed: %s" % error, PySystem.Console.MessageType.Error)
@@ -115,6 +122,10 @@ def update():
         return
 
     if map_is_settling():
+        # The posted restore can sit unread while the loader is between pumps;
+        # keep re-posting until the window actually leaves the iconic state.
+        if Utils.IsWindowMinimized():
+            show_window(SW_RESTORE)
         if hold_timer.IsExpired():
             minimize_now("held %ds without settling (%s)" % (MAX_HOLD_MS // 1000, settle_reason()))
             return

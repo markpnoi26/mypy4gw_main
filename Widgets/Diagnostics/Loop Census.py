@@ -8,8 +8,10 @@ import PyGameThread
 import PyImGui
 import PySystem
 
+from Core import Map
 from Core import Routines
 from Core import ThrottledTimer
+from Core import Utils
 from Core.native_src.methods.PlayerMethods import PlayerMethods
 
 MODULE_NAME = "Loop Census"
@@ -66,10 +68,51 @@ USER32 = ctypes.WinDLL("user32", use_last_error=True)
 hide_timer = ThrottledTimer(HIDE_TEST_MS)
 hiding = False
 
+# Hang watchdog. IsHungAppWindow is the exact test Windows uses before it ghosts a
+# window as "Not Responding" (message pump silent > 5s), so recording its
+# transitions tells us when the GW main thread starved and for how long. gt_lag is
+# the age of the last executed heartbeat — it separates "game thread stalled" from
+# "only the message pump stalled".
+HANG_DOCUMENT = "HANG.json"
+HANG_EVENTS_MAX = 50
+GT_STALL_ALERT_MS = 3000
+
+hang_events: list[str] = []
+window_hung = False
+hung_since_ms = 0
+last_gt_ran_ms = 0
+map_valid_since_ms = 0
+gt_stall_alerted = False
+
 
 def note_game_thread_ran():
-    global executed
+    global executed, last_gt_ran_ms
     executed += 1
+    last_gt_ran_ms = int(Utils.GetLiveTimestamp())
+
+
+def is_window_hung() -> bool:
+    try:
+        hwnd = int(PySystem.Console.get_gw_window_handle() or 0)
+        if not hwnd:
+            return False
+        return bool(USER32.IsHungAppWindow(ctypes.c_void_p(hwnd)))
+    except Exception:
+        return False
+
+
+def record_hang_event(line: str) -> None:
+    from Core.py4gwcorelib_src.JsonFactory import JsonFactory
+
+    hang_events.append(line)
+    if len(hang_events) > HANG_EVENTS_MAX:
+        del hang_events[0 : len(hang_events) - HANG_EVENTS_MAX]
+
+    document = JsonFactory(HANG_DOCUMENT)
+    document.set_json("events", list(hang_events))
+    document.save()
+
+    PySystem.Console.Log(MODULE_NAME, line, PySystem.Console.MessageType.Warning)
 
 
 def take_sample(elapsed):
@@ -123,7 +166,8 @@ def set_window_state(command: int) -> None:
     try:
         hwnd = int(PySystem.Console.get_gw_window_handle() or 0)
         if hwnd:
-            USER32.ShowWindow(ctypes.c_void_p(hwnd), command)
+            # Async so a busy main thread can never block this update loop.
+            USER32.ShowWindowAsync(ctypes.c_void_p(hwnd), command)
     except Exception as error:
         PySystem.Console.Log(MODULE_NAME, "ShowWindow failed: %s" % error, PySystem.Console.MessageType.Error)
 
@@ -141,6 +185,60 @@ def start_hide_test() -> None:
     hiding = True
     hide_timer.Reset()
     set_window_state(SW_HIDE)
+
+
+def watch_for_hangs(sample):
+    global window_hung, hung_since_ms, map_valid_since_ms, last_gt_ran_ms, gt_stall_alerted
+
+    now_ms = int(Utils.GetLiveTimestamp())
+
+    if sample.map_valid:
+        if map_valid_since_ms == 0:
+            # Fresh map: seed the heartbeat stamp so lag doesn't count load time.
+            map_valid_since_ms = now_ms
+            last_gt_ran_ms = now_ms
+    else:
+        map_valid_since_ms = 0
+        gt_stall_alerted = False
+
+    gt_lag_ms = 0
+    if map_valid_since_ms and (now_ms - map_valid_since_ms) > GT_STALL_ALERT_MS:
+        gt_lag_ms = now_ms - last_gt_ran_ms
+
+    hung_now = is_window_hung()
+    if hung_now and not window_hung:
+        hung_since_ms = now_ms
+        record_hang_event(
+            "%s HUNG start | min=%d map=%s loading=%d gt_lag=%dms upd=%.0f/s"
+            % (
+                time.strftime("%H:%M:%S"),
+                int(sample.minimized),
+                "ok" if sample.map_valid else "no",
+                int(Map.IsMapLoading()),
+                gt_lag_ms,
+                sample.update_hz,
+            )
+        )
+    elif window_hung and not hung_now:
+        record_hang_event("%s HUNG end | lasted=%dms" % (time.strftime("%H:%M:%S"), now_ms - hung_since_ms))
+    window_hung = hung_now
+
+    if gt_lag_ms > GT_STALL_ALERT_MS:
+        if not gt_stall_alerted:
+            gt_stall_alerted = True
+            record_hang_event(
+                "%s GT-STALL | heartbeat %dms old, min=%d loading=%d hung=%d"
+                % (
+                    time.strftime("%H:%M:%S"),
+                    gt_lag_ms,
+                    int(sample.minimized),
+                    int(Map.IsMapLoading()),
+                    int(hung_now),
+                )
+            )
+    elif gt_stall_alerted and gt_lag_ms < 1500:
+        gt_stall_alerted = False
+        record_hang_event("%s GT-STALL recovered" % time.strftime("%H:%M:%S"))
 
 
 def update():
@@ -169,6 +267,8 @@ def update():
 
     line = format_line(sample)
     PySystem.Console.Log(MODULE_NAME, line, PySystem.Console.MessageType.Info)
+
+    watch_for_hangs(sample)
 
     # enqueue is a silent no-op while the map is not ready, which would read as a
     # stalled game thread; skipping keeps enqueued/executed comparable.
@@ -213,6 +313,13 @@ def render_panel():
         start_hide_test()
 
     PyImGui.text("Samples: %d   Game thread: %d/%d" % (len(samples), executed, enqueued))
+
+    if hang_events:
+        PyImGui.separator()
+        PyImGui.text("Hang events (also in json/<account>/%s):" % HANG_DOCUMENT)
+        for event_line in reversed(hang_events[-10:]):
+            PyImGui.text(event_line)
+
     PyImGui.separator()
 
     if PyImGui.begin_table("LoopCensusRows", 7):
