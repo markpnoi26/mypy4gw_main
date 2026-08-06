@@ -5,11 +5,16 @@ This tree is generated. Getting this wrong loses work silently.
 ## Three repos
 
 `mypy4gw_main` (here — freeform, primary source of changes) → `Py4GW_Reforged`
-(the fork; the only one with a GitHub remote, staging for PRs) →
-`apoguita/Py4GW_Reforged` (upstream; arrives here through `vendor`).
+(the fork; staging for PRs) → `apoguita/Py4GW_Reforged` (upstream; arrives here
+through `vendor`).
 
 Commit freely here. Only what you deliberately publish goes through the fork.
 Nothing has to flow upward — `backport.py` marks layout-only changes as such.
+
+Both of the first two have a GitHub remote. Here that is `origin`
+(`markpnoi26/mypy4gw_main`); the fork is `fork` (`markpnoi26/Py4GW_Reforged`),
+with `local-src` pointing at its working copy on this machine and `upstream` at
+apoguita's. A push here is publishing, not proposing — only the fork does that.
 
 ## Credentials are in this working tree
 
@@ -32,6 +37,25 @@ state and conflicts with itself.
 Never `git reset --hard layout` onto `main` once `main` carries work — it
 discards your overlay history. **Rebase.** (This has already cost nine commits
 once; they were recovered from reflog as `toolchain-history*`.)
+
+## Pushing
+
+`vendor` fast-forwards, so it pushes plainly. `base` and `main` are both rebased
+by the sync — `base` onto a newer `vendor`, `main` onto a newer `layout` — so
+both need `--force-with-lease` and neither divergence is a warning by itself.
+
+Before forcing `base`, check that what is on the remote is the *same* history
+replayed rather than work you never had:
+
+```bash
+git log --format="%s" origin/base ^base | sort > /tmp/a
+git log --format="%s" base ^origin/base | sort > /tmp/b
+comm -23 /tmp/a /tmp/b        # empty = every remote commit has a local twin
+```
+
+`layout` does not need pushing. `main` descends from it, so its commit is
+already on the remote; the branch ref would add only a label that the next sync
+invalidates.
 
 ## Where edits are safe
 
