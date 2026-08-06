@@ -109,6 +109,50 @@ def party_health(snapshot: dict | None) -> float:
         return 1.0
 
 
+# The zone holds this much route back so a step never lands on the far end with
+# nowhere to go. Mirrors ZoneConfig.give_ground_margin; a route shorter than this
+# yields a zero ceiling and the party cannot step at all.
+GIVE_GROUND_MARGIN = 200.0
+
+
+def retreat_blockers(snapshot: dict | None) -> list[str]:
+    """Why a withdrawal cannot happen, most-blocking first, or that it can.
+
+    Health decides WHETHER to back off; the escape route decides whether backing
+    off is possible at all. A missing route is silent — the verdict keeps reading
+    WITHDRAW, the budget is never spent, and nothing moves.
+    """
+    if not snapshot:
+        return ["no fight zone publishing"]
+
+    lines: list[str] = []
+    if not snapshot.get("health_enabled"):
+        lines.append("BLOCKED: health retreat is switched off")
+
+    escape = snapshot.get("escape")
+    if not escape:
+        if not snapshot.get("escape_terrain_known"):
+            lines.append("BLOCKED: no escape route - navmesh unusable, and no trail walked yet")
+        elif snapshot.get("escape_boxed_in"):
+            lines.append("BLOCKED: no escape route - boxed in")
+        else:
+            lines.append("BLOCKED: no escape route")
+        return lines
+
+    distance = float(escape.get("distance", 0.0) or 0.0)
+    source = str(escape.get("source", "?"))
+    if distance <= GIVE_GROUND_MARGIN:
+        lines.append(f"BLOCKED: escape route only {distance:.0f}u ({source}) - needs > {GIVE_GROUND_MARGIN:.0f}u")
+    else:
+        lines.append(f"escape {distance:.0f}u via {source}, room for {distance - GIVE_GROUND_MARGIN:.0f}u")
+
+    used = int(snapshot.get("health_steps_used", 0) or 0)
+    budget = int(snapshot.get("health_max_steps", 0) or 0)
+    if budget and used >= budget:
+        lines.append(f"BLOCKED: retreat budget spent ({used}/{budget})")
+    return lines
+
+
 def describe(snapshot: dict | None) -> str:
     """One line for the bot window, naming the reason and not just the state."""
     current = stance(snapshot)

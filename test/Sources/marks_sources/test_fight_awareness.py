@@ -128,3 +128,56 @@ def test_the_withdrawal_line_falls_back_to_the_health_level():
 
 def test_the_clear_line_says_the_route_is_running():
     assert awareness.describe(None) == "route running"
+
+
+def escape_snapshot(**overrides) -> dict:
+    base = snapshot(health_enabled=True, escape_terrain_known=True, escape_boxed_in=False)
+    base["escape"] = {"distance": 1200.0, "source": "PROBE", "path": []}
+    base.update(overrides)
+    return base
+
+
+def test_a_healthy_route_reports_the_room_it_leaves():
+    lines = awareness.retreat_blockers(escape_snapshot())
+    assert not any("BLOCKED" in line for line in lines), lines
+    assert "1000u" in " ".join(lines), "room is the route minus the margin the zone holds back"
+
+
+def test_a_missing_route_is_named_as_the_blocker():
+    """The silent failure: the verdict keeps reading WITHDRAW and nothing moves."""
+    lines = awareness.retreat_blockers(escape_snapshot(escape=None))
+    assert any("no escape route" in line for line in lines), lines
+
+
+def test_an_unusable_navmesh_is_distinguished_from_being_boxed_in():
+    """Opposite causes, opposite fixes — one is a loading problem, one is terrain."""
+    unusable = awareness.retreat_blockers(escape_snapshot(escape=None, escape_terrain_known=False))
+    boxed = awareness.retreat_blockers(escape_snapshot(escape=None, escape_boxed_in=True))
+    assert "navmesh" in " ".join(unusable), unusable
+    assert "boxed in" in " ".join(boxed), boxed
+    assert unusable != boxed
+
+
+def test_a_route_shorter_than_the_margin_cannot_produce_a_step():
+    lines = awareness.retreat_blockers(
+        escape_snapshot(escape={"distance": awareness.GIVE_GROUND_MARGIN, "source": "PROBE"})
+    )
+    assert any("BLOCKED" in line for line in lines), lines
+
+
+def test_the_feature_being_switched_off_is_reported_before_anything_else():
+    lines = awareness.retreat_blockers(escape_snapshot(health_enabled=False))
+    assert "switched off" in lines[0], lines
+
+
+def test_a_spent_budget_is_reported_even_with_a_good_route():
+    lines = awareness.retreat_blockers(escape_snapshot(health_steps_used=3, health_max_steps=3))
+    assert any("budget spent" in line for line in lines), lines
+
+
+def test_the_margin_matches_the_one_the_zone_actually_enforces():
+    """A duplicated constant that drifts turns this readout into a confident lie
+    — it would report room the zone will refuse to use, or vice versa."""
+    from HeroAI.fight.zone import ZoneConfig
+
+    assert awareness.GIVE_GROUND_MARGIN == ZoneConfig().give_ground_margin

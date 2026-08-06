@@ -509,9 +509,19 @@ def draw_fight_tab() -> None:
     PyImGui.text(f"Zone state: {snapshot.get('state', '?')}")
     PyImGui.text(f"Alive {snapshot.get('party_alive', '?')} / dead {snapshot.get('party_dead', '?')}")
     PyImGui.text(f"Health steps: {snapshot.get('health_steps_used', 0)}/{snapshot.get('health_max_steps', 0)}")
+    PyImGui.text(f"Given ground: {float(snapshot.get('given_ground', 0.0)):.0f}u")
     anchor = fight_awareness.anchor(snapshot)
     if anchor is not None:
         PyImGui.text(f"Anchor: {anchor[0]:.0f}, {anchor[1]:.0f}")
+
+    PyImGui.separator()
+    # The escape route is a HARD GATE on withdrawing, not one input among
+    # several: no route, or one shorter than the give-ground margin, and the
+    # party cannot back up at all however bad its health gets. This is the line
+    # to read first when a retreat does not happen.
+    for line in fight_awareness.retreat_blockers(snapshot):
+        PyImGui.text(line)
+
     if stance is fight_awareness.Stance.CLEAR:
         return
     PyImGui.separator()
