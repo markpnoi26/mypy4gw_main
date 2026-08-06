@@ -1,3 +1,4 @@
+import PyGameThread
 import PyImGui
 from Core import *
 from Core.HotkeyManager import HOTKEY_MANAGER
@@ -97,7 +98,14 @@ def tooltip():
 # refresh and coroutine drain at roughly their previous cadence.
 PUMP_INTERVAL_MS = 16
 
+# PyGameThread.enqueue silently discards the callable while a map is loading, so
+# an in-flight pump is not guaranteed to ever release the flag. Re-dispatch after
+# this long rather than waiting for a release that may never come.
+PUMP_DISPATCH_ESCAPE_MS = 1000
+
 pump_timer = ThrottledTimer(PUMP_INTERVAL_MS)
+pump_dispatch_escape = ThrottledTimer(PUMP_DISPATCH_ESCAPE_MS)
+pump_in_flight = False
 
 
 def pump():
@@ -163,9 +171,36 @@ def pump():
         widget_config.throttle_fast_queue.Reset()
 
 
-def update():
-    if Utils.IsDrawLoopStalled():
+def pump_on_game_thread():
+    global pump_in_flight
+
+    try:
         pump()
+    finally:
+        pump_in_flight = False
+
+
+def update():
+    """Drives the pump while the draw loop is stalled, via the game thread.
+
+    The queues execute arbitrary game calls - Map.Travel sends a raw UI message -
+    and this callback runs on Py4GW's own update thread, where those calls fault.
+    Hopping to the game thread puts them back where draw() used to run them.
+    """
+    global pump_in_flight
+
+    if not Utils.IsDrawLoopStalled():
+        return
+
+    if not pump_timer.IsExpired():
+        return
+
+    if pump_in_flight and not pump_dispatch_escape.IsExpired():
+        return
+
+    pump_in_flight = True
+    pump_dispatch_escape.Reset()
+    PyGameThread.enqueue(pump_on_game_thread)
 
 
 def draw():
