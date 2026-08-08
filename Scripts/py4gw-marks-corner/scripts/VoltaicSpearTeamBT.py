@@ -22,15 +22,11 @@ __script__ = {
 }
 
 import os
-import time
 from dataclasses import dataclass
 from typing import Callable
 
-import PyImGui
 import PySystem
 
-from Core import GLOBAL_CACHE
-from Core import Player
 from Core import Range
 from Core import SharedCommandType
 from Core.BottingTree import BottingTree
@@ -38,9 +34,8 @@ from Core.enums_src.Model_enums import GadgetModelID
 from Core.py4gwcorelib_src.BehaviorTree import BehaviorTree
 from Core.py4gwcorelib_src.Settings import Settings
 from Core.routines_src.BehaviourTrees import BT
-from Sources.marks_sources import fight_awareness
 from Sources.marks_sources import gadget_interact
-from Sources.marks_sources import team_turns
+from Sources.marks_sources import team_bt
 
 MODULE_NAME = "Voltaic Spear Team BT"
 INI_PATH = "Widgets/Automation/Bots/Voltaic Spear Team BT"
@@ -130,206 +125,30 @@ ROUTES: tuple[ChestRoute, ...] = (
     # nothing below this line needs editing.
 )
 
-# Movement nodes read ONE pause key, and the HeroAI branch owns PAUSE_MOVEMENT.
-FIGHT_HOLD_KEY = "FIGHT_HOLD"
-# Player.Move goes through the ACTION queue the party's skills are also using.
-REPOSITION_INTERVAL_MS = 1500.0
-CHEST_TURNS_KEY = "chest_turns"
 # Wider than the 200 this used before. Once the gadget id is doing the matching a
 # decoy cannot win the scan, so the only thing a tight radius still buys is a
 # missed chest when the walk lands short.
 CHEST_SCAN_RADIUS = 400.0
-# Generous on purpose: expiry here means "could not confirm", and every wait that
-# uses it is wrapped so it cannot decide whether the step counted.
-TEAM_ACK_TIMEOUT_MS = 90_000
-
-TURN_CFG = team_turns.TurnConfig()
 
 botting_tree: BottingTree | None = None
 initialized = False
 ini_key = ""
 
 
-def fight_gate() -> BehaviorTree:
-    """Hold the route while the party is fighting; follow it back when it withdraws.
-
-    Writes its own pause key rather than PAUSE_MOVEMENT because services tick
-    AFTER the planner, and the HeroAI branch rewrites PAUSE_MOVEMENT at the top of
-    every tick — before the planner reads it. A service write to that key is
-    clobbered before anything can act on it, so FIGHT_HOLD carries it forward
-    instead, one frame behind.
-    """
-    state = {"last_move_ms": 0.0}
-
-    def tick_gate(node: BehaviorTree.Node) -> BehaviorTree.NodeState:
-        snapshot = fight_awareness.read()
-        stance = fight_awareness.stance(snapshot)
-        blackboard = node.blackboard
-        blackboard["FIGHT_STANCE"] = stance.name
-        blackboard["FIGHT_REASON"] = fight_awareness.describe(snapshot)
-        blackboard[FIGHT_HOLD_KEY] = stance is not fight_awareness.Stance.CLEAR or bool(
-            blackboard.get("PAUSE_MOVEMENT", False)
-        )
-
-        target = fight_awareness.reposition_target(snapshot, Player.GetXY())
-        if target is None:
-            return BehaviorTree.NodeState.RUNNING
-
-        # Re-issuing a move to the same point is idempotent, so this wants rate
-        # limiting rather than a latch on an observed change.
-        now = time.monotonic() * 1000.0
-        if now - float(state["last_move_ms"]) < REPOSITION_INTERVAL_MS:
-            return BehaviorTree.NodeState.RUNNING
-        Player.Move(target[0], target[1])
-        state["last_move_ms"] = now
-        return BehaviorTree.NodeState.RUNNING
-
-    return BehaviorTree(BehaviorTree.ActionNode(name="FightGate", action_fn=tick_gate, aftercast_ms=0))
-
-
 def optional(subtree: BehaviorTree, name: str) -> BehaviorTree:
-    """Let a step expire or miss without dropping the rung.
-
-    A FAILURE anywhere in the planner Sequence stops the whole bot — the planner
-    sets `started = False` on it. That is the right answer for a wrong map and
-    the wrong one for a wait that merely could not confirm what it was watching
-    for. The Selector still pins on RUNNING, so this shortens nothing.
-
-    The fallback LOGS. A wait that quietly gave up is the hardest kind of run to
-    read afterwards, because the bot carries on looking healthy.
-    """
-
-    def carry_on(node: BehaviorTree.Node) -> BehaviorTree.NodeState:
-        PySystem.Console.Log(
-            MODULE_NAME,
-            f"{name} did not complete - continuing anyway.",
-            PySystem.Console.MessageType.Warning,
-        )
-        return BehaviorTree.NodeState.SUCCESS
-
-    return BehaviorTree(
-        BehaviorTree.SelectorNode(
-            name=name,
-            children=[
-                subtree,
-                BehaviorTree.ActionNode(
-                    name=f"{name}: continue anyway",
-                    action_fn=carry_on,
-                    aftercast_ms=0,
-                ),
-            ],
-        )
-    )
+    return team_bt.optional(subtree, name, MODULE_NAME)
 
 
 def walk(x: float, y: float) -> BehaviorTree:
-    return BT.Movement.Move(x=x, y=y, pause_flag_key=FIGHT_HOLD_KEY)
+    return team_bt.walk(x, y)
 
 
 def walk_path(points: list[tuple[float, float]], label: str) -> BehaviorTree:
-    return BehaviorTree(
-        BehaviorTree.SequenceNode(
-            name=label,
-            children=[walk(x, y) for x, y in points],
-        )
-    )
+    return team_bt.walk_path(points, label)
 
 
 def walk_and_exit(x: float, y: float, target_map_id: int, label: str) -> BehaviorTree:
-    """Composed here rather than using MoveAndExitMap, which offers no pause key."""
-    return BehaviorTree(
-        BehaviorTree.SequenceNode(
-            name=label,
-            children=[
-                walk(x, y),
-                BT.Map.WaitforMapLoad(map_id=target_map_id, log=True, timeout=60_000),
-            ],
-        )
-    )
-
-
-def chest_target_key(chest: str) -> str:
-    return f"chest_target_id:{chest}"
-
-
-def chest_started_key(chest: str) -> str:
-    return f"chest_turns_started:{chest}"
-
-
-def follower_emails(sender_email: str) -> list[str]:
-    return [
-        email
-        for email in (
-            str(getattr(account, "AccountEmail", "") or "") for account in GLOBAL_CACHE.ShMem.GetAllAccountData() or []
-        )
-        if email and email != sender_email
-    ]
-
-
-def account_is_busy(email: str) -> bool:
-    """Any active message for that account — the order itself, and the loot pass
-    HeroAI queues behind it. Waiting on the interact alone releases the chest
-    while the account is still picking up."""
-    index, message = GLOBAL_CACHE.ShMem.PreviewNextMessage(email)
-    return index != -1 and message is not None
-
-
-def team_opens_chest_in_turn(chest: str) -> BehaviorTree:
-    """One account at a time. The chest is a mutex — a second account interacting
-    while the first still has it open gets nothing, and reports success anyway.
-
-    Keyed by chest name so a run with more than one of them cannot have the
-    second step read the first one's target or its already-started flag.
-
-    The receiver already snapshots and disables HeroAI options around its walk
-    and interact, then restores them — see Widgets/Panels/Messaging.py. Do not
-    add a combat toggle here; it would fight that snapshot.
-    """
-    state = team_turns.TurnState()
-
-    def tick_turns(node: BehaviorTree.Node) -> BehaviorTree.NodeState:
-        target = int(node.blackboard.get(chest_target_key(chest), 0) or 0)
-        sender_email = str(Player.GetAccountEmail() or "")
-        if not target or not sender_email:
-            return BehaviorTree.NodeState.FAILURE
-
-        started_key = chest_started_key(chest)
-        if not node.blackboard.get(started_key):
-            team_turns.begin(state, follower_emails(sender_email))
-            node.blackboard[started_key] = True
-
-        busy = account_is_busy(state.current) if state.current else False
-        verdict = team_turns.next_turn(state, TURN_CFG, int(time.monotonic() * 1000.0), busy)
-        node.blackboard[CHEST_TURNS_KEY] = f"{chest}: {team_turns.summary(state)}"
-
-        if verdict is team_turns.Turn.START:
-            GLOBAL_CACHE.ShMem.SendMessage(
-                sender_email,
-                state.current,
-                SharedCommandType.InteractWithTarget,
-                (float(target), 0.0, 0.0, 0.0),
-            )
-            PySystem.Console.Log(
-                MODULE_NAME,
-                f"{chest} turn: {state.current} ({team_turns.remaining(state)} left).",
-                PySystem.Console.MessageType.Info,
-            )
-            return BehaviorTree.NodeState.RUNNING
-
-        if verdict is team_turns.Turn.FINISHED:
-            node.blackboard[started_key] = False
-            PySystem.Console.Log(
-                MODULE_NAME,
-                f"{chest} turns complete: {team_turns.summary(state)}.",
-                PySystem.Console.MessageType.Success,
-            )
-            return BehaviorTree.NodeState.SUCCESS
-
-        return BehaviorTree.NodeState.RUNNING
-
-    return BehaviorTree(
-        BehaviorTree.ActionNode(name=f"TeamOpensChestInTurn({chest})", action_fn=tick_turns, aftercast_ms=0)
-    )
+    return team_bt.walk_and_exit(x, y, target_map_id, label)
 
 
 def initialize() -> BehaviorTree:
@@ -409,7 +228,7 @@ def claim_chest(route: ChestRoute) -> BehaviorTree:
                                 gadget_interact.interact_gadget(
                                     route.chest[0],
                                     route.chest[1],
-                                    key=chest_target_key(chest),
+                                    key=team_bt.chest_target_key(chest),
                                     radius=CHEST_SCAN_RADIUS,
                                     wanted_ids=(route.chest_id,),
                                 ),
@@ -423,14 +242,14 @@ def claim_chest(route: ChestRoute) -> BehaviorTree:
                 # Then the followers, strictly one at a time. Each turn ends on
                 # that account going quiet, not on a timer — how long it takes is
                 # geometry, since it walks in from wherever the formation left it.
-                optional(team_opens_chest_in_turn(chest), f"Team chest turns ({chest})"),
+                optional(team_bt.team_opens_chest_in_turn(chest, MODULE_NAME), f"Team chest turns ({chest})"),
                 # Looting is not a mutex, so the sweep for anything left on the
                 # floor can go out to everyone at once.
                 BT.Shared.SendCommand(command=SharedCommandType.PickUpLoot, log=True),
                 optional(
                     BT.Shared.WaitCommandDispatch(
                         command=SharedCommandType.PickUpLoot,
-                        timeout_ms=TEAM_ACK_TIMEOUT_MS,
+                        timeout_ms=team_bt.TEAM_ACK_TIMEOUT_MS,
                         log=True,
                     ),
                     f"Team loot ({chest})",
@@ -451,8 +270,11 @@ def reset_run() -> BehaviorTree:
             children=[
                 BT.Shared.ResignAllAccounts(log=True),
                 BT.Party.Resign(log=True),
-                BT.Map.WaitforMapLoad(map_id=UMBRAL_GROTTO_ID, log=True, timeout=90_000),
-                optional(BT.Party.WaitForPartyLoaded(timeout_ms=30_000), "Wait for party"),
+                # From here the wipe-restart service owns the run: outpost
+                # loads, planner restarts from Initialize. Waiting on the map
+                # load here races the restart — measured live in SoO as the bot
+                # standing in the outpost restarting its own reset step.
+                team_bt.hold_for_restart("Reset Run: waiting for restart"),
             ],
         )
     )
@@ -492,42 +314,11 @@ def ensure_botting_tree() -> BottingTree:
         # Never add ConfigureUpkeep above this line: it calls SetUpkeepTrees,
         # which REPLACES the service list rather than appending to it, and the
         # gate would vanish silently.
-        botting_tree.AddServiceTree("FightGate", fight_gate)
+        botting_tree.AddServiceTree("FightGate", team_bt.fight_gate)
+        botting_tree.AddServiceTree(
+            "WipeRestart", lambda: team_bt.wipe_restart_service("Initialize", MODULE_NAME)
+        )
     return botting_tree
-
-
-def draw_fight_tab() -> None:
-    snapshot = fight_awareness.read()
-    stance = fight_awareness.stance(snapshot)
-    PyImGui.text(f"Stance: {stance.name}")
-    PyImGui.text(fight_awareness.describe(snapshot))
-    PyImGui.separator()
-
-    if snapshot is None:
-        PyImGui.text("No fight zone publishing. HeroAI leader-side only.")
-        return
-
-    PyImGui.progress_bar(fight_awareness.party_health(snapshot), -1.0, f"{fight_awareness.party_health(snapshot):.0%}")
-    PyImGui.text(f"Zone state: {snapshot.get('state', '?')}")
-    PyImGui.text(f"Alive {snapshot.get('party_alive', '?')} / dead {snapshot.get('party_dead', '?')}")
-    PyImGui.text(f"Health steps: {snapshot.get('health_steps_used', 0)}/{snapshot.get('health_max_steps', 0)}")
-    PyImGui.text(f"Given ground: {float(snapshot.get('given_ground', 0.0)):.0f}u")
-    anchor = fight_awareness.anchor(snapshot)
-    if anchor is not None:
-        PyImGui.text(f"Anchor: {anchor[0]:.0f}, {anchor[1]:.0f}")
-
-    PyImGui.separator()
-    # The escape route is a HARD GATE on withdrawing, not one input among
-    # several: no route, or one shorter than the give-ground margin, and the
-    # party cannot back up at all however bad its health gets. This is the line
-    # to read first when a retreat does not happen.
-    for line in fight_awareness.retreat_blockers(snapshot):
-        PyImGui.text(line)
-
-    if stance is fight_awareness.Stance.CLEAR:
-        return
-    PyImGui.separator()
-    PyImGui.text("Route is HELD - the leader is not advancing.")
 
 
 def main() -> None:
@@ -551,7 +342,7 @@ def main() -> None:
         "textures",
         "voltaic_spear.png",
     )
-    tree.UI.draw_window(icon_path=texture, extra_tabs=[("Fight", draw_fight_tab)])
+    tree.UI.draw_window(icon_path=texture, extra_tabs=[("Fight", team_bt.draw_fight_tab)])
 
 
 if __name__ == "__main__":
