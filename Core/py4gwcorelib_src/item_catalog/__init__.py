@@ -8,6 +8,7 @@ catalog kept there is missing from a fresh clone.
 
 * :mod:`catalog` -- the item catalog (387 resolved entries) and the 16 whose id is unknown.
 * :mod:`materials` -- the 36 crafting materials, and what items salvage into.
+* :mod:`storage` -- where each material sits in the material storage pane.
 * :mod:`dyes` -- dye colours, identified by item type, never by model id.
 * :mod:`nicholas` -- resolving the scheduled trophy for a week.
 """
@@ -47,16 +48,26 @@ from .nicholas import NicholasSelection
 from .nicholas import entry_for_day
 from .nicholas import entry_for_week
 from .nicholas import monday_of
+from .storage import COMMON_MATERIAL_IDS
+from .storage import RARE_MATERIAL_IDS
+from .storage import STORAGE_SLOT
+from .storage import is_common_material
+from .storage import is_material
+from .storage import is_rare_material
+from .storage import storage_slot
 
 __all__ = [
     "CATALOG",
     "COMMON",
+    "COMMON_MATERIAL_IDS",
     "DYES",
     "DYE_ITEM_TYPE",
     "DYE_MODEL_ID",
     "MATERIALS",
     "RARE",
+    "RARE_MATERIAL_IDS",
     "SALVAGE_MAP",
+    "STORAGE_SLOT",
     "UNRESOLVED",
     "CatalogEntry",
     "Dye",
@@ -76,7 +87,10 @@ __all__ = [
     "groups",
     "in_category",
     "in_group",
+    "is_common_material",
     "is_dye",
+    "is_material",
+    "is_rare_material",
     "known_sources",
     "material",
     "material_model_ids",
@@ -84,4 +98,5 @@ __all__ = [
     "monday_of",
     "salvages_into",
     "salvages_into_material",
+    "storage_slot",
 ]

@@ -218,7 +218,8 @@ TYPES_PER_ROW = 4
 
 SETTINGS_SECTION = "InventoryLite"
 RULES_DOC = "Widgets/Items/InventoryLiteRules.json"
-SEEDED_UNNAMED_KEY = "seeded_unnamed"
+#: The retired seeded rule. It DEPOSITED unnamed items -- the built-in hold now keeps them in the
+#: bags instead, so the rule is dropped on read rather than left to argue with the hold.
 UNNAMED_RULE_NAME = "Unnamed - park in storage"
 SEEDED_SALVAGE_KEY = "seeded_salvage"
 SALVAGE_RULE_NAME = "Salvage - white and blue"
@@ -228,6 +229,8 @@ SALVAGE_RULE_NAME = "Salvage - white and blue"
 ACTIONS = ("keep", "sell", "salvage")
 ACTION_TABS = {"keep": "Keep", "sell": "Sell", "salvage": "Salvage"}
 ACTION_VERBS = {"keep": "DEPOSIT", "sell": "SELL", "salvage": "SALVAGE"}
+HOLD_VERB = "HOLD"
+UNNAMED_HOLD_REASON = "unnamed - held in the bags until it can be named"
 ACTION_BLURBS = {
     "keep": "Matches are deposited into storage, if there is room.",
     "sell": "Matches are sold at the merchant.",
@@ -315,6 +318,14 @@ def display_safe(text: str) -> str:
 def normalize_match(text: str) -> str:
     """Lowercase, letters and digits only -- the form both sides of a text criterion compare in."""
     return re.sub(r"[^a-z0-9]+", "", (text or "").lower())
+
+
+def matches_any(haystack: str, needles) -> bool:
+    """Loose on purpose: case is ignored, and so is anything that is not a letter or digit. The mod
+    tables read "of Enchanting" while LootEx-style identifiers read "OfEnchanting", and both should
+    hit -- as should "Superior Vigor" against "Rune of Superior Vigor"."""
+    low = normalize_match(haystack)
+    return bool(low) and any(normalize_match(n) in low for n in needles if normalize_match(n))
 
 
 def item_facts(item_id: int, model_id: int, quantity: int) -> dict:
@@ -527,7 +538,7 @@ class Rule:
     inherent_max_only: bool = False
     #: Every mod on the item is maxed -- a perfect item, not just a perfect slot.
     all_mods_max: bool = False
-    #: Nothing could name the model. Parks the item in storage until naming catches up.
+    #: Nothing could name the model.
     unnamed_only: bool = False
 
     def to_dict(self) -> dict:
@@ -604,13 +615,6 @@ class Rule:
         """(verdict, per-criterion breakdown). A rule with no criteria matches nothing."""
         results: list[tuple[str, bool]] = []
 
-        def contains(haystack: str, needles) -> bool:
-            # Loose on purpose: case is ignored, and so is anything that is not a letter or digit.
-            # The mod tables read "of Enchanting" while LootEx-style identifiers read "OfEnchanting",
-            # and both should hit -- as should "Superior Vigor" against "Rune of Superior Vigor".
-            low = normalize_match(haystack)
-            return bool(low) and any(normalize_match(n) in low for n in needles if normalize_match(n))
-
         for label, value, needles in (
             ("name", facts["name"], self.name_contains),
             ("prefix", facts["prefix"], self.prefix_contains),
@@ -618,7 +622,7 @@ class Rule:
             ("inherent", facts["inherent"], self.inherent_contains),
         ):
             if needles:
-                results.append(("%s~%s" % (label, "/".join(needles)), contains(value, needles)))
+                results.append(("%s~%s" % (label, "/".join(needles)), matches_any(value, needles)))
 
         if self.rarities:
             results.append(("rarity", facts["rarity"] in self.rarities))
@@ -655,6 +659,12 @@ class Rule:
         return (all(passed) if self.match_all else any(passed)), results
 
 
+def retired_unnamed_rule(rule: Rule) -> bool:
+    """The old seeded rule, recognised so read_rules can drop it from an existing rules doc: it
+    deposited exactly what the unnamed hold now exists to keep in the bags."""
+    return rule.unnamed_only and rule.action == "keep" and rule.name == UNNAMED_RULE_NAME
+
+
 def read_rules() -> list[Rule] | None:
     """Parsed rules from the shared document, or None when it could not be read at all.
 
@@ -673,9 +683,12 @@ def read_rules() -> list[Rule] | None:
     for entry in raw:
         if isinstance(entry, dict):
             try:
-                out.append(Rule.from_dict(entry))
+                rule = Rule.from_dict(entry)
             except Exception:
                 continue
+            if retired_unnamed_rule(rule):
+                continue
+            out.append(rule)
     return out
 
 
@@ -700,10 +713,6 @@ def seed_once(key: str, rules, rule: Rule) -> bool:
         return False
     rules.append(rule)
     return True
-
-
-def seed_unnamed_rule(rules) -> bool:
-    return seed_once(SEEDED_UNNAMED_KEY, rules, Rule(name=UNNAMED_RULE_NAME, unnamed_only=True))
 
 
 def seed_salvage_rule(rules) -> bool:
@@ -781,6 +790,33 @@ def action_block_reason(facts: dict, action: str) -> str:
     return ""
 
 
+def mods_vouch(rule: Rule, facts: dict) -> bool:
+    """Whether this rule matched the item BY ITS MODS -- checked against the facts, not just asked
+    for on the rule, so a Match ANY rule that passed on rarity alone does not count."""
+    for slot, needles, max_only in (
+        ("prefix", rule.prefix_contains, rule.prefix_max_only),
+        ("suffix", rule.suffix_contains, rule.suffix_max_only),
+        ("inherent", rule.inherent_contains, rule.inherent_max_only),
+    ):
+        if needles and matches_any(facts[slot], needles):
+            return True
+        if max_only and facts[slot] and facts["%s_max" % slot]:
+            return True
+    return rule.all_mods_max and facts["all_mods_max"]
+
+
+def rule_claims(rule: Rule, facts: dict) -> bool:
+    """Whether this rule both matches the item and may take it.
+
+    An item nothing could name may only leave the bags for a rule that matched its mods: the mods
+    are readable before the name is, so "the right mods" is the one judgement that does not have to
+    wait for naming. Everything else about a nameless item is a guess.
+    """
+    if not rule.evaluate(facts)[0]:
+        return False
+    return bool(facts["name"]) or mods_vouch(rule, facts)
+
+
 def match_rules(rules, facts_by_id: dict, action: str, residual: bool = False):
     """Ids this action claims, plus one row for EVERY item. (matched, rows).
 
@@ -791,6 +827,10 @@ def match_rules(rules, facts_by_id: dict, action: str, residual: bool = False):
     Items that did NOT match are listed too, each with the breakdown of whichever rule came closest.
     An item you expected to be taken and was not is the case that needs explaining, and it cannot
     explain itself if it has no row.
+
+    Items nothing could name are HELD: no rule may deposit, sell or salvage one -- residual salvage
+    included -- unless the rule matched it by its mods (rule_claims). Held items stay in the bags
+    and come back through here on every pass, so naming catching up is all it takes to release them.
     """
     verb = ACTION_VERBS[action]
     rank = ACTIONS.index(action)
@@ -800,11 +840,12 @@ def match_rules(rules, facts_by_id: dict, action: str, residual: bool = False):
     rows: list[list[str]] = []
 
     for item_id, facts in facts_by_id.items():
-        verdict_label = "-"
-        rule_name = ""
-        why = "no enabled %s rule has criteria" % action
+        if facts["name"]:
+            verdict_label, rule_name, why = "-", "", "no enabled %s rule has criteria" % action
+        else:
+            verdict_label, rule_name, why = HOLD_VERB, "", UNNAMED_HOLD_REASON
 
-        claimed = next((r for r in stronger if r.evaluate(facts)[0]), None)
+        claimed = next((r for r in stronger if rule_claims(r, facts)), None)
         blocked = action_block_reason(facts, action)
         if claimed is not None:
             verdict_label = ACTION_VERBS[claimed.action]
@@ -816,22 +857,26 @@ def match_rules(rules, facts_by_id: dict, action: str, residual: bool = False):
             best_score = -1
             for rule in mine:
                 passes, results = rule.evaluate(facts)
-                if passes:
+                if passes and (facts["name"] or mods_vouch(rule, facts)):
                     verdict_label, rule_name, why = verb, rule.name, describe_verdict(rule, results)
                     matched.append(item_id)
                     break
+                if passes:
+                    # Wanted, but held: name the rule so the row shows who is waiting for the name.
+                    rule_name = rule.name
+                    continue
                 score = sum(1 for _label, ok in results if ok)
-                if results and score > best_score:
+                if facts["name"] and results and score > best_score:
                     best_score = score
                     rule_name, why = rule.name, describe_verdict(rule, results)
             else:
-                if residual:
+                if residual and facts["name"]:
                     verdict_label, rule_name, why = verb, "", "unclaimed by any rule"
                     matched.append(item_id)
 
         rows.append([verdict_label] + facts_row(facts) + [display_safe(rule_name), display_safe(why)])
 
-    order = {verb: 0, "SKIP": 2, "-": 3}
+    order = {verb: 0, HOLD_VERB: 1, "SKIP": 2, "-": 3}
     rows.sort(key=lambda row: order.get(row[0], 1))
     return matched, rows
 
@@ -1369,14 +1414,7 @@ class InventoryLite:
         # the residual has to be something you turned on rather than something you inherited.
         self.salvage_residual = handler.get_bool(SETTINGS_SECTION, "SalvageResidual", False)
         self.rules = load_rules()
-        seeded = [
-            name
-            for name, added in (
-                (UNNAMED_RULE_NAME, seed_unnamed_rule(self.rules)),
-                (SALVAGE_RULE_NAME, seed_salvage_rule(self.rules)),
-            )
-            if added
-        ]
+        seeded = [name for name, added in ((SALVAGE_RULE_NAME, seed_salvage_rule(self.rules)),) if added]
         if seeded:
             save_rules(self.rules)
             ConsoleLog(
@@ -1871,6 +1909,11 @@ class InventoryLite:
 
     def draw_rules_tab(self, action: str):
         PyImGui.text_colored(ACTION_BLURBS[action], WARN if action == "salvage" else GRAY)
+        PyImGui.text_colored(
+            "Nameless items ('model <id>') are held in the bags until a scan can name them - "
+            "a rule only takes one by matching its mods.",
+            GRAY,
+        )
 
         if action == "salvage":
             residual = PyImGui.checkbox("Salvage anything no rule claimed##residual", self.salvage_residual)
