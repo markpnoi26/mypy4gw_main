@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from .agents import BTAgents
     from .cast_events import BTCastEvents
     from .composite import BTComposite, BTCompositeHelpers
+    from .economy import BTEconomy
     from .items import BTItems
     from .keybinds import BTKeybinds
     from .map import BTMap
@@ -27,6 +28,7 @@ __all__ = [
     "BTCastEvents",
     "BTComposite",
     "BTCompositeHelpers",
+    "BTEconomy",
     "BTItems",
     "BTKeybinds",
     "BTMap",
@@ -56,6 +58,10 @@ def __getattr__(name: str) -> Any:
         from .composite import BTCompositeHelpers
 
         return BTCompositeHelpers
+    if name == "BTEconomy":
+        from .economy import BTEconomy
+
+        return BTEconomy
     if name == "BTItems":
         from .items import BTItems
 

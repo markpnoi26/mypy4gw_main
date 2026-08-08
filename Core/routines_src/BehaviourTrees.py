@@ -66,6 +66,7 @@ from .behaviourtrees_src import (
     BTCastEvents,
     BTComposite,
     BTCompositeHelpers,
+    BTEconomy,
     BTItems,
     BTKeybinds,
     BTMap,
@@ -137,6 +138,7 @@ class BT:
     Map = BTMap
     Upkeepers = BTUpkeepers
     Items = BTItems
+    Economy = BTEconomy
     Agents = BTAgents
     Party = BTParty
     Shared = BTShared

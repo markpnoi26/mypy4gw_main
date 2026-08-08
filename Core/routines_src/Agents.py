@@ -183,7 +183,7 @@ class Agents:
         return best_id
 
     @staticmethod
-    def GetFilteredEnemyArray(x, y, max_distance=4500.0, aggressive_only=False):
+    def GetFilteredEnemyArray(x, y, max_distance=4500.0, aggressive_only=False, layer_filtered=True):
         from ..AgentArray import AgentArray
         from ..Py4GWcorelib import Utils
         from ..Agent import Agent
@@ -204,6 +204,10 @@ class Agents:
         enemy_array = AgentArray.Filter.ByCondition(enemy_array, lambda agent_id: Player.GetAgentID() != agent_id)
         if aggressive_only:
             enemy_array = AgentArray.Filter.ByCondition(enemy_array, lambda agent_id: Agent.IsAggressive(agent_id))
+        if layer_filtered:
+            from .CombatLayer import ApplyEnemyPoolFilter
+
+            enemy_array = ApplyEnemyPoolFilter(enemy_array)
         return enemy_array
 
     @staticmethod
