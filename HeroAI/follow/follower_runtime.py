@@ -42,6 +42,11 @@ class FollowExecutionState:
     recovery_detour_attempted: bool = False
     pet_recovery_notified: bool = False
     relocating_to_flag: bool = False
+    plane_disagree_samples: int = 0
+    plane_agree_samples: int = 0
+    planes_disagree: bool = False
+    native_follow_active: bool = False
+    native_follow_started_ms: int = 0
     stuck: SmartUnstuckState = field(default_factory=SmartUnstuckState)
     steer: LeaderSteeringState = field(default_factory=LeaderSteeringState)
 
@@ -55,6 +60,32 @@ FOLLOW_RECOVERY_RELEASE_DISTANCE = Range.Earshot.value
 # on its spot never jitters, tight enough that a backliner pulled into the melee
 # walks back out rather than tanking from the healer slot.
 FLAG_RETURN_MARGIN = Range.Nearby.value
+
+# Plane readings flap where two surfaces overlap in plan view - the middle of a
+# bridge reads as both. Acting on one sample is what sends a follower hunting for
+# a destination on the level it is not on, so require agreement to persist in
+# either direction before believing it.
+PLANE_DEBOUNCE_SAMPLES = 3
+
+# Native follow is GW's own pathing, borrowed as transport when ours has provably
+# failed. Never load-bearing: expiry hands control back to normal follow rather
+# than deciding anything (runtime-behaviour.md).
+NATIVE_FOLLOW_TIMEOUT_MS = 15000
+
+
+def update_plane_agreement(state: FollowExecutionState, own_plane: int, destination_plane: int) -> bool:
+    """Debounced 'is the destination on my level'. True while they agree."""
+    if own_plane == destination_plane:
+        state.plane_agree_samples += 1
+        state.plane_disagree_samples = 0
+        if state.plane_agree_samples >= PLANE_DEBOUNCE_SAMPLES:
+            state.planes_disagree = False
+    else:
+        state.plane_disagree_samples += 1
+        state.plane_agree_samples = 0
+        if state.plane_disagree_samples >= PLANE_DEBOUNCE_SAMPLES:
+            state.planes_disagree = True
+    return not state.planes_disagree
 
 
 def get_follow_destination_distance(cached_data: CacheData) -> float:
@@ -174,6 +205,11 @@ def execute_follower_follow(
         state.last_recovery_follow_command_ms = 0
         state.recovery_detour_attempted = False
         state.relocating_to_flag = False
+        state.native_follow_active = False
+        state.native_follow_started_ms = 0
+        state.planes_disagree = False
+        state.plane_agree_samples = 0
+        state.plane_disagree_samples = 0
         reset_smart_unstuck(state.stuck)
         reset_steering(state.steer)
 
@@ -361,6 +397,8 @@ def execute_follower_follow(
             cached_data.follow_throttle_timer.Reset()
             return BehaviorTree.NodeState.FAILURE
 
+    planes_agree = update_plane_agreement(state, int(Agent.GetZPlane(player_agent_id)), follow_z)
+
     assigned_point = (follow_x, follow_y, follow_z)
     destination_refresh_distance = max(25.0, min(150.0, follow_distance * 0.25))
     assigned_changed = _assigned_point_changed(
@@ -435,6 +473,15 @@ def execute_follower_follow(
         cached_data.follow_throttle_timer.Reset()
         return BehaviorTree.NodeState.FAILURE
 
+    # A station on another level cannot be walked to directly: the move resolves
+    # at this follower's plane, which is how a bridge crossing ends with the
+    # backline on the far bank. Fighting a few paces off station beats leaving
+    # the fight, so suspend the station until the planes agree again.
+    if bool(cached_data.data.local_in_aggro) and not planes_agree:
+        state.last_follow_move_point = None
+        cached_data.follow_throttle_timer.Reset()
+        return BehaviorTree.NodeState.FAILURE
+
     if follow_z == 0 and not own_flag_active:
         update_smart_unstuck(
             state.stuck,
@@ -505,15 +552,41 @@ def execute_follower_follow(
     if not ActionQueueManager().IsEmpty("ACTION"):
         return BehaviorTree.NodeState.FAILURE
 
-    if follow_z == 0 or own_flag_active or all_flag_active:
-        Player.Move(xx, yy)
-        if steering_active:
-            mark_move_issued(state.steer, Player.GetXY(), (xx, yy), tick_ms)
-    else:
+    # Borrow GW's own pathing when ours has provably failed. Triggered by the
+    # failure itself, not by plane: the plane reading is what misleads us at a
+    # bridge, while "issued moves are not closing the gap" is true of bridges,
+    # corridors and doorways alike. Transport only - it steers to the leader with
+    # no formation offset, so combat and flagged followers never hand over.
+    native_follow_wanted = (
+        not own_flag_active
+        and not all_flag_active
+        and not bool(cached_data.data.local_in_aggro)
+        and (not planes_agree or state.stuck.no_progress_samples > 0)
+    )
+
+    if state.native_follow_active:
+        if native_follow_wanted and (tick_ms - state.native_follow_started_ms) < NATIVE_FOLLOW_TIMEOUT_MS:
+            cached_data.follow_throttle_timer.Reset()
+            return BehaviorTree.NodeState.FAILURE
+        state.native_follow_active = False
+        state.last_follow_move_point = None
+        ActionQueueManager().AddAction(
+            "ACTION", UIManager.Keypress, ControlAction.ControlAction_CancelAction.value, 0
+        )
+    elif native_follow_wanted:
+        state.native_follow_active = True
+        state.native_follow_started_ms = tick_ms
+        reset_smart_unstuck(state.stuck)
         ActionQueueManager().AddAction(
             "ACTION", UIManager.Keypress, ControlAction.ControlAction_TargetPartyMember1.value, 0
         )
         ActionQueueManager().AddAction("ACTION", UIManager.Keypress, ControlAction.ControlAction_Follow.value, 0)
+        cached_data.follow_throttle_timer.Reset()
+        return BehaviorTree.NodeState.FAILURE
+
+    Player.Move(xx, yy)
+    if steering_active:
+        mark_move_issued(state.steer, Player.GetXY(), (xx, yy), tick_ms)
 
     state.last_follow_move_point = (xx, yy)
 

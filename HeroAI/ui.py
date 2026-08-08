@@ -3148,6 +3148,21 @@ def draw_configure_window(module_name: str, configure_window: WindowModule):
                         settings.AutoCallTargets = auto_call_targets
                         settings.save_settings()
 
+                    layer_aware_targeting = ImGui.checkbox("Layer Aware Targeting", settings.LayerAwareTargeting)
+                    if layer_aware_targeting != settings.LayerAwareTargeting:
+                        settings.LayerAwareTargeting = layer_aware_targeting
+                        settings.save_settings()
+                    ImGui.show_tooltip(
+                        "Ignore enemies separated vertically by more than the tolerance below, so the party stops attacking through bridges and floors."
+                    )
+
+                    combat_layer_z_tolerance = ImGui.slider_float(
+                        "Combat Layer Z Tolerance", settings.CombatLayerZTolerance, 0.0, 1000.0
+                    )
+                    if combat_layer_z_tolerance != settings.CombatLayerZTolerance:
+                        settings.CombatLayerZTolerance = combat_layer_z_tolerance
+                        settings.save_settings()
+
                     combat_range_modes = [
                         Settings.COMBAT_RANGE_MODE_PARTY_AGGRO,
                         Settings.COMBAT_RANGE_MODE_LEGACY,

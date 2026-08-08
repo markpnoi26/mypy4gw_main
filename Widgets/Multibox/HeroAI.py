@@ -34,6 +34,7 @@ from HeroAI.windows import (
 from HeroAI.ui_base import HeroAI_BaseUI
 from HeroAI.ui import draw_configure_window, draw_skip_cutscene_overlay
 from HeroAI import team_viewer_broadcast
+from HeroAI.layer_targeting import InstallLayerFilter
 from Core import GLOBAL_CACHE, Agent, Range, Routines, ThrottledTimer, SharedCommandType, Utils
 
 # region GLOBALS
@@ -41,6 +42,7 @@ LOOT_THROTTLE_CHECK = ThrottledTimer(250)
 
 cached_data = CacheData()
 heroai_build = create_heroai_engine(cached_data)
+InstallLayerFilter()
 map_quads: list[Map.Pathing.Quad] = []
 build_contract_map_signature: tuple[int, int, int, int] | None = None
 
@@ -542,7 +544,9 @@ def tick_logic():
 
 
 AGGRO_PROBE_ENABLED = True
-AGGRO_PROBE_MAX_LINES = 50
+# Ring size, not a budget: the probe now runs continuously rather than per
+# engagement, so this is how much history survives, not when it stops.
+AGGRO_PROBE_MAX_LINES = 600
 
 # MC = minimised combat. Account scope, so every client writes its own file and a
 # minimised follower can be read without restoring its window. JsonFactory rather
@@ -575,12 +579,12 @@ def record_mc_line(line: str) -> None:
 
 
 def log_aggro_probe() -> None:
-    """TEMPORARY. Reports which gate is holding the combat branch shut.
+    """TEMPORARY. Reports which gate is holding the combat or follow branch shut.
 
-    Logs only while in aggro, capped per engagement — a follower that heals but
-    never attacks has failed one of these gates, and the interesting window is the
-    fight itself. The counter resets when combat ends, so each fight gets a fresh
-    budget instead of one long fight burning it for the session.
+    Deliberately ungated by aggro: a follower that stops advancing on a correct
+    destination does it out of combat, so an aggro-only probe records nothing for
+    exactly the failure worth catching. Minimised-only still, since a visible
+    client can be watched directly.
     """
     global aggro_probe_lines
 
@@ -588,11 +592,8 @@ def log_aggro_probe() -> None:
         return
     aggro_probe_timer.Reset()
 
-    # MC only: minimised AND in combat. A visible client records nothing.
-    if not (Utils.IsDrawLoopStalled() and cached_data.data.in_aggro):
+    if not Utils.IsDrawLoopStalled():
         aggro_probe_lines = 0
-        return
-    if aggro_probe_lines >= AGGRO_PROBE_MAX_LINES:
         return
     aggro_probe_lines += 1
 
@@ -610,9 +611,16 @@ def log_aggro_probe() -> None:
         target = Player.GetTargetID()
         queue = ActionQueueManager()
 
+        my_x, my_y = Agent.GetXY(me)
+        stuck = follow_execution_state.stuck
+        assigned = follow_execution_state.last_follow_assigned_point
+
         line = (
             "%s pos=%d enemies=%d effective=%d | target=%d attacking=%d casting=%d moving=%d idle=%d"
             " | weapon=%d holding=%d qACTION=%s next=%s"
+            " | xy=(%.0f,%.0f) plane=%d dist=%.0f recovery=%d reloc=%d stuck=%s wp=%d/%d nop=%d"
+            " nativefollow=%d planesbad=%d"
+            " | assigned=%s move=%s"
             % (
                 time.strftime("%H:%M:%S"),
                 int(data.party_position),
@@ -627,6 +635,20 @@ def log_aggro_probe() -> None:
                 int(bool(Agent.IsHoldingItem(me))),
                 "empty" if queue.IsEmpty("ACTION") else "BUSY",
                 queue.GetNextActionName("ACTION") or "-",
+                my_x,
+                my_y,
+                int(Agent.GetZPlane(me)),
+                get_follow_destination_distance(cached_data),
+                int(bool(follow_execution_state.recovery_active)),
+                int(bool(follow_execution_state.relocating_to_flag)),
+                str(stuck.mode),
+                int(stuck.waypoint_idx),
+                len(stuck.waypoints),
+                int(stuck.no_progress_samples),
+                int(bool(follow_execution_state.native_follow_active)),
+                int(bool(follow_execution_state.planes_disagree)),
+                assigned,
+                follow_execution_state.last_follow_move_point,
             )
         )
 

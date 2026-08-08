@@ -143,6 +143,8 @@ class Settings:
         self.ShowHeroSkills = True
         self.ShowFloatingTargets = True
         self.AutoCallTargets = False
+        self.LayerAwareTargeting = False
+        self.CombatLayerZTolerance = 250.0
         self.CombatRangeMode = self.COMBAT_RANGE_MODE_PARTY_AGGRO
         self._combat_range_mode_override: str | None = None
         self.ShowPartyPanelUI = True
@@ -279,6 +281,8 @@ class Settings:
         self.ini_handler.set("General", "ShowHeroBars", str(self.ShowHeroBars))
         self.ini_handler.set("General", "ShowFloatingTargets", str(self.ShowFloatingTargets))
         self.ini_handler.set("General", "AutoCallTargets", str(self.AutoCallTargets))
+        self.ini_handler.set("General", "LayerAwareTargeting", str(self.LayerAwareTargeting))
+        self.ini_handler.set("General", "CombatLayerZTolerance", str(self.CombatLayerZTolerance))
         self.ini_handler.set("General", "CombatRangeMode", self.normalize_combat_range_mode(self.CombatRangeMode))
         self.ini_handler.set("General", "ShowHeroSkills", str(self.ShowHeroSkills))
 
@@ -338,6 +342,10 @@ class Settings:
         self.ShowHeroBars = self.ini_handler.get_bool("General", "ShowHeroBars", True)
         self.ShowFloatingTargets = self.ini_handler.get_bool("General", "ShowFloatingTargets", True)
         self.AutoCallTargets = self.ini_handler.get_bool("General", "AutoCallTargets", False)
+        self.LayerAwareTargeting = self.ini_handler.get_bool("General", "LayerAwareTargeting", False)
+        self.CombatLayerZTolerance = min(
+            1000.0, max(0.0, self.ini_handler.get_float("General", "CombatLayerZTolerance", 250.0))
+        )
         self.CombatRangeMode = self.normalize_combat_range_mode(
             self.ini_handler.get_str("General", "CombatRangeMode", self.COMBAT_RANGE_MODE_PARTY_AGGRO)
         )
