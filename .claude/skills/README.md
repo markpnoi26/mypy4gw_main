@@ -1,21 +1,30 @@
 # Skills
 
-Auto-registered by Claude Code. Filename becomes the skill name
-(`persistence-jail.md` → `/persistence-jail`); frontmatter `description` is the
-hook it reads to decide whether to auto-invoke. Presence costs nothing —
-invocation is what lands content in context.
+Only **directory-form** skills (`.claude/skills/<name>/SKILL.md`) register with
+Claude Code and are invocable. The flat `.md` files in this directory do NOT
+register — they are knowledge notes, read on demand by grep or by being told
+to. Both are worth having; only the form differs.
 
 **These are tracked here**, unlike in the sibling repo where `.claude/` is
 excluded via `.git/info/exclude` and one `git clean` from gone. Ported
 2026-07-28 with every path translated through `tools/reforge/layout.toml`, so
 they name *this* tree.
 
-## Index
+## Registered skills (directory-form, invocable)
+
+- `rebuild-dll` — rebuild and deploy the patched `Py4GW.dll` when upstream
+  ships a new DLL or native source changes; guards the game-thread fix
+- `contribute-unchained` — branch/commit/PR mechanics for the Unchained fork
+  line, the active contribution target (RS-008)
+- `port-concept` — re-implementation discipline for moving a concept across
+  fork lines, either direction; the name/persistence translation tables
+
+## Index of knowledge notes (flat files)
 
 **Repo-wide** — load early, cheap, applies to any task
 
 - `repo-navigation` — LINE_INDEX symbol lookup, tree ownership, docs hierarchy, entry points
-- `pr-workflow` — origin/upstream fork split, branch scratchpads, files never to commit
+- `pr-workflow` — **superseded stub** (RS-008): points at `contribute-unchained`
 - `python-naming-conventions` — snake_case vs the framework APIs we don't own
 - `test-harness` — test/ mirrors the source tree, native stubs, the gate, known reds, proving a test can fail
 
@@ -43,12 +52,17 @@ they name *this* tree.
 
 ## Reading these against a sibling repo
 
-Two siblings exist, both at `C:\cygwin64\home\Mark\code\`:
+The full sibling map — five repos plus support dirs — is
+`docs/related-repos.md`. The two that share this lineage's layout:
 
 | repo | layout | what it is |
 |---|---|---|
-| `Py4GW_Reforged` | `Py4GWCoreLib/` + `HeroAI/` | the fork — PR staging, and `forwardport.py --source` |
+| `Py4GW_Reforged` | `Py4GWCoreLib/` + `HeroAI/` | the fork — archive of unported work, `forwardport.py --source`, inbound only (RS-008) |
 | `MyPy4GW` | `Py4GWCoreLib/` only | symlink-overlay runtime; no `HeroAI/`, so BT skills do not apply |
+
+The Unchained pair (`Py4GW-Unchained`, `Py4GW-unchained-cpp`) is a different
+fork line — these skills' paths and native names do not apply there. See
+`docs/repo-overlap.md` and the `port-concept` skill.
 
 > `Py4GW_Reforged` also contains a stray `Core/` — 11 entries against
 > `Py4GWCoreLib`'s 69, untracked and gitignored at `.gitignore:253`. It is
@@ -103,4 +117,5 @@ go there, on-demand knowledge goes here. `AGENTS.md` is the operating manual for
 other agentic tools and for humans; Claude Code does not auto-load it.
 
 There is no `.claude/hooks/` in this repo — the sibling's `py_syntax_check.py`
-`PostToolUse` hook was not ported, and neither was its `settings.local.json`.
+`PostToolUse` hook was not ported. A `settings.local.json` does exist here
+(gitignored, permissions allowlist only).

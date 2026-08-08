@@ -48,9 +48,9 @@ with `Player.ChangeTarget` first. Confirming on `GetTargetID()` after a bare
 Guard casts with `Routines.Checks.Skills.CanCast()`, which covers IsCasting,
 IsDead, IsKnockedDown and `SkillBar.GetCasting() != 0`.
 
-> The worked BT form of this (`cast_verified`) lives in `Py4GW_Reforged` on
-> `HEROAI_MIGRATION` and has **not** been ported here yet. Do not cite it as
-> present in this tree.
+> The worked BT form of this (`cast_verified`) sits in the sibling fork's
+> archive, on `HEROAI_MIGRATION` — importable with `forwardport.py` if wanted.
+> Do not cite it as present in this tree.
 
 ## Identify UI frames by tree pattern, not by hash or name
 

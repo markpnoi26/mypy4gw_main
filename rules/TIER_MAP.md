@@ -11,7 +11,9 @@ ownership. Under RS-000 it outranks anything in `docs/` that disagrees.
 ## Standing of each part
 
 Written in the fork before the four-branch machine existed, then ported here and
-retargeted at this tree. Read it with that history in mind:
+retargeted at this tree. Read it with that history in mind — in particular, its
+"send it upstream as a PR" framing predates RS-008: nothing goes to the
+Reforged line anymore. The tier analysis itself remains current:
 
 | part | standing |
 |---|---|

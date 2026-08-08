@@ -45,22 +45,23 @@ abandoned and deleted; `docs/ImGui_Facade_Migration_Plan.md` is dead.
 - `Core/GlobalCache/SharedMemory.py` imports `HeroAI.follow.leader_publish`
   directly and is startup-sensitive. Do not broaden it to a package-root import.
 - `import Core` is **not** neutral: it appends system site-packages, redirects
-  `sys.stdout`/`sys.stderr` into the Py4GW console, and eagerly pulls **241
+  `sys.stdout`/`sys.stderr` into the Py4GW console, and eagerly pulls **~240
   modules including 17 from `HeroAI`**. Prefer module-specific imports when
   debugging startup or import side effects. Reducing that closure is tracked in
   `rules/TIER_MAP.md`.
 
 ## Tier 0 is a binary you consume
 
-`Py4GW.dll` is built by a separate C++ project that is **not present in this
-workspace**. You cannot rebuild or inspect it here. `stubs/` is your only
-contract with it — treat a stub mismatch as the signal that the DLL moved.
+`Py4GW.dll` is built from the sibling C++ repo `../Py4GW_Reforged_Native` —
+readable, and rebuildable via the `rebuild-dll` skill. What ships here is
+still a binary artifact: `stubs/` is the contract with it, and a stub mismatch
+is the signal that the DLL moved.
 
 ## Toolchain
 
-- **Interpreter: 3.13.0, 32-bit** is the injected target. There is no `.venv` in
-  this repo yet; the sibling `Py4GW_Reforged/.venv/Scripts/python.exe` works for
-  running `tools/`. Bare `python` is 3.11 in PowerShell (it cannot parse 3.12+
+- **Interpreter: 3.13.0, 32-bit** is the injected target. The repo-root
+  `.venv/Scripts/python.exe` (gitignored) matches it and runs `tools/` and
+  pytest. Bare `python` is 3.11 in PowerShell (it cannot parse 3.12+
   nested-quote f-strings) and is **not on PATH at all in Bash**, along with `py`.
 - **Bash tool** is Git Bash, rooted at the repo. Use relative paths.
 - **PowerShell is 5.1**: no `&&`, no `||`, no ternary. Don't put `git` in a
@@ -74,8 +75,9 @@ contract with it — treat a stub mismatch as the signal that the DLL moved.
 ## Formatting
 
 Black `line-length = 120`, `skip-string-normalization = true` (keep single quotes
-where present), isort `force_single_line = true`. There is no CI and no pytest
-config — verify with targeted scripts, never assume a global test command exists.
+where present), isort `force_single_line = true`. There is no CI; the offline
+gate is `python -m pytest test` (AGENTS.md §5). Leaf files are deselected by
+default (`-m leaf` opts in) — verify leaves with targeted scripts.
 
 ## Navigation
 

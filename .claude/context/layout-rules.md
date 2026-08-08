@@ -2,14 +2,17 @@
 
 This tree is generated. Getting this wrong loses work silently.
 
-## Three repos
+## The repos
 
-`mypy4gw_main` (here — freeform, primary source of changes) → `Py4GW_Reforged`
-(the fork; the only one with a GitHub remote, staging for PRs) →
-`apoguita/Py4GW_Reforged` (upstream; arrives here through `vendor`).
+`apoguita/Py4GW_Reforged` (upstream) supplies this tree through `vendor` and
+takes nothing back — the Reforged line is inbound-only (RS-008). The sibling
+`Py4GW_Reforged` clone is an archive of unported work (13 branches) that
+`forwardport.py` pulls from; it is not PR staging. Outbound contributions go
+to the separate `Py4GW-Unchained` fork line, as re-implemented concepts, never
+copied files — the full map is `docs/related-repos.md`.
 
-Commit freely here. Only what you deliberately publish goes through the fork.
-Nothing has to flow upward — `backport.py` marks layout-only changes as such.
+Commit freely here; everything stays here by default. `backport.py` is dormant
+(RS-008), kept as the manifest inverter.
 
 ## Credentials are in this working tree
 
@@ -46,8 +49,9 @@ if upstream touches the same file.
 **Never** — hand-move a file. Motion is the manifest's job.
 
 Preference order for structural change:
-**manifest edit** → **wrap from a Tier 4 file you own** → **edit + upstream PR** →
-carry a local patch forever.
+**manifest edit** → **wrap from a Tier 4 file you own** → **edit and carry as
+an overlay commit** (conflict surface, tracked in `rules/DIVERGENCE.md`). The
+upstream-PR rung is gone (RS-008).
 
 ## The only thing that conflicts
 

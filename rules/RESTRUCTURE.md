@@ -17,6 +17,7 @@ rule is reversed, its entry says so rather than being deleted.
 | [RS-005](#rs-005) | packs cannot reach their own `lib/` | **OPEN — blocks 6 scripts** |
 | [RS-006](#rs-006) | the tier map is instruction, not reference | active |
 | [RS-007](#rs-007) | `BuildMgr` is retired; `BldMgrBT` is the only build base | active |
+| [RS-008](#rs-008) | the Reforged line is inbound-only; contributions go to the Unchained line | active |
 
 ---
 
@@ -232,3 +233,37 @@ noting RS-007, plus the three Dervish `[[override]]` moves that outrank them.
 `Core/Builds/__init__.py` is emptied by overlay on `main` — the manifest cannot
 edit file contents, and the package must stay importable for
 `Core.Builds.Skills`.
+
+## RS-008
+
+**The Reforged line takes nothing back. Outbound work goes to the Unchained
+fork line.**
+
+Decided 2026-08-06. No PR goes to `apoguita/Py4GW_Reforged` or to
+`Py4GW_Reforged_Native`'s upstream again. The Reforged line is a supplier,
+consumed through `vendor`, and that is the whole relationship.
+
+*What stays alive.* The sync cycle is untouched. `forwardport.py` still pulls
+Mark's own unported work in from the sibling fork — its 13 branches are an
+archive (e.g. `cast_verified` on `HEROAI_MIGRATION`), not PR staging.
+
+*What goes dormant.* `backport.py` and the fork-branch PR recipe. The script is
+kept: it is the manifest inverter, and the recipe would work again if this
+decision were ever reversed.
+
+*Where contributions go instead.* The sibling Unchained fork line —
+`Py4GW-Unchained` (PR to Wick-Divinus) and `Py4GW-unchained-cpp` (PR to
+sloppynacho), from the markpnoi26 forks. Code never crosses fork lines by
+copying, in either direction: different ancestry, different module roots,
+different native names, different DLLs, no persistence jail over there.
+Concepts are re-implemented per side. The module-level map of what exists
+where is [docs/repo-overlap.md](../docs/repo-overlap.md).
+
+*Why.* Upstream does not coordinate and restructures in large sweeps — that is
+why the vendor machine exists at all. The Unchained upstreams take PRs, and
+contribution should go where contribution works.
+
+*Enforced by.* Nothing mechanical — this is a workflow decision, not layout
+machinery. Its anchors are the dormancy note in `backport.py`'s docstring,
+`docs/related-repos.md`, and the `contribute-unchained` / `port-concept`
+skills, each of which cites this number.

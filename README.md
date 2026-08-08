@@ -78,33 +78,28 @@ python tools/reforge/tiercheck.py --core Core
 Read next: **`CHEATSHEET.md`** first if you just want to not break anything —
 it is one page and covers the five real mistakes. Then **`AGENTS.md`** (what you may change and what will conflict),
 then `.claude/context/hard-rules.md` (rules that make code wrong even when it
-runs), then `docs/tier_map_and_separation_plan.md` (the measured analysis this is
-all built on).
+runs), then `rules/TIER_MAP.md` (the measured analysis this is all built on).
 
 ## Relationship to upstream
 
-Three repos, one direction of obligation — none.
+The Reforged line is a supplier, nothing more (RS-008).
 
 ```
-mypy4gw_main  →  Py4GW_Reforged  →  apoguita/Py4GW_Reforged
-(freeform)       (the fork, PRs)     (upstream)
+apoguita/Py4GW_Reforged  →  mypy4gw_main         Py4GW_Reforged (sibling fork)
+(upstream, supplier)        (freeform, here)     (archive of unported work)
 ```
 
-You work here without collaboration overhead and still take upstream's work
-through `vendor`. Only what you choose to publish moves through the fork;
-`origin` is a private backup, guarded by a pre-push credential check.
-
-Changes flow **both ways**, on different paths:
+You work here without collaboration overhead and take upstream's work through
+`vendor`; `origin` is a private backup, guarded by a pre-push credential check.
 
 - **Down** — `git fetch upstream && sync`. Upstream's work arrives through
   `vendor`, is re-transformed, and your overlay rebases on top.
-- **Up** — `tools/reforge/backport.py layout..main` maps a change here onto
-  upstream's layout so it can be a normal PR. It also tells you which of your
-  changes *can't* be back-ported because they only exist in this structure.
-
-Nothing here is hostile to upstream. The transform is motion plus derived
-rewrites; every semantic fix is worth sending up, and the manifest doubles as a
-reorganization proposal if they ever want it.
+- **In** — `tools/reforge/forwardport.py` pulls not-yet-ported work from the
+  sibling fork's branches into this layout.
+- **Up** — nothing. No PRs go to the Reforged line (RS-008, decided
+  2026-08-06). Contributions go to the separate `Py4GW-Unchained` fork line as
+  re-implemented concepts — mapped in `docs/related-repos.md`. `backport.py`
+  is kept dormant as the manifest inverter.
 
 ---
 

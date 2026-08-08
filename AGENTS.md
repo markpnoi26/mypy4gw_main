@@ -10,44 +10,54 @@ This repo is one of three. Know which you are in before touching anything.
 ```
                         ┌──────────────────────────────────────────┐
                         │ apoguita/Py4GW_Reforged — upstream       │
-                        │ read-only supplier. Never merged.        │
+                        │ read-only supplier. Never merged,        │
+                        │ never PRed (RS-008).                     │
                         └──────────────────────────────────────────┘
-                             │                          ▲
-             git fetch upstream                          │  normal PR
-             (direct — remote `upstream`)                │
-                             ▼                          │
-mypy4gw_main  ← YOU START HERE ─── backport.py ──→  Py4GW_Reforged
-the primary source of changes.      maps a change    the fork. PR staging,
-Freeform: commit anything.          onto upstream's  and the `--source` that
-                                    layout           forwardport.py reads from.
-        ▲                                                    │
+                             │
+             git fetch upstream
+             (direct — remote `upstream`)
+                             ▼
+mypy4gw_main  ← YOU START HERE                       Py4GW_Reforged
+the primary source of changes.                       the fork: an archive of
+Freeform: commit anything.                           unported work (13 branches),
+        ▲                                            forwardport.py's `--source`.
         └──────────────── forwardport.py ────────────────────┘
-                  (its HEROAI_MIGRATION delta is already absorbed)
+          (inbound only — its HEROAI_MIGRATION delta is already absorbed)
 ```
 
 **Upstream is reached from here, directly.** `upstream` is a remote on this repo,
 so `sync.py` fetches apoguita without going through the fork. Nothing routes
-through the sibling — it is needed only to stage a PR, or to pull work that was
-authored there and never ported.
+through the sibling — it is needed only to pull work that was authored there and
+never ported.
 
 Remotes here: `origin` (this repo's backup), `upstream` (apoguita), `fork`
 (markpnoi26/Py4GW_Reforged on GitHub), `local-src` (the sibling working copy).
 
 The point of the split: **here you are free** — commit whatever, restructure
 whatever, no collaboration overhead — while still taking upstream's work through
-`vendor`. Only what you deliberately choose to publish goes through the fork.
+`vendor`.
 
-Nothing is obligated to flow upward. A change that only makes sense in this
-layout can simply stay here; `backport.py` reports those as "layout-only" rather
-than guessing.
+Nothing flows upward (RS-008). Everything stays here; outbound contributions go
+to the Unchained fork line as re-implemented concepts — see
+`docs/related-repos.md` and the `contribute-unchained` skill.
 
 Other repos on this machine, for reference: `Py4GW`, the retired pre-Reforged
 project, **no longer has a working tree** — only a stale memory scope refers to
 it. `MyPy4GW` is a working symlink-overlay runtime that ran in-client on
 2026-07-22 — it is the proof that owning `Py4GW_widget_manager.py` plus
 `sys.path` precedence is enough to control the runtime without touching
-upstream's tree. `Py4GW_Reforged_Native`, the C++ project that builds
-`Py4GW.dll`, is **not present** — Tier 0 is a binary you consume.
+upstream's tree.
+
+`Py4GW_Reforged_Native`, the C++ project that builds `Py4GW.dll`, **is** present
+as a sibling, as is `GW_RE`, a Ghidra bench for the game. Tier 0 is still a
+binary you consume from *this* tree, but the source is readable — do not answer
+"the C++ isn't here".
+
+Reference material outside the Reforged line — the `Py4GW-Unchained` fork and its
+`Py4GW-unchained-cpp` native project — is mapped in **`docs/related-repos.md`**.
+Read that before borrowing anything from them: Unchained is a *sibling* fork of
+the same ancestor, not a downstream one, so its module names, its DLL and its
+persistence habits are all incompatible with this tree.
 
 ## 1. The one thing to understand
 
@@ -80,8 +90,9 @@ survives only if it lives as a commit on `main` that gets rebased onto each new
 | anything with a `note =` in the manifest | the note explains a pin or a hazard. Read it first. |
 
 Prefer, in order: **change the manifest** → **wrap the behaviour from a Tier 4
-file you own** → **edit the upstream file and send it up as a PR** → edit and
-carry it locally forever (worst).
+file you own** → **edit and carry it as an overlay commit** (conflict surface,
+tracked per-sync in `rules/DIVERGENCE.md`). The upstream-PR rung is gone
+(RS-008).
 
 ### NEVER
 
@@ -194,7 +205,16 @@ Resolve it like any merge, `git add`, `git rebase --continue`. Everything else �
 upstream adding files, deleting them, moving them, renaming whole trees — is
 absorbed by the manifest and never reaches the rebase.
 
-## 4. Sending changes upstream
+## 4. Outbound contributions (RS-008)
+
+The Reforged line takes nothing back — no PRs to apoguita, decided 2026-08-06.
+Active contributions go to the Unchained fork line instead: branch on the
+markpnoi26 fork, PR to the true upstream. `docs/related-repos.md` maps the
+repos, the `contribute-unchained` skill has the mechanics, and carrying a
+concept across fork lines is the `port-concept` skill's job — never a file
+copy.
+
+`backport.py` is dormant but kept — it is the manifest inverter:
 
 ```bash
 python tools/reforge/backport.py layout..main
@@ -207,29 +227,11 @@ but `Core` is an ordinary English word, so only import statements and quoted pat
 strings are rewritten back. Files with no upstream counterpart are reported as
 layout-only rather than guessed at.
 
-Semantic fixes are worth upstreaming individually — they stand on their own merit
-and, once merged, survive upstream's next restructure. Local-only edits do not.
-
-
-### Getting it into the fork
-
-`backport.py` gives you upstream-shaped content. Landing it publicly:
-
-```bash
-python tools/reforge/backport.py layout..main     # what is portable, what is not
-cd ../Py4GW_Reforged
-git checkout -b fix/<thing> main
-# apply the mapped content, commit, push, PR to upstream
-```
-
 This repo has an `origin` (`markpnoi26/mypy4gw_main`, private backup) and a
-`fork` remote — but PRs to upstream go through `../Py4GW_Reforged` only. Before
-any push here, confirm no credential-shaped file is tracked — a pre-push hook
-(`.git/hooks/pre-push`) enforces it: `git ls-files` must match none of
-`accounts.json`, `Py4GW.ini`, `Settings/` outside `Defaults/`, or `json/`.
-
-Send semantic fixes individually. They stand on their own merit, and once merged
-they survive upstream's next restructure — a local-only edit does not.
+`fork` remote. Before any push here, confirm no credential-shaped file is
+tracked — a pre-push hook (`.git/hooks/pre-push`) enforces it: `git ls-files`
+must match none of `accounts.json`, `Py4GW.ini`, `Settings/` outside
+`Defaults/`, or `json/`.
 
 ## 5. Gates
 
@@ -339,9 +341,10 @@ semantic in a few files (`Core/__init__.py`, `Core/GlobalCache/`,
 `HeroAI/follow/`, `Py4GW_widget_manager.py`) — they are in isort's
 `extend_skip_glob` and must stay there.
 
-**Importing fork/upstream-shaped work:** `tools/reforge/forwardport.py
-upstream/main..BRANCH [--filter GLOB]` — backport's inverse: manifest path map,
-forward codemod, same formatters. Unmapped paths are reported, never guessed.
+**Importing fork-archive work (inbound — still live under RS-008):**
+`tools/reforge/forwardport.py upstream/main..BRANCH [--filter GLOB]` —
+backport's inverse: manifest path map, forward codemod, same formatters.
+Unmapped paths are reported, never guessed.
 
 ## 10. Gotchas that have already bitten
 

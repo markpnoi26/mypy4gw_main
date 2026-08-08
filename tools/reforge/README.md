@@ -7,7 +7,8 @@ Deterministic mapping between upstream's layout and this repo's.
 | Branch | Contents | Rule |
 |---|---|---|
 | `vendor` | pristine mirror of `upstream/main` | ff-only, never edited |
-| `layout` | `apply.py(vendor)` | generated, disposable |
+| `base` | `vendor` + toolchain and identity | tool/manifest commits go here |
+| `layout` | `apply.py(base)` | generated, disposable |
 | `main` | layout + your overlay | free reign |
 
 ## Tools
@@ -19,7 +20,7 @@ Deterministic mapping between upstream's layout and this repo's.
 | `verify.py` | postconditions on a transformed tree |
 | `tiercheck.py` | AST tier enforcement + eager-closure measurement. Exits 1 on violation |
 | `compare.py` | splits divergence into transform / overlay / upstream |
-| `backport.py` | maps a change here back onto upstream's layout for a PR |
+| `backport.py` | maps a change here back onto upstream's layout. Dormant (RS-008) |
 
 ## Sync
 
@@ -36,6 +37,9 @@ python tools/reforge/compare.py
 ```
 
 ## Backport
+
+Dormant since 2026-08-06 — no PRs go to the Reforged line (RS-008). Kept as the
+manifest inverter.
 
 ```bash
 python tools/reforge/backport.py layout..main
