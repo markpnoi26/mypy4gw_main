@@ -10,12 +10,17 @@ import PySystem
 
 from Core import Color
 from Core import ImGui
+from Core.py4gwcorelib_src.script_manager import ScriptLoader
 from Core.py4gwcorelib_src.script_manager import ScriptRegistry
 
 SCRIPTS_PATH = "Scripts"
 RELOAD_DELAY_MS = 350
 
 registry = ScriptRegistry(SCRIPTS_PATH)
+# Launching a script drops its reloadable dependencies (Sources/, Bots/, ...)
+# from sys.modules so the native re-exec picks up edits from disk. Core and
+# anything a widget also imports stay cached — see script_manager/loader.py.
+loader = ScriptLoader()
 loaded = False
 search = ""
 function_filter = 0
@@ -62,6 +67,9 @@ def launch(meta):
         log(last_error, PySystem.Console.MessageType.Error)
         return
     try:
+        dropped = loader.purge()
+        if dropped:
+            log("reloading %d cached module(s): %s" % (len(dropped), ", ".join(dropped)))
         PySystem.script_control.defer_stop_load_and_run(full, RELOAD_DELAY_MS)
         launched_id = meta.id
         last_error = ""
@@ -93,6 +101,9 @@ def scan():
     before = len(registry.scripts)
     try:
         changed = registry.refresh()
+        # Widget imports decide what the purge must NOT drop; a rescan is the
+        # moment to notice a widget started importing something new.
+        loader.refresh_protected()
     except Exception as exc:
         last_scan = "scan failed: %s" % exc
         log(last_scan, PySystem.Console.MessageType.Error)

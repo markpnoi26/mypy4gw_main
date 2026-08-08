@@ -71,20 +71,21 @@ before handing off to the native runner.
 goes straight to the native runner. The interpreter then re-execs the script,
 whose `import Sources.marks_sources.team_bt` hits the stale cache.
 
-### Recommended work items
+### Work items
 
-1. **Wire the purge** into `launch()`: instantiate one `ScriptLoader`, call
-   `.purge()` immediately before `defer_stop_load_and_run`, and log the
-   dropped module names (the log line doubles as proof-of-reload when
+1. ~~**Wire the purge** into `launch()`~~ — **DONE 2026-08-08**: `launch()`
+   calls `loader.purge()` immediately before `defer_stop_load_and_run` and
+   logs the dropped module names (the log line is proof-of-reload when
    debugging). The native runner's re-exec then re-imports everything fresh.
-   Note `purge()` is independent of `load()` — the native slot still owns
-   execution, so none of the loader's entry-point machinery is needed.
-2. **Refresh the protected set on Rescan** — `shared_with_widgets` is computed
-   once per loader instance (`loader.py:86-93`); tie `refresh_protected()` to
-   the panel's existing Rescan button so new widget imports are noticed.
+   `purge()` is independent of `load()` — the native slot still owns
+   execution. With this live, **the `Sources/**` row of the restart matrix
+   becomes "script relaunch"**.
+2. ~~**Refresh the protected set on Rescan**~~ — **DONE 2026-08-08**: `scan()`
+   calls `loader.refresh_protected()` so a widget that starts importing a new
+   reload-root module is noticed.
 3. **Add a "Purge cached modules" button** to the SMS panel showing
    `purgeable()` as a preview — the manual escape hatch for anything the
-   automation misses.
+   automation misses. (Open.)
 4. **Leave alone:** `Core`, the native modules, and the widget-shared
    protection semantics. The protection is load-bearing — e.g.
    `Sources.marks_sources.item_naming` holds `NAME_CACHE` that live widgets
@@ -103,6 +104,46 @@ whose `import Sources.marks_sources.team_bt` hits the stale cache.
   `HeroAI.globals`) and type-checking them later would break. Today's
   marks_sources modules keep no such state (team_turns/brazier_route are pure;
   team_bt/gadget_interact hold state only inside node closures).
+
+## The bigger hammer: DLL eject + re-inject (the "relaunch the Python shell" concept)
+
+Unchained's "relaunch the python shell" is a full DLL eject:
+`Py4GW-unchained-cpp/src/dllmain.cpp:302` `Terminate(unload_module=true)` →
+`py::finalize_interpreter()` → `FreeLibraryAndExitThread`, then re-injection
+into the still-running client. A fresh DLL load means a fresh interpreter and
+an empty `sys.modules` — **every row of the restart matrix above except "none
+needed" collapses to eject + re-inject**, including `Core/` and a rebuilt DLL,
+without killing the client or re-logging.
+
+**Our native already has the eject half.** `../Py4GW_Reforged_Native/src/
+Py4GW.cpp:490` `Py4GW_RequestShutdown()` → `Py4GW_Shutdown()` (stops the
+script, flushes Settings/JsonFactory, tears down ImGui, listeners, GW hooks,
+destroys the Python runtime and both shared-memory regions) → the runtime
+thread exits via `FreeLibraryAndExitThread` (`Py4GW.cpp:511`). It is wired to
+an ImGui shutdown callback (`imgui_manager.cpp:501`), so it is likely already
+reachable from the native UI.
+
+What is missing / unverified:
+
+1. **The re-inject half** — an injector that attaches to a *running* GW
+   process. The external launcher is the natural home (it is one of the
+   sanctioned non-injected processes). If it only injects at client launch,
+   that is the piece to build.
+2. **A proven clean eject under the locally patched DLL** — the game-thread
+   queue patch touches teardown-adjacent code. Test on one logged-in client in
+   an outpost: eject, check the injection log, re-inject, confirm widgets
+   return. Watch the multibox shared-memory creator handoff when the ejected
+   client was the region creator.
+3. **Repeat-cycle hygiene** — Unchained's comments show they fought dangling
+   VEH filters from unloaded modules; our CrashHandler has
+   `RtlDllShutdownInProgress` handling, but nobody has cycled it dozens of
+   times in one session.
+
+The two fixes are complementary, not competing: the `ScriptLoader.purge()`
+wiring is seconds-fast and right for Sources-edit iteration; eject+re-inject
+is the complete reset for `Core/`, `HeroAI/`, and DLL changes. Per RS-008 the
+concept is re-implemented in our native idioms, never copied, and nothing
+goes back upstream.
 
 ## Evidence (2026-08-08 session)
 
