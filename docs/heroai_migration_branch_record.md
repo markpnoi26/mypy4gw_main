@@ -1,3 +1,6 @@
+> **Historical.** The Reforged line is inbound-only since 2026-08-06 (RS-008);
+> the branch is now part of the fork's archive, reachable via `forwardport.py`.
+
 # `HEROAI_MIGRATION` — branch record
 
 What this branch is, what is actually in it, and the order it comes apart into

@@ -1,3 +1,6 @@
+> **Historical.** The Reforged line is inbound-only since 2026-08-06 (RS-008);
+> this sequencing never ran. Kept as record.
+
 # HeroAI BT Migration — PR Sequencing Plan
 
 How to land the migration as a readable, reviewable series instead of one

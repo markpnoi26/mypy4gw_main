@@ -425,3 +425,54 @@ change per build, and state exactly what else is already live in that build.**
 The task that found it was the aC freeze, which is fixed. This is a separate, pre-existing property
 of DXOverlay that only became visible once the freeze was gone. Continuing without the replay
 measurement would be a sixth guess.
+
+---
+
+## PF-6 · `UIManager`'s four log wrappers call natives this DLL does not export
+
+**Found:** 2026-08-06, while auditing the native surface against Unchained's for the porting campaign.
+**File:** `Core/UIManager.py:160-188`
+**Status:** open — the real fix is a Native change, not a Python one.
+
+### What is wrong
+
+Four wrappers call methods that are not in `stubs/PyUIManager.pyi` and not in the shipped
+`Py4GW.dll` (`strings Py4GW.dll | grep get_ui_message_logs` returns nothing):
+
+| wrapper | native it calls |
+|---|---|
+| `GetFrameLogs` | `PyUIManager.UIManager.get_frame_logs()` |
+| `ClearFrameLogs` | `clear_frame_logs()` |
+| `GetUIMessageLogs` | `get_ui_message_logs()` |
+| `ClearUIMessageLogs` | `clear_ui_message_logs()` |
+
+Each raises `AttributeError` on first call. Nothing in the tree calls them today, so it has never
+surfaced — but they are public wrappers with docstrings that promise a working return.
+
+### Why the native is missing
+
+The capture that would feed these needs the `SendUIMessage` detour. `Py4GW_Reforged_Native` on
+`stable-patched` deliberately does **not** install it (`src/GW/ui/ui.cpp:717-723`: "do not detour the
+game's native message path", teardown-sensitive handle ABI). The `personal` branch — which the
+currently deployed DLL was built from — **does** install it, and the record struct already exists as
+`DialogEventLog` (`include/GW/dialog/dialog.h:52-61`, the same 7 fields Unchained's
+`UIPayloadDump` uses), scoped to four dialog messages in `dialog.cpp:1266-1300`.
+
+So the data path is 80% built; what is missing is generalising the capture out of `dialog.cpp` and
+binding the four methods.
+
+### Blast radius
+
+Zero today (no callers). It becomes load-bearing the moment a bridge `ui.messages` / `ui.frame_logs`
+surface is ported — those are the three commands of Unchained's `ui_capture` that cannot work here.
+
+### What makes it non-trivial
+
+It is a Native change, and the prerequisite is a branch decision: the local game-thread deadlock
+patch currently sits on `stable-patched`, which is 8+ commits behind the deployed DLL. Rebuilding
+without first rebasing that patch onto `personal` would silently regress `PyCtoS` and `PyDatReader`
+out of the shipped DLL. See the DLL-wave section of the porting campaign plan.
+
+### Why it was not fixed on discovery
+
+The campaign that found it is Python-only by decision; native work is a separately green-lit wave.

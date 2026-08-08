@@ -1,3 +1,6 @@
+> **Historical.** The Reforged line is inbound-only since 2026-08-06 (RS-008);
+> this PR was never sent. Kept as record.
+
 # Fight Zone — upstream PR dossier
 
 Formation-based combat positioning for HeroAI parties. The party stops piling
